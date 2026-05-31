@@ -1,0 +1,22 @@
+interface TextAreaProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  rows?: number;
+}
+
+export default function TextArea({ label, value, onChange, rows = 4 }: TextAreaProps) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-ink">{label}</span>
+      <textarea
+        className="w-full resize-y rounded-md border border-line bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100"
+        lang="vi"
+        spellCheck
+        rows={rows}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}

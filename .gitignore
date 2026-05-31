@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+*.spec
+vite.config.js
+vite.config.d.ts
+.env
+.venv/
+__pycache__/
+*.py[cod]
+backend/data/*.db

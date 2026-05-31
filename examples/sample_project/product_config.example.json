@@ -1,0 +1,55 @@
+{
+  "project_name": "sample-product",
+  "source_folder": "./sample_videos/sample_product",
+  "output_folder": "./outputs",
+  "product": {
+    "name": "Sample Product",
+    "brand": "Sample Brand",
+    "description": "Sản phẩm mẫu dùng để test pipeline Auto Tool.",
+    "features": [
+      "Thiết kế gọn gàng",
+      "Dễ sử dụng",
+      "Phù hợp nhu cầu hằng ngày"
+    ],
+    "cta": "Xem chi tiết sản phẩm ngay"
+  },
+  "render": {
+    "output_count": 3,
+    "duration": 12,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "fps": 30
+  },
+  "effects": {
+    "cut_intensity": 65,
+    "speed_variation": 30,
+    "grain": 12,
+    "zoom_motion": 20,
+    "overlay_height": 22,
+    "subtitle_size": 54
+  },
+  "ai": {
+    "text_model": "gemini-3.1-flash-lite",
+    "tone": "friendly_reviewer",
+    "language": "vi"
+  },
+  "tts": {
+    "provider": "edge_tts",
+    "fallback_provider": "piper",
+    "voice": "vi-VN-HoaiMyNeural",
+    "language": "vi",
+    "api_key": null,
+    "credentials_json_path": null,
+    "access_token": null,
+    "rate": "+0%",
+    "pitch": "+0Hz",
+    "volume": "+0%",
+    "output_format": "mp3"
+  },
+  "timeline": {
+    "template_id": "ugc_reviewer_natural"
+  },
+  "script_variation": {
+    "mode": "auto_mix"
+  }
+}

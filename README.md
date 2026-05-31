@@ -1,0 +1,1066 @@
+# Auto Tool
+
+Auto Tool là công cụ local hỗ trợ tạo video recut ngắn cho sản phẩm từ một thư mục video nguồn. Mục tiêu hiện tại là cung cấp một pipeline chạy được trên máy cá nhân: scan video, cắt segment, dựng timeline, tạo script bằng Gemini, tạo voice tiếng Việt, burn subtitle/overlay, thêm nhạc nền và xuất nhiều video đầu ra.
+
+Dự án đang ở giai đoạn MVP có CLI, FastAPI local, React UI và bản Windows exe. Tool chưa phải hệ thống production hoàn chỉnh, nhưng đã đủ để developer tiếp tục phát triển các phần segment thông minh, timeline theo sản phẩm và workflow UI tốt hơn.
+
+## Tính Năng Hiện Tại
+
+- CLI render batch từ file JSON config.
+- FastAPI local để frontend tạo project, scan video, render preview/full batch và lấy kết quả.
+- React + TypeScript UI cho luồng tạo project, chỉnh preset, preview, sửa script và render full batch.
+- Scan folder video đầu vào, chỉ nhận `.mp4`, `.mov`, `.mkv`, `.webm`.
+- Lấy metadata video bằng `ffprobe`.
+- Cắt video thành segment logic theo `cut_intensity`.
+- Smart Segment Scoring bằng OpenCV/NumPy để ưu tiên đoạn sáng, rõ, có chuyển động vừa phải.
+- Product-aware Timeline Templates để dựng cấu trúc `Hook -> Product -> Demo -> Benefit -> CTA`.
+- Build timeline weighted random theo điểm chất lượng segment, tag và template slot cho nhiều output.
+- Render visual recut bằng FFmpeg theo tỷ lệ dọc `1080x1920`.
+- Generate script/subtitle bằng Gemini, có hỗ trợ nhiều API key và tự xoay key khi key lỗi.
+- Script Variant Generator tạo script khác nhau cho từng video trong batch, ưu tiên style phù hợp với timeline template.
+- Cho phép nhập Gemini API keys trên giao diện.
+- Cho phép render preview một video ngắn trước khi render full batch.
+- Cho phép sửa script sau preview rồi lưu custom script cho full batch.
+- TTS tiếng Việt qua provider system: Edge TTS -> Piper -> gTTS -> silent fallback.
+- Burn overlay đáy video, subtitle `.ass`, voiceover và nhạc nền.
+- QA checker sau render, phân loại `success`, `warning`, `failed`.
+- Mỗi output có log riêng `video_XXX_log.json` hoặc `preview_001_log.json`.
+- Project summary có thống kê số output thành công, thất bại, warning và danh sách lỗi.
+- Windows exe launcher có thể tự kiểm tra/cài FFmpeg, Piper và voice tiếng Việt một lần vào `%LOCALAPPDATA%\AutoTool`.
+
+## Giới Hạn Sử Dụng Hợp Pháp
+
+Chỉ sử dụng Auto Tool với video, hình ảnh, âm thanh và nội dung mà bạn có quyền sử dụng. Không dùng tool để bypass watermark, reupload nội dung vi phạm bản quyền, giả mạo review, đưa claim sai sự thật hoặc né chính sách nền tảng.
+
+Khi tạo nội dung quảng cáo sản phẩm:
+
+- Không bịa thông số kỹ thuật.
+- Không dùng claim tuyệt đối như "tốt nhất", "số 1", "100% hiệu quả" nếu không có bằng chứng.
+- Không dùng nhạc hoặc video không có quyền thương mại.
+- Tuân thủ điều khoản của TikTok, Shopee, Reels, Gemini API và các dịch vụ TTS.
+- Kiểm tra video đầu ra trước khi đăng công khai.
+
+## Tech Stack
+
+Backend:
+
+- Python 3.10+
+- Pydantic v2
+- FastAPI
+- Uvicorn
+- SQLite
+- FFmpeg / FFprobe
+- edge-tts
+- Piper TTS optional
+- gTTS backup
+- PyInstaller cho bản Windows exe
+
+Frontend:
+
+- React 19
+- TypeScript
+- Vite
+- TailwindCSS
+- react-router-dom
+
+## Cấu Trúc Project
+
+```txt
+Auto-Tool/
+  backend/
+    app/
+      adapters/
+      modules/
+      schemas/
+      utils/
+      api.py
+      config.py
+      database.py
+      launcher.py
+      main.py
+    data/
+    dist/
+    requirements.txt
+    requirements-build.txt
+    README.md
+
+  frontend/
+    src/
+      api/
+      components/
+      pages/
+      types/
+      utils/
+    package.json
+    README.md
+
+  examples/
+    product_config.example.json
+    sample_videos/
+    music/
+    outputs/
+
+  packaging/
+    build_windows_exe.ps1
+
+  docs/
+    DEVELOPMENT_PLAN.md
+    TROUBLESHOOTING.md
+```
+
+## Cài Đặt Backend
+
+```powershell
+cd backend
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+py -m pip install -r requirements.txt
+```
+
+Nếu cần build exe:
+
+```powershell
+py -m pip install -r requirements-build.txt
+```
+
+## Cài Đặt Frontend
+
+```powershell
+cd frontend
+npm install
+copy .env.example .env
+npm run dev
+```
+
+Frontend mặc định gọi API ở:
+
+```txt
+http://localhost:8000
+```
+
+Biến môi trường frontend:
+
+```txt
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+## Cài FFmpeg
+
+Auto Tool cần `ffmpeg` và `ffprobe`.
+
+Cài bằng winget:
+
+```powershell
+winget install Gyan.FFmpeg
+ffmpeg -version
+ffprobe -version
+```
+
+Nếu chạy bằng exe, launcher sẽ cố tự tải FFmpeg Windows vào:
+
+```txt
+%LOCALAPPDATA%\AutoTool\tools\ffmpeg
+```
+
+Launcher cũng tự tải Piper Windows và voice tiếng Việt mặc định vào:
+
+```txt
+%LOCALAPPDATA%\AutoTool\tools\piper
+%LOCALAPPDATA%\AutoTool\tools\piper\models
+```
+
+Sau khi tải xong, app tự set `PATH`, `PIPER_MODEL_PATH` và `PIPER_CONFIG_PATH` cho process đang chạy. Người dùng mở file exe lần đầu có thể phải chờ lâu hơn vì app đang tải FFmpeg/Piper/model; các lần sau sẽ dùng lại file đã cài.
+
+Nếu muốn chỉ định FFmpeg thủ công:
+
+```powershell
+$env:AUTO_TOOL_FFMPEG_DIR="D:\Tools\ffmpeg\bin"
+```
+
+Nếu muốn tắt auto install:
+
+```powershell
+$env:AUTO_TOOL_AUTO_INSTALL="0"
+```
+
+## Cấu Hình `.env`
+
+Backend tự đọc `.env` trong `backend`, project root hoặc cùng thư mục với file exe.
+
+Ví dụ:
+
+```txt
+GEMINI_API_KEY=your_single_key_here
+GEMINI_API_KEYS=key_1,key_2,key_3
+AUTO_TOOL_ALLOW_SCRIPT_FALLBACK=0
+AUTO_TOOL_TTS_VOICE=vi-VN-HoaiMyNeural
+AUTO_TOOL_TTS_PROVIDER=edge_tts
+AUTO_TOOL_TTS_FALLBACK_PROVIDER=piper
+AUTO_TOOL_TTS_FORMAT=mp3
+AUTO_TOOL_TTS_RETRIES=2
+GOOGLE_TTS_CREDENTIALS_JSON_PATH=D:\Keys\google-tts-service-account.json
+GOOGLE_TTS_ACCESS_TOKEN=optional_short_lived_oauth_token
+GOOGLE_TTS_API_KEY=optional_legacy_api_key
+PIPER_MODEL_PATH=D:\Models\piper\vi_VN-vais1000-medium.onnx
+PIPER_CONFIG_PATH=D:\Models\piper\vi_VN-vais1000-medium.onnx.json
+AUTO_TOOL_FFMPEG_DIR=D:\Tools\ffmpeg\bin
+AUTO_TOOL_DB_PATH=D:\Projects\Auto-Tool\backend\data\autotool.db
+AUTO_TOOL_PORT=8000
+AUTO_TOOL_OPEN_BROWSER=1
+```
+
+Ghi chú:
+
+- `GEMINI_API_KEY`: một Gemini key.
+- `GEMINI_API_KEYS`: nhiều key, ngăn cách bằng dấu phẩy. UI cũng cho nhập nhiều key, mỗi dòng một key.
+- `AUTO_TOOL_ALLOW_SCRIPT_FALLBACK=1`: cho phép dùng fallback script local khi Gemini lỗi. Chỉ nên bật khi debug/offline.
+- `AUTO_TOOL_TTS_PROVIDER=edge_tts`: dùng Edge TTS online.
+- `AUTO_TOOL_TTS_PROVIDER=google_cloud_tts`: dùng Google Cloud Text-to-Speech.
+- `GOOGLE_TTS_CREDENTIALS_JSON_PATH`: service account JSON path cho Google Cloud TTS. Đây là cách ổn định nhất cho Cloud Text-to-Speech REST.
+- `GOOGLE_TTS_ACCESS_TOKEN`: OAuth access token ngắn hạn cho Google Cloud TTS nếu muốn test nhanh.
+- `GOOGLE_TTS_API_KEY`: fallback legacy. Cloud Text-to-Speech REST thường cần OAuth/service account, nên API key có thể bị Google từ chối.
+- `AUTO_TOOL_TTS_FALLBACK_PROVIDER=piper`: provider fallback offline nếu Edge TTS lỗi.
+- `AUTO_TOOL_TTS_PROVIDER=silent`: ép dùng silent audio để test nhanh pipeline.
+- `AUTO_TOOL_TTS_VOICE=vi-VN-HoaiMyNeural`: voice nữ tiếng Việt mặc định.
+- `AUTO_TOOL_TTS_RETRIES=2`: số lần retry Edge TTS, tối đa 5.
+- `PIPER_MODEL_PATH` và `PIPER_CONFIG_PATH`: file model/config cho Piper offline.
+
+Piper mặc định dùng model tiếng Việt rõ hơn:
+
+```txt
+Language: vi_VN
+Quality: medium
+Samplerate: 22,050Hz
+Model: vi_VN-vais1000-medium
+```
+- `AUTO_TOOL_PORT`: cổng launcher/API.
+
+## Chạy CLI
+
+```powershell
+cd backend
+py -m app.main --config ../examples/product_config.example.json
+```
+
+CLI sẽ:
+
+1. Load config JSON.
+2. Scan video nguồn.
+3. Tạo segment/timeline.
+4. Render từng output.
+5. Chạy QA.
+6. Ghi `project_summary.json`.
+
+Chạy sample project end-to-end:
+
+```powershell
+cd backend
+py -m app.main --config ../examples/sample_project/product_config.example.json
+```
+
+Sample project có sẵn video dummy trong `examples/sample_project/sample_videos/sample_product`. Khi test sản phẩm thật, thay bằng 3-5 video nguồn dài hơn 4 giây.
+
+## Chạy API
+
+```powershell
+cd backend
+py -m uvicorn app.main:app --reload --port 8000
+```
+
+Health check:
+
+```txt
+GET http://localhost:8000/api/health
+```
+
+Endpoint chính:
+
+```txt
+POST /api/projects
+GET  /api/projects/{project_id}
+POST /api/projects/{project_id}/scan
+POST /api/projects/{project_id}/analyze-segments
+POST /api/projects/{project_id}/render
+GET  /api/projects/{project_id}/latest-script
+PUT  /api/projects/{project_id}/script
+GET  /api/jobs/{job_id}
+GET  /api/jobs/{job_id}/results
+GET  /api/files/video?path=...
+GET  /api/presets
+GET  /api/tts/providers
+GET  /api/timeline-templates
+GET  /api/script-variants/styles
+POST /api/projects/{project_id}/generate-script-variants
+```
+
+Preview render:
+
+```json
+{
+  "preview_only": true
+}
+```
+
+Preview chỉ render 1 video, duration tối đa 8 giây, output nằm trong:
+
+```txt
+{output_folder}/preview
+```
+
+## Chạy Frontend
+
+Terminal 1:
+
+```powershell
+cd backend
+py -m uvicorn app.main:app --reload --port 8000
+```
+
+Terminal 2:
+
+```powershell
+cd frontend
+npm run dev
+```
+
+Mở:
+
+```txt
+http://127.0.0.1:5173
+```
+
+## Chạy Một Process Cho UI Và API
+
+Build frontend:
+
+```powershell
+cd frontend
+npm run build
+```
+
+Chạy launcher:
+
+```powershell
+cd backend
+py -m app.launcher
+```
+
+Launcher sẽ start FastAPI, serve frontend build và tự mở browser.
+
+## Build Windows EXE
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build_windows_exe.ps1
+```
+
+File exe sinh ra:
+
+```txt
+backend/dist/AutoTool.exe
+```
+
+Khi gửi sang máy khác, người dùng có thể mở exe. App sẽ tạo database local ở:
+
+```txt
+%LOCALAPPDATA%\AutoTool\data\autotool.db
+```
+
+## Config JSON Mẫu
+
+File mẫu:
+
+```txt
+examples/product_config.example.json
+```
+
+Ví dụ rút gọn:
+
+```json
+{
+  "project_name": "kaw-xmax10",
+  "source_folder": "./sample_videos/kaw_xmax10",
+  "output_folder": "./outputs",
+  "product": {
+    "name": "Máy Chiếu 4K Android KAW XMAX10",
+    "brand": "KAW",
+    "description": "Máy chiếu giải trí gia đình nhỏ gọn, hỗ trợ 4K, Android 9.0.",
+    "features": [
+      "Hỗ trợ 4K",
+      "Android 9.0",
+      "Thiết kế nhỏ gọn"
+    ],
+    "cta": "Xem chi tiết sản phẩm ngay"
+  },
+  "render": {
+    "output_count": 3,
+    "duration": 12,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "fps": 30
+  },
+  "effects": {
+    "cut_intensity": 70,
+    "speed_variation": 30,
+    "grain": 15,
+    "zoom_motion": 25,
+    "overlay_height": 33,
+    "subtitle_size": 84
+  },
+  "ai": {
+    "text_model": "gemini-3.1-flash-lite",
+    "tone": "friendly_reviewer",
+    "language": "vi",
+    "gemini_api_keys": []
+  },
+  "music": {
+    "enabled": true,
+    "source_folder": "./music",
+    "source_file": null,
+    "volume": 0.12,
+    "fade_in": 0.5,
+    "fade_out": 0.8,
+    "duck_under_voice": false
+  }
+}
+```
+
+Path tương đối trong CLI được resolve theo vị trí file config. Khi tạo project qua API/UI, backend cố resolve path theo current working directory, project root, `examples`, backend folder và thư mục exe.
+
+## Output Folder Mẫu
+
+Full batch:
+
+```txt
+examples/outputs/kaw-xmax10-2026-05-31-093000/
+  video_001.mp4
+  video_001_visual.mp4
+  video_001_script.json
+  video_001_sub.srt
+  video_001_sub.ass
+  video_001_voice.mp3
+  video_001_voice_normalized.wav
+  video_001_voice_text.txt
+  video_001_timeline.json
+  video_001_log.json
+  video_002.mp4
+  segment_scoring_report.json
+  script_variants.json
+  project_summary.json
+```
+
+Preview:
+
+```txt
+examples/outputs/preview/
+  preview_001.mp4
+  preview_001_visual.mp4
+  preview_001_script.json
+  preview_001_sub.srt
+  preview_001_sub.ass
+  preview_001_voice.mp3
+  preview_001_voice_normalized.wav
+  preview_001_voice_text.txt
+  preview_001_log.json
+  segment_scoring_report.json
+  script_variants.json
+  project_summary.json
+```
+
+`project_summary.json` có dạng:
+
+```json
+{
+  "total_outputs": 3,
+  "successful_outputs": 2,
+  "failed_outputs": 1,
+  "warnings_count": 4,
+  "failed_items": [
+    {
+      "index": 3,
+      "reason": "render_final failed: FFmpeg command failed"
+    }
+  ]
+}
+```
+
+## How To Run E2E Test
+
+Chạy toàn bộ test backend:
+
+```powershell
+cd backend
+py -m pytest
+```
+
+Chạy riêng nhóm acceptance/E2E:
+
+```powershell
+cd backend
+py -m pytest tests/e2e -q
+```
+
+E2E tests sẽ tạo video dummy bằng FFmpeg trong thư mục tạm, patch TTS để không gọi mạng, rồi chạy pipeline thật qua renderer/QA/API. Nếu FFmpeg không khả dụng, nhóm test media sẽ skip với message rõ.
+
+## How To Test With Sample Videos
+
+Sample project nằm ở:
+
+```txt
+examples/sample_project/
+```
+
+Nguồn video:
+
+```txt
+examples/sample_project/sample_videos/sample_product/
+```
+
+Chạy:
+
+```powershell
+cd backend
+py -m app.main --config ../examples/sample_project/product_config.example.json
+```
+
+Expected output structure:
+
+```txt
+examples/sample_project/outputs/sample-product-YYYY-MM-DD-HHMMSS/
+  video_001.mp4
+  video_001_visual.mp4
+  video_001_script.json
+  video_001_sub.srt
+  video_001_sub.ass
+  video_001_voice.mp3
+  video_001_voice_normalized.wav
+  video_001_voice_text.txt
+  video_001_timeline.json
+  video_001_log.json
+  video_002.mp4
+  video_003.mp4
+  segment_scoring_report.json
+  script_variants.json
+  project_summary.json
+```
+
+Known limitations:
+
+- Sample videos là dummy test pattern, chỉ dùng để kiểm tra pipeline kỹ thuật.
+- `edge-tts` cần internet khi render thật. E2E tests không gọi TTS online.
+- Gemini không bắt buộc cho test offline vì script variants có fallback theo style.
+- Pipeline chưa có AI vision hoặc scene detection nâng cao.
+
+## Smart Segment Scoring
+
+Sau khi tạo segment, backend sẽ sample tối đa 5 frame cho mỗi đoạn và tính các điểm cơ bản:
+
+- `brightness_score`: tránh đoạn quá tối hoặc cháy sáng.
+- `sharpness_score`: tránh đoạn quá mờ bằng variance of Laplacian.
+- `motion_score`: ưu tiên chuyển động vừa phải.
+- `freeze_score`: loại đoạn gần như đứng hình.
+- `stability_score`: giảm ưu tiên đoạn rung hoặc chuyển động quá mạnh.
+
+Kết quả được ghi vào:
+
+```txt
+segment_scoring_report.json
+```
+
+Timeline builder dùng weighted random theo `overall_score`, vì vậy segment điểm cao có xác suất được chọn cao hơn nhưng vẫn giữ seed để reproducible. Nếu số segment tốt quá ít, backend sẽ log warning và bổ sung segment điểm thấp hơn để batch không crash. Nếu không có segment nào dùng được sau scoring, job fail rõ với message `No usable video segments after scoring`.
+
+## Timeline Templates
+
+Timeline hiện được dựng theo template sản phẩm thay vì ghép random hoàn toàn. Template mặc định là:
+
+```txt
+ugc_reviewer_natural
+```
+
+Các template có sẵn:
+
+- `product_showcase_clean`: showcase sản phẩm rõ, sạch, ưu tiên shot sáng và ổn định.
+- `ugc_reviewer_natural`: review tự nhiên, nhịp vừa.
+- `fast_tiktok_recut`: nhịp nhanh cho TikTok/Reels.
+- `problem_solution`: cấu trúc vấn đề -> giải pháp.
+
+Config có thể chọn template:
+
+```json
+{
+  "timeline": {
+    "template_id": "ugc_reviewer_natural"
+  }
+}
+```
+
+Mỗi output sẽ có thêm `video_XXX_timeline.json`, gồm template id, slot name, text role, score segment và tags của từng clip. Log output cũng ghi `timeline_template`, `average_segment_score` và `source_diversity` để debug.
+
+## Script Variant Generator
+
+Khi full batch không có custom script được lưu từ preview editor, backend sẽ tạo trước một danh sách script riêng cho từng output bằng `ScriptVariantGenerator`. Mỗi output có `output_index` riêng, prompt riêng và variant style riêng để tránh việc cả batch dùng chung một hook/CTA.
+
+Các style mặc định:
+
+- `problem_hook`: hook dạng nêu vấn đề.
+- `reviewer_natural`: hook như người dùng review tự nhiên.
+- `benefit_first`: đi thẳng vào lợi ích chính.
+- `use_case_scene`: mở bằng tình huống sử dụng.
+- `fast_sales`: hook ngắn, nhanh cho TikTok/Reels.
+- `comparison_soft`: so sánh nhẹ, không công kích.
+
+Nếu timeline template khớp `best_for_templates`, planner sẽ ưu tiên style phù hợp trước. Nếu số output nhiều hơn số style, planner xoay vòng nhưng tránh dùng cùng style ở hai video liên tiếp khi có thể.
+
+File tổng được ghi tại:
+
+```txt
+script_variants.json
+```
+
+Mỗi video vẫn có file script riêng:
+
+```txt
+video_001_script.json
+video_002_script.json
+```
+
+Nếu Gemini lỗi ở một output, backend tạo fallback theo đúng style của output đó thay vì dùng một script mock chung cho toàn batch. Nếu project có custom script đã lưu, custom script vẫn được ưu tiên theo logic editor hiện tại.
+
+API hỗ trợ kiểm tra/generate trước:
+
+```txt
+GET  /api/script-variants/styles
+POST /api/projects/{project_id}/generate-script-variants
+```
+
+## QA Và Log
+
+Mỗi output có file log riêng:
+
+```txt
+video_001_log.json
+```
+
+Log gồm:
+
+- `started_at`
+- `finished_at`
+- `duration_seconds`
+- `steps`
+- `warnings`
+- `errors`
+- `qa`
+
+Status output:
+
+- `success`: render và QA đạt.
+- `warning`: video vẫn xuất được nhưng có cảnh báo, ví dụ TTS fallback hoặc duration lệch nhẹ.
+- `failed`: lỗi bắt buộc, ví dụ final video không tạo được, file rỗng, ffprobe không đọc được, thiếu segment.
+
+## Debug Lỗi FFmpeg
+
+Kiểm tra FFmpeg:
+
+```powershell
+ffmpeg -version
+ffprobe -version
+```
+
+Nếu PowerShell không nhận lệnh:
+
+```powershell
+where ffmpeg
+where ffprobe
+```
+
+Cách sửa:
+
+- Cài FFmpeg bằng `winget install Gyan.FFmpeg`.
+- Mở terminal mới sau khi cài.
+- Thêm thư mục `bin` của FFmpeg vào `PATH`.
+- Hoặc set `AUTO_TOOL_FFMPEG_DIR`.
+
+Nếu chạy exe và auto-install lỗi, xóa file zip hỏng rồi mở lại:
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\AutoTool\tools\ffmpeg\ffmpeg-release-essentials.zip" -Force
+```
+
+## Debug Lỗi Gemini
+
+Kiểm tra key:
+
+```powershell
+$env:GEMINI_API_KEY
+$env:GEMINI_API_KEYS
+```
+
+Hoặc kiểm tra key nhập trên UI.
+
+Nếu Gemini trả invalid JSON:
+
+- Xem `video_XXX_log.json`.
+- Xem step `generate_script`.
+- Xem `script_variants.json` để biết output nào dùng style nào và hook nào.
+- Giảm độ dài mô tả/features quá dài.
+- Kiểm tra model name trong config.
+- Thử key khác.
+- Tạm bật fallback khi debug:
+
+```powershell
+$env:AUTO_TOOL_ALLOW_SCRIPT_FALLBACK="1"
+```
+
+## Debug Lỗi TTS
+
+Mặc định TTS dùng Edge TTS, sau đó tự fallback qua Piper, gTTS và silent nếu provider trước lỗi:
+
+```txt
+vi-VN-HoaiMyNeural
+```
+
+Nếu không nghe tiếng Việt hoặc voice không được tạo:
+
+- Kiểm tra internet vì `edge-tts` cần gọi dịch vụ online.
+- Kiểm tra `AUTO_TOOL_TTS_VOICE`.
+- Nếu dùng Piper, kiểm tra `PIPER_MODEL_PATH`, `PIPER_CONFIG_PATH` và binary `piper` trong `PATH`.
+- Xem warnings trong `video_XXX_log.json`.
+- Backend retry Edge TTS theo `AUTO_TOOL_TTS_RETRIES`, tối đa 5 lần, rồi thử provider fallback.
+
+- Test nhanh pipeline bằng silent mode:
+
+```powershell
+$env:AUTO_TOOL_TTS_PROVIDER="silent"
+```
+
+Nếu silent mode đang bật, output có thể có warning liên quan audio nhưng không nhất thiết fail job.
+
+## Testing TTS
+
+Tạo thử một file voice riêng trước khi render:
+
+```powershell
+cd backend
+py -m app.tools.test_tts --provider edge_tts --voice vi-VN-HoaiMyNeural --text "Xin chào, đây là video review sản phẩm." --output ../examples/outputs/test_voice.mp3
+```
+
+Google Cloud TTS:
+
+```powershell
+$env:GOOGLE_TTS_CREDENTIALS_JSON_PATH="D:\Keys\google-tts-service-account.json"
+py -m app.tools.test_tts --provider google_cloud_tts --voice vi-VN-Wavenet-A --text "Xin chào, đây là video review sản phẩm." --output ../examples/outputs/google_voice.mp3
+```
+
+Provider hỗ trợ:
+
+- `edge_tts`: cần internet, chất lượng voice tiếng Việt tốt nhất trong MVP.
+- `google_cloud_tts`: Google Cloud Text-to-Speech, cần service account/OAuth credentials và Text-to-Speech API đã bật trong Google Cloud project.
+- `piper`: dùng model local, exe sẽ tự tải model `vi_VN-vais1000-medium` khi mở lần đầu.
+- `gtts`: backup online.
+- `silent`: chỉ để pipeline không crash khi cần debug.
+
+Command sẽ in JSON gồm provider thực tế, `output_path`, `duration`, `format` và `warnings`.
+
+## Audio Normalization
+
+Trước khi mux vào video, Auto Tool normalize mọi voice provider về WAV 44.1kHz mono:
+
+```txt
+video_001_voice.mp3
+video_001_voice_normalized.wav
+```
+
+Edge TTS/gTTS thường xuất MP3, Piper thường xuất WAV. Renderer luôn dùng file normalized để tránh lỗi mux audio không đồng nhất.
+
+## Subtitle Sync Behavior
+
+Subtitle được tạo theo duration voice thật:
+
+- Voice ngắn hơn video quá 2 giây: log warning `voice_shorter_than_video`, video vẫn giữ đủ duration và phần cuối im lặng.
+- Voice dài hơn video quá 1 giây: log warning `voice_longer_than_video`, final render cắt voice theo duration video.
+- Subtitle cuối luôn bị clamp trước cuối video ít nhất 0.1 giây.
+- Tool không dùng `atempo` để ép voice dài khớp video, tránh giọng bị nhanh/chậm bất thường.
+
+Mỗi `video_001_log.json` có thêm block `tts` và `subtitle_sync` để debug provider, raw voice, normalized voice và active subtitle duration.
+
+## Output Quality Review
+
+Sau khi render full batch, mở Result page và bấm `Review Output Quality`.
+
+Backend sẽ đọc các file log sẵn có của từng output:
+
+```txt
+video_001_log.json
+video_001_timeline.json
+video_001_sub.ass
+project_summary.json
+```
+
+Tool tính điểm kỹ thuật cho từng video:
+
+- Technical: file final, ffprobe, duration, resolution, audio/video stream.
+- Segment: average segment score, source diversity, cảnh bị lặp liên tục.
+- Audio: TTS provider, silent fallback, voice duration lệch video.
+- Subtitle: file subtitle, warning subtitle, subtitle burn fallback.
+- Timeline: template id, slot name, text role metadata.
+
+Overall score:
+
+```txt
+technical 30% + segment 25% + audio 20% + subtitle 15% + timeline 10%
+```
+
+Quality score chỉ là đánh giá kỹ thuật dựa trên log/render metadata. Nó không thay thế việc người dùng xem video bằng mắt.
+
+Review được lưu ở:
+
+```txt
+output_quality_review.json
+```
+
+và lưu trong SQLite để giữ trạng thái người dùng đánh dấu `Good`, `Bad`, `Need Rerender` hoặc `Ignored`.
+
+## Rerender Failed/Selected Videos
+
+Từ trang Output Quality Review, người dùng có thể render lại một phần batch:
+
+- `Rerender Selected`: chỉ render các video đang tick.
+- `Rerender Failed`: chỉ render output lỗi.
+- `Rerender Needs Rerender`: render các output bị score thấp hoặc người dùng đánh dấu cần render lại.
+
+Default rerender options:
+
+```txt
+reuse_script: true
+reuse_timeline: false
+reuse_settings: true
+```
+
+Output cũ không bị xóa. Output mới nằm trong:
+
+```txt
+outputs/rerenders/run_001/
+  video_003.mp4
+  video_003_script.json
+  video_003_sub.srt
+  video_003_voice.mp3
+  video_003_timeline.json
+  video_003_log.json
+  rerender_summary.json
+```
+
+Sau khi rerender, review endpoint sẽ ưu tiên file mới nhất theo output index nhưng vẫn giữ file cũ trên ổ đĩa.
+
+## Common TTS Issues
+
+- Edge TTS lỗi: kiểm tra mạng, voice name và thử lại.
+- Piper lỗi: kiểm tra model local hoặc mở lại exe để app tự cài vào `%LOCALAPPDATA%\AutoTool\tools\piper`.
+- gTTS lỗi: thường do mạng hoặc giới hạn dịch vụ.
+- Silent fallback: không phải voice thật, chỉ để batch render không crash.
+
+## Checklist Trước Khi Render
+
+- Source folder tồn tại và có video hợp lệ.
+- Video nguồn dài hơn 3 giây.
+- FFmpeg và FFprobe chạy được.
+- Output folder có quyền ghi.
+- Gemini API key đã nhập hoặc fallback đã bật khi debug.
+- Product name, description, features và CTA không rỗng.
+- Duration phù hợp với số lượng video nguồn.
+- Resolution là `1080x1920`.
+- Music folder/file tồn tại nếu bật nhạc nền.
+- Render preview trước khi render full batch.
+- Xem lại script/subtitle sau preview.
+- Nếu render full batch không dùng custom script, kiểm tra `script_variants.json`.
+- Kiểm tra warning/error trong Result page.
+
+## Roadmap
+
+- Smart Segment: chọn segment theo chuyển động, độ nét, scene boundary và audio cue.
+- Product-aware Timeline: ưu tiên đoạn có sản phẩm rõ, tránh đoạn mờ/không liên quan.
+- Better Script Editor: form chỉnh từng dòng voiceover/subtitle thay vì JSON textarea.
+- Asset Overlay: thay overlay chữ bằng ảnh/template overlay.
+- Voice Provider thật có kiểm soát tốc độ, emotion và caching.
+- Render Queue ổn định hơn với cancel/retry job.
+- File manager local để mở output folder từ UI.
+- Preset nâng cao theo ngành hàng.
+- Export project package để chuyển máy.
+- Bộ test tự động cho renderer/QA/API.
+
+## Tài Liệu Khác
+
+- [Development Plan](docs/DEVELOPMENT_PLAN.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Backend README](backend/README.md)
+- [Frontend README](frontend/README.md)
+
+## Content Manager / Caption Export
+
+Sau khi render xong full batch, người dùng có thể mở trang `Quản lý caption` từ trang kết quả để quản lý nội dung đăng bài cho từng video.
+
+Backend đọc output mới nhất của project, lấy thông tin từ `video_XXX_script.json`, `video_XXX_timeline.json` và kết quả render trong SQLite để tạo danh sách content item. Nếu người dùng đã sửa caption, hashtag, CTA, ghi chú hoặc trạng thái đăng bài thì các giá trị này được giữ lại khi build lại danh sách.
+
+API chính:
+
+```txt
+GET  /api/projects/{project_id}/content
+PUT  /api/projects/{project_id}/content/{output_index}
+POST /api/projects/{project_id}/content/{output_index}/mark-copied
+POST /api/projects/{project_id}/content/{output_index}/mark-posted
+POST /api/projects/{project_id}/content/export
+```
+
+Các trạng thái publish:
+
+- `draft`: nội dung mới tạo, chưa dùng.
+- `copied`: người dùng đã copy caption/hashtag.
+- `posted`: người dùng đã đánh dấu đã đăng.
+- `skipped`: bỏ qua video này.
+
+File export được ghi vào output folder mới nhất:
+
+```txt
+content_items.json
+content_export.json
+content_export.csv
+content_export.txt
+content_plan.md
+```
+
+`content_export.csv` dùng UTF-8 BOM để mở ổn định trong Excel. `content_plan.md` dùng để review nhanh kế hoạch đăng bài.
+
+---
+
+## Release Candidate Testing (v0.1.0-rc1)
+
+Auto Tool hiện đang ở trạng thái **Release Candidate v0.1.0-rc1**.
+
+### Phiên bản
+
+```txt
+0.1.0-rc1
+```
+
+Kiểm tra phiên bản qua API:
+
+```txt
+GET http://localhost:8000/api/health
+→ { "status": "ok", "version": "0.1.0-rc1" }
+```
+
+Hoặc xem ở footer giao diện web.
+
+---
+
+## Smoke Test
+
+Smoke test kiểm tra pipeline end-to-end nhanh — **không cần video thật**, **không cần internet** (mock mode mặc định):
+
+```powershell
+cd backend
+py -m app.tools.smoke_test --config ../examples/qa_projects/projector_config.json
+```
+
+Output mẫu khi thành công:
+
+```json
+{
+  "status": "success",
+  "steps": {
+    "load_config": "ok",
+    "check_env": "ok",
+    "scan": "ok",
+    "segment": "ok",
+    "segment_scoring": "ok",
+    "timeline": "ok",
+    "script": "ok",
+    "tts": "ok",
+    "subtitle": "ok",
+    "render_preview": "ok",
+    "qa": "ok"
+  },
+  "preview_path": "..."
+}
+```
+
+Test với video thật (cần bỏ video vào `examples/sample_videos/projector/`):
+
+```powershell
+py -m app.tools.smoke_test --config ../examples/qa_projects/projector_config.json --no-mock
+```
+
+---
+
+## Manual QA
+
+Template báo cáo QA thủ công:
+
+```txt
+docs/MANUAL_QA_REPORT_TEMPLATE.md
+```
+
+Checklist đầy đủ:
+
+```txt
+docs/RELEASE_QA_CHECKLIST.md
+```
+
+Config mẫu cho 3 sản phẩm QA:
+
+```txt
+examples/qa_projects/
+  projector_config.json
+  fan_config.json
+  jacket_config.json
+  README.md
+```
+
+---
+
+## Performance Logs
+
+Sau mỗi render, Auto Tool ghi chi tiết thời gian từng bước vào `video_XXX_log.json`:
+
+```json
+{
+  "performance": {
+    "render_visual_seconds": 18.4,
+    "script_seconds": 3.1,
+    "tts_seconds": 2.8,
+    "subtitle_seconds": 0.1,
+    "render_final_seconds": 7.6,
+    "total_seconds": 38.7
+  }
+}
+```
+
+Và tổng kết toàn batch trong `project_summary.json`:
+
+```json
+{
+  "performance_summary": {
+    "total_runtime_seconds": 180.5,
+    "average_time_per_video": 36.1,
+    "slowest_step": "render_visual",
+    "slowest_output_index": 3
+  }
+}
+```
+
+---
+
+## Known Limitations (v0.1.0-rc1)
+
+Những hạn chế cố ý trong phiên bản này — **không nằm trong scope RC v0.1**:
+
+| Hạn chế | Giải thích |
+|---------|------------|
+| Không tự tải video từ TikTok/Shopee | Phải bỏ video thủ công vào thư mục nguồn |
+| Không tự đăng video lên mạng xã hội | Cần copy file video và đăng tay |
+| Chất lượng video phụ thuộc video input | Garbage in, garbage out — cần video nguồn chất lượng |
+| Edge TTS cần kết nối internet | Dùng Piper hoặc silent mode khi offline |
+| Piper cần tải model local (cỡ ~60MB) | Exe tự tải lần đầu; cần internet lần đầu |
+| Segment scoring chỉ là heuristic | Không phải AI vision — không nhận diện sản phẩm trong khung hình |
+| Quality score chỉ là đánh giá kỹ thuật | Luôn xem video bằng mắt trước khi đăng |
+| Gemini cần API key | Không có API key → script dùng style template mặc định |
+| Chưa hỗ trợ multi-user | Dùng cho máy cá nhân, một người dùng |
+| Chưa có cloud render | Render chạy trên máy local, cần CPU/GPU mạnh |

@@ -1,0 +1,63 @@
+{
+  "project_name": "qa-jacket",
+  "source_folder": "../sample_videos/jacket",
+  "output_folder": "../outputs/qa_jacket",
+  "product": {
+    "name": "Áo khoác chống nắng",
+    "brand": "QA Brand",
+    "description": "Áo khoác nhẹ cho nhu cầu đi làm, đi học và di chuyển ngoài trời hằng ngày.",
+    "features": [
+      "Chất liệu nhẹ",
+      "Dễ phối đồ",
+      "Phù hợp di chuyển ngoài trời",
+      "Thiết kế tiện dụng"
+    ],
+    "cta": "Xem chi tiết sản phẩm ngay"
+  },
+  "render": {
+    "output_count": 3,
+    "duration": 12,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "fps": 30
+  },
+  "effects": {
+    "cut_intensity": 70,
+    "speed_variation": 30,
+    "grain": 10,
+    "zoom_motion": 20,
+    "overlay_height": 33,
+    "subtitle_size": 84
+  },
+  "ai": {
+    "text_model": "gemini-3.1-flash-lite",
+    "tone": "friendly_reviewer",
+    "language": "vi",
+    "gemini_api_keys": []
+  },
+  "tts": {
+    "provider": "edge_tts",
+    "fallback_provider": "piper",
+    "voice": "vi-VN-HoaiMyNeural",
+    "language": "vi",
+    "api_key": null,
+    "credentials_json_path": null,
+    "access_token": null,
+    "rate": "+0%",
+    "pitch": "+0Hz",
+    "volume": "+0%",
+    "output_format": "mp3"
+  },
+  "music": {
+    "enabled": false,
+    "source_folder": null,
+    "source_file": null,
+    "volume": 0.12,
+    "fade_in": 0.5,
+    "fade_out": 0.8,
+    "duck_under_voice": false
+  },
+  "timeline": {
+    "template_id": "ugc_reviewer_natural"
+  }
+}
