@@ -32,8 +32,29 @@ export default function RenderProgress({ job }: RenderProgressProps) {
           <div className="font-semibold">{job?.total_outputs ?? 0}</div>
         </div>
       </div>
+      {job?.cache_summary ? (
+        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+          <div className="rounded-md bg-emerald-50 p-3 text-emerald-700">
+            <div className="text-xs">Cache hit</div>
+            <div className="font-semibold">{job.cache_summary.hits ?? 0}</div>
+          </div>
+          <div className="rounded-md bg-amber-50 p-3 text-amber-800">
+            <div className="text-xs">Cache miss</div>
+            <div className="font-semibold">{job.cache_summary.misses ?? 0}</div>
+          </div>
+          <div className="rounded-md bg-surface p-3">
+            <div className="text-xs text-muted">Dung lượng cache</div>
+            <div className="font-semibold">{formatCacheSize(job.cache_summary.cache_size_mb ?? 0)}</div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function formatCacheSize(sizeMb: number): string {
+  if (sizeMb >= 1024) return `${(sizeMb / 1024).toFixed(2)} GB`;
+  return `${sizeMb.toFixed(1)} MB`;
 }
 
 function formatStatus(status: string): string {

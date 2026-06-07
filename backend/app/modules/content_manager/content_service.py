@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app import database
+from app.modules.content_safety.safety_guard_service import SafetyGuardService
 from app.modules.content_manager.content_exporter import ContentExporter
 from app.modules.content_manager.content_schema import (
     OutputContentItem,
@@ -13,6 +14,8 @@ from app.modules.content_manager.content_schema import (
     build_content_summary,
     normalize_hashtags,
 )
+from app.modules.industry_presets.industry_preset_service import IndustryPresetService
+from app.modules.industry_presets.industry_schema import IndustryPreset
 from app.modules.script_writer.script_writer import ProductVideoScript
 from app.schemas.project_schema import ProjectConfig
 
@@ -113,9 +116,18 @@ class ContentService:
         output_dir = _latest_output_folder(project_id)
         if output_dir is None:
             return None
+        safety_check = None
+        project = database.get_project(project_id)
+        if project:
+            try:
+                config = ProjectConfig.model_validate(project["config"])
+                safety_check = SafetyGuardService().check_content_items(items, config.product).model_dump(mode="json")
+            except Exception:
+                safety_check = None
         payload = {
             "generated_at": datetime.now().replace(microsecond=0).isoformat(),
             "summary": build_content_summary(items).model_dump(mode="json"),
+            "safety_check": safety_check,
             "items": [item.model_dump(mode="json") for item in items],
         }
         path = output_dir / "content_items.json"
@@ -160,16 +172,24 @@ def _content_item_from_output(
 ) -> dict[str, Any]:
     script = _read_script(output.get("script_file"))
     timeline = _read_json(output.get("timeline_file"))
-    fallback_caption = config.product.description or config.product.name
+    industry = _industry_for_config(config)
+    fallback_caption = _caption_from_product(config)
     caption = _first_text(
         script.caption if script else None,
         output.get("caption"),
         fallback_caption,
         "Nội dung sản phẩm cần được bổ sung.",
     )
+    caption = _clean_caption_for_industry(caption, industry)
     hashtags = normalize_hashtags(
-        script.hashtags if script else output.get("hashtags") or ["#review", "#sanpham", "#muasam"]
+        script.hashtags
+        if script and script.hashtags
+        else output.get("hashtags")
+        or config.product.hashtag_suggestions
+        or (industry.hashtag_suggestions if industry else ["#review", "#sanpham", "#muasam"])
     )
+    if not hashtags and industry:
+        hashtags = normalize_hashtags(industry.hashtag_suggestions)
     cta = _first_text(script.cta if script else None, output.get("cta"), config.product.cta)
     return {
         "id": f"{project_id}:content:{output_index}",
@@ -194,6 +214,17 @@ def _content_item_from_output(
         "created_at": datetime.now().replace(microsecond=0).isoformat(),
         "updated_at": datetime.now().replace(microsecond=0).isoformat(),
     }
+
+
+def _caption_from_product(config: ProjectConfig) -> str:
+    product = config.product
+    base = product.description or product.name
+    specs = [f"{spec.name}: {spec.value}" for spec in product.specs[:2] if spec.name and spec.value]
+    if specs:
+        candidate = f"{base} | {'; '.join(specs)}"
+        if len(candidate) <= 180:
+            return candidate
+    return base
 
 
 def _merge_existing_edits(source_item: dict[str, Any], existing: dict[str, Any]) -> dict[str, Any]:
@@ -226,6 +257,49 @@ def _read_script(path_value: Any) -> ProductVideoScript | None:
         return ProductVideoScript.model_validate(payload)
     except Exception:
         return None
+
+
+def _industry_for_config(config: ProjectConfig) -> IndustryPreset | None:
+    if not config.industry or not config.industry.preset_id:
+        return None
+    return IndustryPresetService().get_preset(config.industry.preset_id)
+
+
+def _clean_caption_for_industry(caption: str, industry: IndustryPreset | None) -> str:
+    if industry is None:
+        return caption
+    cleaned = caption.strip()
+    if industry.id == "fast_sale_trending" and len(cleaned) > 180:
+        cleaned = cleaned[:177].rstrip() + "..."
+    if industry.id in {"beauty_cosmetics", "mom_baby"}:
+        cleaned = _replace_risky_terms(
+            cleaned,
+            {
+                "trị mụn": "hỗ trợ chăm sóc da",
+                "trị nám": "hỗ trợ chăm sóc da",
+                "làm trắng": "làm da trông sáng hơn",
+                "an toàn tuyệt đối": "dễ cân nhắc khi dùng",
+                "chữa bệnh": "hỗ trợ nhu cầu sử dụng",
+            },
+        )
+    if industry.id == "food_beverage":
+        cleaned = _replace_risky_terms(
+            cleaned,
+            {
+                "giảm cân": "dùng trong chế độ ăn phù hợp",
+                "chữa bệnh": "phù hợp nhu cầu ăn uống",
+                "tốt cho sức khỏe": "dễ dùng trong nhiều dịp",
+            },
+        )
+    return cleaned
+
+
+def _replace_risky_terms(text: str, replacements: dict[str, str]) -> str:
+    cleaned = text
+    for source, target in replacements.items():
+        cleaned = cleaned.replace(source, target)
+        cleaned = cleaned.replace(source.capitalize(), target.capitalize())
+    return cleaned
 
 
 def _read_json(path_value: Any) -> dict[str, Any]:

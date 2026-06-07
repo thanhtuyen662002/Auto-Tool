@@ -77,12 +77,13 @@ class VariantPlanner:
         self,
         output_count: int,
         timeline_template_id: str | None,
+        preferred_variant_ids: list[str] | None = None,
     ) -> list[ScriptVariantStyle]:
         if output_count <= 0:
             raise ValueError("output_count must be greater than 0.")
 
         styles = list_variant_styles()
-        ordered = self._ordered_for_template(styles, timeline_template_id)
+        ordered = self._ordered_for_template(styles, timeline_template_id, preferred_variant_ids)
         planned: list[ScriptVariantStyle] = []
 
         for index in range(output_count):
@@ -101,11 +102,19 @@ class VariantPlanner:
     def _ordered_for_template(
         styles: list[ScriptVariantStyle],
         timeline_template_id: str | None,
+        preferred_variant_ids: list[str] | None = None,
     ) -> list[ScriptVariantStyle]:
+        preferred_ids = preferred_variant_ids or []
+        by_id = {style.id: style for style in styles}
+        industry_preferred = [by_id[style_id] for style_id in preferred_ids if style_id in by_id]
+
         if not timeline_template_id:
-            return styles
+            others = [style for style in styles if style not in industry_preferred]
+            return industry_preferred + others
 
-        preferred = [style for style in styles if timeline_template_id in style.best_for_templates]
-        others = [style for style in styles if style not in preferred]
-        return preferred + others
-
+        template_preferred = [style for style in styles if timeline_template_id in style.best_for_templates]
+        ordered: list[ScriptVariantStyle] = []
+        for style in [*industry_preferred, *template_preferred, *styles]:
+            if style not in ordered:
+                ordered.append(style)
+        return ordered

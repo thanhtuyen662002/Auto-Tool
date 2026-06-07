@@ -109,7 +109,10 @@ class ProductTimelineBuilder:
                         slot_name=slot.name,
                         text_role=slot.text_role,
                         segment_score=round(segment_score, 3),
+                        segment_score_cache_hit=segment.score_detail.cache_hit if segment.score_detail else False,
                         tags=list(segment.tags),
+                        user_review_status=segment.user_review_status,
+                        source_media_review_status=segment.source_media_review_status,
                     )
                 )
                 used_sources.append(segment.source_path)
@@ -178,7 +181,12 @@ def _selection_score(
     source_diversity_score = _source_diversity_score(segment.source_path, used_sources)
     duration_fit_score = _duration_fit_score(segment.duration, slot)
     repeat_penalty = 0.35 if used_segment_ids and _segment_key(segment) in used_segment_ids else 1.0
-    return repeat_penalty * (
+    review_boost = 1.0
+    if segment.user_review_status == "favorite":
+        review_boost = 2.2
+    elif segment.user_review_status == "good":
+        review_boost = 1.45
+    return review_boost * repeat_penalty * (
         quality_score * 0.55
         + tag_match_score * 0.25
         + source_diversity_score * 0.15

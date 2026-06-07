@@ -8,6 +8,10 @@ from typing import Any
 
 from app.adapters.ffmpeg_adapter import probe_media_duration
 from app.modules.audio.audio_normalizer import create_silent_audio, normalize_audio_for_render
+from app.modules.cache.cache_service import CacheService
+from app.modules.content_safety.safety_guard_service import SafetyGuardService
+from app.modules.crop_safety.crop_safety_service import summarize_crop_safety_for_output
+from app.modules.industry_presets.industry_preset_service import IndustryPresetService
 from app.modules.music_selector.music_selector import MusicSelector
 from app.modules.qa_checker.qa_checker import check_output_video
 from app.modules.renderer.overlay_renderer import OverlayRenderer
@@ -23,6 +27,8 @@ from app.modules.render_worker.output_log import (
 )
 from app.modules.script_writer.script_writer import ProductVideoScript, ScriptWriter
 from app.modules.subtitle_generator.subtitle_generator import SubtitleGenerator
+from app.modules.visual_style.subtitle_style_renderer import generate_ass_subtitle
+from app.modules.visual_style.visual_style_service import VisualStyleService, parse_resolution
 from app.modules.voice_generator.voice_generator import VoiceGenerator
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import write_json
@@ -44,6 +50,8 @@ def render_one_output(
     preview_only: bool,
     log_callback: LogCallback | None,
     script_override: ProductVideoScript | None = None,
+    cache_service: CacheService | None = None,
+    source_media_filter_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     name = base_name(index, preview_only)
     final_path = output_dir / f"{name}.mp4"
@@ -51,6 +59,7 @@ def render_one_output(
     script_path = output_dir / f"{name}_script.json"
     subtitle_path = output_dir / f"{name}_sub.srt"
     subtitle_ass_path = output_dir / f"{name}_sub.ass"
+    overlay_asset_path = output_dir / f"{name}_overlay.png"
     voice_path = output_dir / f"{name}_voice.{_voice_extension(config)}"
     normalized_voice_path = output_dir / f"{name}_voice_normalized.wav"
     voice_text_path = output_dir / f"{name}_voice_text.txt"
@@ -72,6 +81,7 @@ def render_one_output(
         "script_file": str(script_path),
         "subtitle_file": str(subtitle_path),
         "subtitle_ass_file": str(subtitle_ass_path),
+        "overlay_file": str(overlay_asset_path),
         "voice_file": str(voice_path),
         "normalized_voice_file": str(normalized_voice_path),
         "timeline_file": str(timeline_path),
@@ -98,6 +108,18 @@ def render_one_output(
             "subtitle_file": str(subtitle_path),
             "warnings": [],
         },
+        "visual_style": {
+            "preset_id": config.visual_style.preset_id,
+            "overlay_asset": str(overlay_asset_path),
+            "subtitle_format": "ass",
+            "ass_subtitle_path": str(subtitle_ass_path),
+            "fallback_used": False,
+            "warnings": [],
+        },
+        "crop_safety": summarize_crop_safety_for_output(timeline),
+        "source_media_filter": dict(source_media_filter_summary or {}),
+        "script_safety": None,
+        "cache": _timeline_cache_summary(timeline),
         "performance": {},
         "warnings": [],
         "errors": [],
@@ -125,6 +147,8 @@ def render_one_output(
                 script_writer = ScriptWriter()
                 script_result = script_writer.generate_script(config, output_index=index)
                 extend_warnings(output_log, script_writer.warnings)
+            script_result = _with_industry_metadata(script_result, config)
+            script_result = _guard_script_or_fallback(script_result, config, index, output_log)
             write_json(script_path, script_result.model_dump(mode="json"))
             return script_result
 
@@ -144,6 +168,7 @@ def render_one_output(
             ),
         )
         output_log["voice_file"] = generated_voice_path
+        output_log["cache"]["tts_cache_hit"] = bool(getattr(voice_generator, "last_cache_hit", False))
         output_log["tts"]["raw_voice_path"] = generated_voice_path
         output_log["caption"] = script.caption
         output_log["hashtags"] = list(script.hashtags)
@@ -186,15 +211,26 @@ def render_one_output(
                 output_path=str(subtitle_path),
                 subtitle_lines=synced_subtitles,
             )
-            subtitle_generator.generate_ass(
-                script,
-                config.render.duration,
-                str(subtitle_ass_path),
-                font_size=config.effects.subtitle_size,
-                overlay_height=config.effects.overlay_height,
-                subtitle_lines=synced_subtitles,
-                voice_duration=normalized_voice_duration,
-            )
+            try:
+                width, height = parse_resolution(config.render.resolution)
+                preset = VisualStyleService().resolve_preset(config.visual_style)
+                styled_lines = synced_subtitles or script.subtitles
+                generate_ass_subtitle(styled_lines, preset, width, height, str(subtitle_ass_path))
+                output_log["visual_style"]["preset_id"] = preset.id
+            except Exception as exc:
+                warning = f"ass_subtitle_failed_fallback_to_srt: Không tạo được phụ đề ASS theo style, dùng ASS mặc định. Lý do: {exc}"
+                extend_warnings(output_log, [warning])
+                output_log["visual_style"]["fallback_used"] = True
+                output_log["visual_style"]["warnings"].append("ass_subtitle_failed_fallback_to_srt")
+                subtitle_generator.generate_ass(
+                    script,
+                    config.render.duration,
+                    str(subtitle_ass_path),
+                    font_size=config.effects.subtitle_size,
+                    overlay_height=config.effects.overlay_height,
+                    subtitle_lines=synced_subtitles,
+                    voice_duration=normalized_voice_duration,
+                )
             output_log["subtitle_sync"]["subtitle_active_duration"] = subtitle_generator.last_active_duration
             output_log["subtitle_sync"]["warnings"] = list(subtitle_generator.warnings)
             extend_warnings(output_log, subtitle_generator.warnings)
@@ -206,7 +242,10 @@ def render_one_output(
         extend_warnings(output_log, music_selector.warnings)
         output_log["music_file"] = music_path
 
-        overlay_renderer = OverlayRenderer()
+        overlay_renderer = OverlayRenderer(
+            cache_service=cache_service,
+            cache_enabled=config.cache.cache_overlay_assets,
+        )
         output_path = run_step(
             output_log,
             "render_final",
@@ -218,9 +257,13 @@ def render_one_output(
                 config=config,
                 output_path=str(final_path),
                 music_path=music_path,
+                fallback_subtitle_path=str(subtitle_path),
             ),
         )
         extend_warnings(output_log, overlay_renderer.warnings)
+        output_log["cache"]["overlay_cache_hit"] = bool(overlay_renderer.last_overlay_cache_hit)
+        if overlay_renderer.last_visual_style:
+            output_log["visual_style"] = overlay_renderer.last_visual_style
 
         qa_result = run_step(
             output_log,
@@ -248,6 +291,7 @@ def render_one_output(
             "script_file": str(script_path),
             "subtitle_file": str(subtitle_path),
             "subtitle_ass_file": str(subtitle_ass_path),
+            "overlay_file": str(overlay_asset_path),
             "voice_file": generated_voice_path,
             "normalized_voice_file": normalized_voice_for_render,
             "tts_provider": output_log["tts_provider"],
@@ -259,6 +303,11 @@ def render_one_output(
             "timeline_file": str(timeline_path),
             "music_file": music_path,
             "log_file": str(log_path),
+            "visual_style": dict(output_log.get("visual_style", {})),
+            "crop_safety": dict(output_log.get("crop_safety", {})),
+            "source_media_filter": dict(output_log.get("source_media_filter", {})),
+            "script_safety": output_log.get("script_safety"),
+            "cache": dict(output_log.get("cache", {})),
             "warnings": short_messages(output_log["warnings"]),
             "errors": short_messages(output_log["errors"]),
             "performance": dict(output_log.get("performance", {})),
@@ -289,11 +338,17 @@ def render_one_output(
             "script_file": str(script_path),
             "subtitle_file": str(subtitle_path),
             "subtitle_ass_file": str(subtitle_ass_path),
+            "overlay_file": str(overlay_asset_path),
             "voice_file": str(voice_path),
             "normalized_voice_file": str(normalized_voice_path),
             "timeline_file": str(timeline_path),
             "music_file": music_path,
             "log_file": str(log_path),
+            "visual_style": dict(output_log.get("visual_style", {})),
+            "crop_safety": dict(output_log.get("crop_safety", {})),
+            "source_media_filter": dict(output_log.get("source_media_filter", {})),
+            "script_safety": output_log.get("script_safety"),
+            "cache": dict(output_log.get("cache", {})),
             "performance": dict(output_log.get("performance", {})),
         }
     finally:
@@ -313,6 +368,16 @@ def _timeline_report(timeline: Any, fallback_template_id: str) -> dict[str, Any]
         "average_segment_score": _average_segment_score(timeline),
         "source_diversity": _source_diversity(timeline),
         "clips": clips,
+    }
+
+
+def _timeline_cache_summary(timeline: Any) -> dict[str, Any]:
+    clips = list(getattr(timeline, "clips", []) or [])
+    return {
+        "segment_score_cache_hits": sum(1 for clip in clips if getattr(clip, "segment_score_cache_hit", False)),
+        "crop_safety_cache_hits": sum(1 for clip in clips if getattr(clip, "crop_cache_hit", False)),
+        "tts_cache_hit": False,
+        "overlay_cache_hit": False,
     }
 
 
@@ -362,3 +427,70 @@ def _normalize_voice_for_render(
 
     duration = round(probe_media_duration(normalized_path), 3)
     return normalized_path, duration
+
+
+def _guard_script_or_fallback(
+    script: ProductVideoScript,
+    config: ProjectConfig,
+    index: int,
+    output_log: dict[str, Any],
+) -> ProductVideoScript:
+    service = SafetyGuardService()
+    result = service.check_script_output(script, config.product, target_duration=config.render.duration)
+    output_log["script_safety"] = {
+        "passed": result.passed,
+        "warnings_count": result.warnings_count,
+        "errors_count": result.errors_count,
+        "issues": [issue.model_dump(mode="json") for issue in result.issues],
+        "fallback_used": False,
+    }
+    extend_warnings(output_log, [issue.message for issue in result.issues if issue.severity == "warning"])
+    if not result.errors_count:
+        return script
+
+    extend_warnings(
+        output_log,
+        [
+            "script_safety_failed_fallback: Script generated không an toàn, đang dùng fallback script.",
+            *[issue.message for issue in result.issues if issue.severity == "error"],
+        ],
+    )
+    fallback = _with_industry_metadata(_fallback_script_for_config(config, index), config)
+    fallback_result = service.check_script_output(fallback, config.product, target_duration=config.render.duration)
+    output_log["script_safety"] = {
+        "passed": fallback_result.passed,
+        "warnings_count": fallback_result.warnings_count,
+        "errors_count": fallback_result.errors_count,
+        "issues": [issue.model_dump(mode="json") for issue in fallback_result.issues],
+        "original_issues": [issue.model_dump(mode="json") for issue in result.issues],
+        "fallback_used": True,
+    }
+    extend_warnings(output_log, [issue.message for issue in fallback_result.issues if issue.severity == "warning"])
+    if fallback_result.errors_count:
+        raise ValueError(
+            "Fallback script safety check failed: "
+            + "; ".join(issue.message for issue in fallback_result.issues if issue.severity == "error")
+        )
+    return fallback
+
+
+def _fallback_script_for_config(config: ProjectConfig, index: int) -> ProductVideoScript:
+    industry = None
+    if config.industry and config.industry.preset_id:
+        industry = IndustryPresetService().get_preset(config.industry.preset_id)
+    return ScriptWriter._fallback_script(config, index, industry)
+
+
+def _with_industry_metadata(script: ProductVideoScript, config: ProjectConfig) -> ProductVideoScript:
+    if not config.industry or not config.industry.preset_id:
+        return script
+    preset = IndustryPresetService().get_preset(config.industry.preset_id)
+    return script.model_copy(
+        update={
+            "industry_preset_id": script.industry_preset_id or preset.id,
+            "caption_tone": script.caption_tone or preset.caption_tone,
+            "hashtag_suggestions_used": list(script.hashtag_suggestions_used)
+            or list(preset.hashtag_suggestions),
+            "hashtags": list(script.hashtags) or list(preset.hashtag_suggestions[:6]),
+        }
+    )

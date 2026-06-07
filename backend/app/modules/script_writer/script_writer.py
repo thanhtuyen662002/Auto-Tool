@@ -5,6 +5,8 @@ import os
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.adapters.gemini_adapter import GeminiAdapter, ScriptGenerationError
+from app.modules.industry_presets.industry_preset_service import IndustryPresetService
+from app.modules.industry_presets.industry_schema import IndustryPreset
 from app.modules.script_writer.prompts import (
     build_product_video_script_prompt,
     recommended_line_count,
@@ -15,6 +17,12 @@ from app.utils.logger import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def _industry_for_config(config: ProjectConfig) -> IndustryPreset | None:
+    if not config.industry or not config.industry.preset_id:
+        return None
+    return IndustryPresetService().get_preset(config.industry.preset_id)
 
 
 class VoiceoverLine(BaseModel):
@@ -36,6 +44,9 @@ class ProductVideoScript(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     variant_style_id: str | None = None
+    industry_preset_id: str | None = None
+    caption_tone: str | None = None
+    hashtag_suggestions_used: list[str] = Field(default_factory=list)
     hook: str = Field(min_length=1)
     voiceover: list[VoiceoverLine] = Field(min_length=1)
     subtitles: list[SubtitleLine] = Field(min_length=1)
@@ -51,7 +62,14 @@ class ScriptWriter:
 
     def generate_script(self, config: ProjectConfig, output_index: int = 1) -> ProductVideoScript:
         self.warnings = []
-        prompt = build_product_video_script_prompt(config.product, config.render, config.ai, output_index)
+        industry = _industry_for_config(config)
+        prompt = build_product_video_script_prompt(
+            config.product,
+            config.render,
+            config.ai,
+            output_index,
+            industry=industry,
+        )
         adapter = self.gemini_adapter or GeminiAdapter(
             api_key=None,
             model_name=config.ai.text_model,
@@ -70,7 +88,7 @@ class ScriptWriter:
             warning = f"{message}; đang dùng kịch bản dự phòng vì AUTO_TOOL_ALLOW_SCRIPT_FALLBACK=1"
             logger.warning(warning)
             self.warnings.append(warning)
-            script = self._fallback_script(config, output_index)
+            script = self._fallback_script(config, output_index, industry)
 
         return self._prepare_script(script, config)
 
@@ -80,6 +98,7 @@ class ScriptWriter:
         config: ProjectConfig,
     ) -> ProductVideoScript:
         target_duration = float(config.render.duration)
+        industry = _industry_for_config(config)
         voiceover = [line for line in script.voiceover if line.text.strip()]
         needed_count = recommended_line_count(target_duration)
         max_count = needed_count + 1
@@ -103,25 +122,46 @@ class ScriptWriter:
 
         return script.model_copy(
             update={
+                "industry_preset_id": script.industry_preset_id or (industry.id if industry else None),
+                "caption_tone": script.caption_tone or (industry.caption_tone if industry else None),
+                "hashtag_suggestions_used": (
+                    list(script.hashtag_suggestions_used)
+                    or (list(industry.hashtag_suggestions) if industry else [])
+                ),
                 "hook": script.hook.strip(),
                 "voiceover": voiceover,
                 "subtitles": subtitles,
                 "cta": cta or script.cta,
                 "caption": script.caption.strip(),
+                "hashtags": list(script.hashtags) or (list(industry.hashtag_suggestions[:6]) if industry else []),
             }
         )
 
     @staticmethod
-    def _fallback_script(config: ProjectConfig, output_index: int) -> ProductVideoScript:
+    def _fallback_script(
+        config: ProjectConfig,
+        output_index: int,
+        industry: IndustryPreset | None = None,
+    ) -> ProductVideoScript:
         line_count = recommended_line_count(float(config.render.duration))
         lines = ScriptWriter._fallback_voiceover_lines(config, output_index)[:line_count]
+        hashtags = list(industry.hashtag_suggestions[:6]) if industry else ["#review", "#sanpham", "#muasam"]
+        caption = (
+            f"{config.product.name}: {industry.caption_tone}"
+            if industry
+            else f"Má»™t gÃ³c nhÃ¬n nhanh vá» {config.product.name}."
+        )
         fallback = {
+            "industry_preset_id": industry.id if industry else None,
+            "caption_tone": industry.caption_tone if industry else None,
+            "hashtag_suggestions_used": hashtags,
             "hook": f"{config.product.name} có vài điểm đáng xem trong nhu cầu sử dụng hằng ngày",
             "voiceover": [{"time_hint": "", "text": text} for text in lines],
             "subtitles": [{"start_hint": None, "end_hint": None, "text": text} for text in lines],
             "cta": config.product.cta,
             "caption": f"Một góc nhìn nhanh về {config.product.name}.",
-            "hashtags": ["#review", "#sanpham", "#muasam"],
+            "hashtags": hashtags,
+            "caption": caption,
         }
         return ProductVideoScript.model_validate(fallback)
 

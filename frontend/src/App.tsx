@@ -7,6 +7,7 @@ import ResultPage from './pages/ResultPage';
 import OutputReviewPage from './pages/OutputReviewPage';
 import AppSettingsPage from './pages/AppSettingsPage';
 import ContentManagerPage from './pages/ContentManagerPage';
+import SourceMediaManagerPage from './pages/SourceMediaManagerPage';
 
 const FALLBACK_VERSION = '0.1.0-rc1';
 
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="/results/:projectId/:jobId" element={<ResultPage />} />
           <Route path="/results/:jobId" element={<ResultPage />} />
           <Route path="/projects/:projectId/review" element={<OutputReviewPage />} />
+          <Route path="/projects/:projectId/source-media" element={<SourceMediaManagerPage />} />
           <Route path="/projects/:projectId/content" element={<ContentManagerPage />} />
           <Route path="/app-settings" element={<AppSettingsPage />} />
           <Route path="*" element={<Navigate replace to="/" />} />

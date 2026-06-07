@@ -23,6 +23,7 @@ def finalize_summary(summary: dict[str, Any]) -> None:
         for item in outputs
         if item.get("status") == "failed"
     ]
+    summary["visual_style_summary"] = _visual_style_summary(outputs)
 
 
 def failed_output_records(
@@ -67,6 +68,14 @@ def failed_output_records(
             "subtitle_ass_file": str(subtitle_ass_path),
             "voice_file": str(voice_path),
             "music_file": None,
+            "visual_style": {
+                "preset_id": config.visual_style.preset_id,
+                "overlay_asset": str(output_dir / f"{name}_overlay.png"),
+                "subtitle_format": "none",
+                "ass_subtitle_path": str(subtitle_ass_path),
+                "fallback_used": True,
+                "warnings": ["prepare_project_failed"],
+            },
             "performance": {"total_seconds": 0},
             "warnings": [],
             "errors": [message],
@@ -86,6 +95,7 @@ def failed_output_records(
                 "script_file": str(script_path),
                 "subtitle_file": str(subtitle_path),
                 "subtitle_ass_file": str(subtitle_ass_path),
+                "overlay_file": str(output_dir / f"{name}_overlay.png"),
                 "voice_file": str(voice_path),
                 "music_file": None,
                 "timeline_template": config.timeline.template_id,
@@ -93,6 +103,14 @@ def failed_output_records(
                 "caption": None,
                 "hashtags": [],
                 "log_file": str(log_path),
+                "visual_style": {
+                    "preset_id": config.visual_style.preset_id,
+                    "overlay_asset": str(output_dir / f"{name}_overlay.png"),
+                    "subtitle_format": "none",
+                    "ass_subtitle_path": str(subtitle_ass_path),
+                    "fallback_used": True,
+                    "warnings": ["prepare_project_failed"],
+                },
                 "performance": {"total_seconds": 0},
             }
         )
@@ -107,3 +125,29 @@ def _voice_extension(config: ProjectConfig) -> str:
     if output_format in {"mp3", "wav"}:
         return output_format
     return "mp3"
+
+
+def _visual_style_summary(outputs: list[dict[str, Any]]) -> dict[str, Any]:
+    preset_id = None
+    outputs_rendered_with_ass = 0
+    outputs_fallback_to_srt = 0
+    outputs_fallback_to_drawbox = 0
+    for output in outputs:
+        visual_style = output.get("visual_style") or {}
+        if not isinstance(visual_style, dict):
+            continue
+        preset_id = preset_id or visual_style.get("preset_id")
+        subtitle_format = visual_style.get("subtitle_format")
+        warnings = [str(item) for item in visual_style.get("warnings", [])]
+        if subtitle_format == "ass" and not visual_style.get("fallback_used"):
+            outputs_rendered_with_ass += 1
+        if subtitle_format == "srt" or any("srt" in warning for warning in warnings):
+            outputs_fallback_to_srt += 1
+        if any("drawbox" in warning for warning in warnings):
+            outputs_fallback_to_drawbox += 1
+    return {
+        "preset_id": preset_id,
+        "outputs_rendered_with_ass": outputs_rendered_with_ass,
+        "outputs_fallback_to_srt": outputs_fallback_to_srt,
+        "outputs_fallback_to_drawbox": outputs_fallback_to_drawbox,
+    }

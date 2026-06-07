@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createProject } from '../api/client';
+import { createProject, getIndustryPresets, updateProjectProductInfo } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
+import IndustryPresetSelector from '../components/industry/IndustryPresetSelector';
+import ProductInfoImporter from '../components/productImport/ProductInfoImporter';
 import ProductInfoForm from '../components/ProductInfoForm';
-import type { ProjectConfig } from '../types/project';
+import type { ApplyIndustryPresetOptions, IndustryPreset, ProductInfoNormalized, ProjectConfig } from '../types/project';
+import { applyIndustryPresetToConfig, DEFAULT_INDUSTRY_APPLY_OPTIONS } from '../utils/industryPresetApply';
 import { defaultProjectConfig, formatJson, maskSensitiveConfig, saveProjectConfig } from '../utils/projectState';
 
 export default function CreateProjectPage() {
@@ -11,6 +14,10 @@ export default function CreateProjectPage() {
   const [config, setConfig] = useState<ProjectConfig>(() => defaultProjectConfig());
   const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
   const [lastSavedConfig, setLastSavedConfig] = useState<ProjectConfig | null>(null);
+  const [industryPresets, setIndustryPresets] = useState<IndustryPreset[]>([]);
+  const [industryApplyOptions, setIndustryApplyOptions] = useState<ApplyIndustryPresetOptions>(
+    DEFAULT_INDUSTRY_APPLY_OPTIONS,
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -18,6 +25,18 @@ export default function CreateProjectPage() {
     if (!savedProjectId || !lastSavedConfig) return true;
     return JSON.stringify(config) !== JSON.stringify(lastSavedConfig);
   }, [config, lastSavedConfig, savedProjectId]);
+
+  useEffect(() => {
+    getIndustryPresets()
+      .then((response) => setIndustryPresets(response.presets))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Không thể tải danh sách ngành hàng.'));
+  }, []);
+
+  function handleIndustrySelect(presetId: string) {
+    const preset = industryPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    setConfig((current) => applyIndustryPresetToConfig(current, preset, industryApplyOptions));
+  }
 
   async function saveCurrentProject(): Promise<string> {
     setSaving(true);
@@ -45,6 +64,45 @@ export default function CreateProjectPage() {
     }
   }
 
+  async function handleApplyImportedProduct(product: ProductInfoNormalized) {
+    const localConfig: ProjectConfig = {
+      ...config,
+      product: {
+        ...config.product,
+        name: product.name,
+        brand: product.brand ?? '',
+        description: product.description,
+        features: product.features,
+        specs: product.specs,
+        cta: product.cta,
+        validation_warnings: product.warnings,
+        hashtag_suggestions: product.hashtag_suggestions,
+      },
+      industry: product.industry_preset_id ? { preset_id: product.industry_preset_id } : config.industry,
+    };
+
+    if (!savedProjectId) {
+      setConfig(localConfig);
+      return;
+    }
+
+    const response = await updateProjectProductInfo(savedProjectId, product);
+    const mergedConfig: ProjectConfig = {
+      ...localConfig,
+      product: response.updated_config.product,
+      industry: response.updated_config.industry,
+    };
+    setConfig(mergedConfig);
+    if (lastSavedConfig) {
+      setLastSavedConfig({
+        ...lastSavedConfig,
+        product: response.updated_config.product,
+        industry: response.updated_config.industry,
+      });
+    }
+    saveProjectConfig(savedProjectId, mergedConfig, JSON.stringify(mergedConfig) !== JSON.stringify(lastSavedConfig));
+  }
+
   async function handleContinue() {
     try {
       const projectId = savedProjectId && !isDirty ? savedProjectId : await saveCurrentProject();
@@ -63,7 +121,21 @@ export default function CreateProjectPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
         <section className="rounded-lg border border-line bg-white p-5 shadow-panel">
+          <div className="mb-6">
+            <ProductInfoImporter industryPresets={industryPresets} onApply={handleApplyImportedProduct} />
+          </div>
+
           <ProductInfoForm config={config} onChange={setConfig} />
+
+          <div className="mt-6 border-t border-line pt-5">
+            <IndustryPresetSelector
+              presets={industryPresets}
+              selectedPresetId={config.industry?.preset_id ?? 'general_product'}
+              applyOptions={industryApplyOptions}
+              onApplyOptionsChange={setIndustryApplyOptions}
+              onSelect={handleIndustrySelect}
+            />
+          </div>
 
           <ApiErrorBox error={error} />
 

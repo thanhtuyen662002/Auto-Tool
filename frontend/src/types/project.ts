@@ -1,9 +1,17 @@
+export interface ProductSpec {
+  name: string;
+  value: string;
+}
+
 export interface ProductInfo {
   name: string;
   brand: string;
   description: string;
   features: string[];
+  specs?: ProductSpec[];
   cta: string;
+  validation_warnings?: string[];
+  hashtag_suggestions?: string[];
 }
 
 export interface RenderSettings {
@@ -46,6 +54,7 @@ export interface TimelineSettings {
 
 export interface ScriptVariationSettings {
   mode: string;
+  preferred_variant_ids?: string[];
 }
 
 export interface TTSSettings {
@@ -62,6 +71,67 @@ export interface TTSSettings {
   output_format: string;
 }
 
+export interface SubtitleStyle {
+  font_family: string;
+  font_size: number;
+  font_color: string;
+  stroke_color: string;
+  stroke_width: number;
+  shadow_enabled: boolean;
+  shadow_color: string;
+  shadow_opacity: number;
+  max_chars_per_line: number;
+  max_lines: number;
+  position: string;
+}
+
+export interface OverlayStyle {
+  enabled: boolean;
+  height_ratio: number;
+  background_color: string;
+  background_opacity: number;
+  border_radius: number;
+  padding_x: number;
+  padding_y: number;
+  accent_color?: string | null;
+  show_accent_bar: boolean;
+  show_soft_gradient: boolean;
+  style_type: string;
+}
+
+export interface VisualStyleSettings {
+  preset_id: string;
+  custom_overrides?: Record<string, unknown> | null;
+}
+
+export interface IndustrySettings {
+  preset_id?: string | null;
+}
+
+export interface CropSafetySettings {
+  enabled: boolean;
+  mode: 'auto_safe' | 'center_crop' | 'fit_blur_background' | string;
+  allow_blur_background: boolean;
+  reduce_zoom_on_risk: boolean;
+  reduce_overlay_on_risk: boolean;
+}
+
+export interface CacheSettings {
+  enabled: boolean;
+  cache_media_metadata: boolean;
+  cache_segment_scoring: boolean;
+  cache_crop_safety: boolean;
+  cache_tts: boolean;
+  cache_overlay_assets: boolean;
+  clear_cache_before_render: boolean;
+}
+
+export interface SourceMediaSettings {
+  respect_user_exclusions: boolean;
+  prefer_favorite_segments: boolean;
+  allow_excluded_fallback: boolean;
+}
+
 export interface ProjectConfig {
   project_name: string;
   source_folder: string;
@@ -74,6 +144,11 @@ export interface ProjectConfig {
   timeline: TimelineSettings;
   script_variation?: ScriptVariationSettings;
   tts?: TTSSettings;
+  visual_style?: VisualStyleSettings;
+  industry?: IndustrySettings | null;
+  crop_safety?: CropSafetySettings;
+  cache?: CacheSettings;
+  source_media?: SourceMediaSettings;
 }
 
 export interface ProjectResponse {
@@ -140,6 +215,9 @@ export interface SubtitleLine {
 
 export interface ProductVideoScript {
   variant_style_id?: string | null;
+  industry_preset_id?: string | null;
+  caption_tone?: string | null;
+  hashtag_suggestions_used?: string[];
   hook: string;
   voiceover: VoiceoverLine[];
   subtitles: SubtitleLine[];
@@ -167,6 +245,7 @@ export interface JobStatus {
   completed_outputs: number;
   failed_outputs: number;
   logs: JobLogItem[];
+  cache_summary?: CacheSummary | null;
 }
 
 export interface JobOutput {
@@ -187,6 +266,7 @@ export interface JobOutput {
   script_variant_id?: string | null;
   caption?: string | null;
   hashtags?: string[];
+  crop_safety?: CropSafetyOutputSummary;
   log_file?: string;
   error?: string;
   warnings?: string[];
@@ -195,6 +275,141 @@ export interface JobOutput {
 
 export interface JobResult {
   outputs: JobOutput[];
+}
+
+export interface CacheSummary {
+  enabled: boolean;
+  hits: number;
+  misses: number;
+  cache_size_mb: number;
+  media_metadata_hits?: number;
+  media_metadata_misses?: number;
+  segment_score_hits?: number;
+  segment_score_misses?: number;
+  crop_safety_hits?: number;
+  crop_safety_misses?: number;
+  tts_hits?: number;
+  tts_misses?: number;
+  overlay_hits?: number;
+  overlay_misses?: number;
+  cache_lookup_seconds?: number;
+  cache_read_seconds?: number;
+  cache_write_seconds?: number;
+  cache_saved_estimated_seconds?: number;
+  items: Record<string, number>;
+}
+
+export interface ClearCacheResponse {
+  success: boolean;
+  message: string;
+}
+
+export type MediaReviewStatus = 'pending' | 'good' | 'bad' | 'excluded' | 'favorite';
+export type SegmentReviewStatus = 'pending' | 'good' | 'bad' | 'excluded' | 'favorite';
+
+export interface SourceMediaItem {
+  id: string;
+  project_id: string;
+  path: string;
+  filename: string;
+  duration: number;
+  width: number;
+  height: number;
+  fps: number;
+  has_audio: boolean;
+  format_name: string;
+  orientation: string;
+  aspect_ratio: string;
+  quality_score?: number | null;
+  segment_count: number;
+  usable_segment_count: number;
+  rejected_segment_count: number;
+  review_status: MediaReviewStatus;
+  user_note?: string | null;
+  warnings: string[];
+  errors: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SegmentReviewItem {
+  id: string;
+  project_id: string;
+  segment_id: string;
+  source_media_id: string;
+  source_path: string;
+  start: number;
+  end: number;
+  duration: number;
+  overall_score: number;
+  brightness_score?: number | null;
+  sharpness_score?: number | null;
+  motion_score?: number | null;
+  freeze_score?: number | null;
+  stability_score?: number | null;
+  crop_safety_score?: number | null;
+  crop_mode?: string | null;
+  tags: string[];
+  reject_reasons: string[];
+  warnings: string[];
+  review_status: SegmentReviewStatus;
+  user_note?: string | null;
+  preview_thumbnail_path?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SourceMediaSummary {
+  total_media: number;
+  good_media: number;
+  excluded_media: number;
+  bad_media: number;
+  total_segments: number;
+  usable_segments: number;
+  excluded_segments: number;
+  favorite_segments: number;
+  average_media_score?: number | null;
+  average_segment_score?: number | null;
+}
+
+export interface SourceMediaResponse {
+  summary: SourceMediaSummary;
+  items: SourceMediaItem[];
+}
+
+export interface SegmentReviewResponse {
+  items: SegmentReviewItem[];
+}
+
+export interface UpdateSourceMediaReviewResponse {
+  success: boolean;
+  item: SourceMediaItem;
+}
+
+export interface UpdateSegmentReviewResponse {
+  success: boolean;
+  item: SegmentReviewItem;
+}
+
+export interface BulkSegmentReviewResponse {
+  success: boolean;
+  updated_count: number;
+}
+
+export interface CropSafetyOutputSummary {
+  average_score?: number | null;
+  fallback_to_blur_background: number;
+  warnings: string[];
+}
+
+export interface CropSafetyAnalyzeResponse {
+  success: boolean;
+  error?: string;
+  total_clips_analyzed?: number;
+  average_crop_safety_score?: number;
+  fallback_to_blur_background?: number;
+  warnings_summary?: Record<string, number>;
+  report_path?: string;
 }
 
 export type OutputReviewStatus = 'pending' | 'good' | 'bad' | 'needs_rerender' | 'ignored';
@@ -356,4 +571,121 @@ export interface ContentExportFile {
 export interface ContentExportResponse {
   success: boolean;
   files: ContentExportFile[];
+}
+
+export interface VisualStylePreset {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  recommended_for: string[];
+  subtitle?: SubtitleStyle | null;
+  overlay?: OverlayStyle | null;
+}
+
+export interface VisualStylePresetsResponse {
+  presets: VisualStylePreset[];
+}
+
+export interface VisualStylePreviewResponse {
+  success: boolean;
+  preview_image_path: string;
+  preview_image_url?: string | null;
+}
+
+export interface IndustryPreset {
+  id: string;
+  name: string;
+  description: string;
+  recommended_for: string[];
+  default_video_style: string;
+  default_edit_strength: string;
+  timeline_template_id: string;
+  visual_style_preset_id: string;
+  script_variation_mode: string;
+  preferred_script_variant_ids: string[];
+  default_tts_voice: string;
+  caption_tone: string;
+  hashtag_suggestions: string[];
+  render_defaults: Record<string, unknown>;
+  notes: string[];
+}
+
+export interface IndustryPresetsResponse {
+  presets: IndustryPreset[];
+}
+
+export interface ApplyIndustryPresetOptions {
+  apply_visual_style: boolean;
+  apply_timeline: boolean;
+  apply_script_variation: boolean;
+  apply_tts_voice: boolean;
+  apply_edit_strength: boolean;
+}
+
+export interface ApplyIndustryPresetResponse {
+  success: boolean;
+  project_id: string;
+  preset_id: string;
+  updated_config: ProjectConfig;
+}
+
+export type ProductImportInputType = 'manual' | 'text' | 'json' | 'txt' | 'csv';
+
+export interface RawProductInput {
+  input_type: ProductImportInputType;
+  raw_text?: string | null;
+  file_path?: string | null;
+  file_content?: string | null;
+  source_name?: string | null;
+}
+
+export interface ProductInfoNormalized {
+  name: string;
+  brand?: string | null;
+  description: string;
+  features: string[];
+  specs: ProductSpec[];
+  cta: string;
+  industry_preset_id?: string | null;
+  hashtag_suggestions: string[];
+  warnings: string[];
+  missing_fields: string[];
+  confidence_score: number;
+}
+
+export interface ProductValidationIssue {
+  field: string;
+  severity: 'info' | 'warning' | 'error';
+  message: string;
+  suggestion?: string | null;
+}
+
+export interface ProductImportResult {
+  success: boolean;
+  product?: ProductInfoNormalized | null;
+  issues: ProductValidationIssue[];
+  raw_preview?: string | null;
+}
+
+export interface UpdateProjectProductInfoResponse {
+  success: boolean;
+  project_id: string;
+  product: ProductInfoNormalized;
+  updated_config: ProjectConfig;
+}
+
+export interface SafetyIssue {
+  severity: 'info' | 'warning' | 'error';
+  category: string;
+  field?: string | null;
+  message: string;
+  suggestion?: string | null;
+}
+
+export interface SafetyCheckResult {
+  passed: boolean;
+  issues: SafetyIssue[];
+  warnings_count: number;
+  errors_count: number;
 }

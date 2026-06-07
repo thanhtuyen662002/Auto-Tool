@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from app import database
+from app.modules.cache.cache_service import CacheService
+from app.modules.crop_safety.crop_safety_service import CropSafetyService
 from app.modules.media_scanner.scanner import MediaScanner
 from app.modules.music_selector.music_selector import MusicSelector
 from app.modules.output_review.review_schema import OutputReviewStatus
@@ -19,6 +21,7 @@ from app.modules.render_worker.summary_builder import finalize_summary
 from app.modules.renderer.renderer import Renderer
 from app.modules.segment_scoring.segment_scorer import SegmentScorer, build_scoring_report
 from app.modules.segmenter.segmenter import Segmenter
+from app.modules.source_media_manager.media_filter_service import MediaFilterService, summarize_timeline_source_filter
 from app.modules.script_writer.script_writer import ProductVideoScript
 from app.modules.subtitle_generator.subtitle_generator import SubtitleGenerator
 from app.modules.timeline_builder.timeline_builder import Timeline
@@ -95,6 +98,10 @@ class RerenderService:
 
         created_at = datetime.now().replace(microsecond=0)
         output_dir = _next_rerender_dir(config.output_folder)
+        cache_service = CacheService.for_project(config, log_callback=log_callback)
+        if config.cache.clear_cache_before_render:
+            cache_service.clear()
+            _log(log_callback, "info", "Đã xoá cache dự án trước khi render lại.")
         latest_outputs = latest_outputs_for_project(project_id)
         outputs: list[dict[str, Any]] = []
         summary: dict[str, Any] = {
@@ -113,6 +120,7 @@ class RerenderService:
             "reuse_timeline": reuse_timeline,
             "reuse_settings": reuse_settings,
             "mode": mode,
+            "cache_summary": cache_service.summary(),
             "outputs": outputs,
         }
 
@@ -129,18 +137,27 @@ class RerenderService:
 
         new_timelines = self._build_new_timelines_if_needed(
             config=config,
+            project_id=project_id,
             output_indexes=output_indexes,
             latest_outputs=latest_outputs,
             reuse_timeline=reuse_timeline,
             output_dir=output_dir,
+            cache_service=cache_service,
             log_callback=log_callback,
             progress_callback=progress_callback,
         )
 
         renderer = Renderer()
-        voice_generator = VoiceGenerator()
+        voice_generator = VoiceGenerator(
+            cache_service=cache_service,
+            cache_enabled=config.cache.cache_tts,
+        )
         subtitle_generator = SubtitleGenerator()
         music_selector = MusicSelector()
+        crop_safety_service = CropSafetyService(
+            cache_service=cache_service,
+            cache_enabled=config.cache.cache_crop_safety,
+        )
 
         for position, index in enumerate(output_indexes, start=1):
             completed = sum(1 for item in outputs if item["status"] in {"success", "warning"})
@@ -166,6 +183,12 @@ class RerenderService:
                 log_callback=log_callback,
             )
             script_override = self._script_for_output(previous_output, reuse_script, log_callback)
+            crop_safety_service.analyze_timelines(
+                timelines=[timeline],
+                config=config,
+                output_dir=output_dir,
+                project_id=project_id,
+            )
             outputs.append(
                 render_one_output(
                     index=index,
@@ -180,10 +203,13 @@ class RerenderService:
                     script_override=script_override,
                     preview_only=False,
                     log_callback=log_callback,
+                    cache_service=cache_service,
+                    source_media_filter_summary=summarize_timeline_source_filter(timeline),
                 )
             )
 
         finalize_summary(summary)
+        summary["cache_summary"] = cache_service.summary()
         successful_output_indexes = [item["index"] for item in outputs if item.get("status") in {"success", "warning"}]
         failed_output_indexes = [item["index"] for item in outputs if item.get("status") == "failed"]
         summary_path = output_dir / "rerender_summary.json"
@@ -194,6 +220,7 @@ class RerenderService:
                 "requested_outputs": output_indexes,
                 "successful_outputs": successful_output_indexes,
                 "failed_outputs": failed_output_indexes,
+                "cache_summary": summary.get("cache_summary"),
             },
         )
         _log(log_callback, "info", f"Rerender summary written: {summary_path}")
@@ -208,8 +235,8 @@ class RerenderService:
             current_step="completed",
             progress=100,
             total_outputs=len(output_indexes),
-            completed_outputs=len(summary["successful_outputs"]),
-            failed_outputs=len(summary["failed_outputs"]),
+            completed_outputs=int(summary["successful_outputs"]),
+            failed_outputs=int(summary["failed_outputs"]),
         )
         return {
             "project_id": project_id,
@@ -220,16 +247,19 @@ class RerenderService:
             "successful_outputs": len(successful_output_indexes),
             "failed_outputs": len(failed_output_indexes),
             "outputs": outputs,
+            "cache_summary": summary.get("cache_summary"),
             "rerender_summary": str(summary_path),
         }
 
     def _build_new_timelines_if_needed(
         self,
         config: ProjectConfig,
+        project_id: str,
         output_indexes: list[int],
         latest_outputs: dict[int, dict[str, Any]],
         reuse_timeline: bool,
         output_dir: Path,
+        cache_service: CacheService,
         log_callback: LogCallback | None,
         progress_callback: ProgressCallback | None,
     ) -> dict[int, Timeline]:
@@ -249,16 +279,31 @@ class RerenderService:
             completed_outputs=0,
             failed_outputs=0,
         )
-        media_files = MediaScanner().scan_folder(config.source_folder)
+        media_files = MediaScanner(
+            cache_service=cache_service,
+            cache_enabled=config.cache.cache_media_metadata,
+        ).scan_folder(config.source_folder)
         if not media_files:
             raise ValueError(f"No valid input videos found in {config.source_folder}")
         segments = Segmenter().create_segments(media_files, config.effects.cut_intensity)
         if not segments:
             raise ValueError("No usable segments were created from the input videos.")
-        scored_segments = SegmentScorer().score_segments(segments)
+        scored_segments = SegmentScorer(
+            cache_service=cache_service,
+            cache_enabled=config.cache.cache_segment_scoring,
+            settings_hash=cache_service.settings_hash(
+                {
+                    "scorer": "segment_scorer_v1",
+                    "max_frames": 5,
+                    "resolution": config.render.resolution,
+                }
+            ),
+        ).score_segments(segments)
         scoring_report = build_scoring_report(scored_segments)
         write_json(output_dir / "segment_scoring_report.json", scoring_report)
-        timeline_segments = _select_timeline_segments(scored_segments, len(output_indexes))
+        media_filter = MediaFilterService(log_callback=log_callback)
+        filtered_segments = media_filter.filter_segments_for_render(project_id, scored_segments, config=config)
+        timeline_segments = _select_timeline_segments(filtered_segments, len(output_indexes))
         built = ProductTimelineBuilder().build_timelines(
             segments=timeline_segments,
             output_count=max(output_indexes),
@@ -357,6 +402,17 @@ def _select_timeline_segments(segments: list[VideoSegment], output_count: int) -
         for segment in segments
         if segment.score_detail is not None and not segment.score_detail.is_rejected
     ]
+    favorite_segments = [
+        segment
+        for segment in segments
+        if getattr(segment, "user_review_status", None) == "favorite"
+    ]
+    if favorite_segments:
+        merged = {
+            (segment.id, segment.source_path, segment.start, segment.end): segment
+            for segment in [*favorite_segments, *usable_segments]
+        }
+        usable_segments = list(merged.values())
     if not usable_segments:
         raise ValueError("No usable video segments after scoring")
     minimum_segments = max(3, output_count)

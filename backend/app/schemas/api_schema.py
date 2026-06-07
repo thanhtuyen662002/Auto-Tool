@@ -5,7 +5,19 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.content_manager.content_schema import ContentBatchSummary, OutputContentItem, PublishStatus
+from app.modules.industry_presets.industry_schema import IndustryPreset
+from app.modules.product_import.product_import_schema import ProductImportResult, ProductInfoNormalized, RawProductInput
 from app.modules.script_writer.script_writer import ProductVideoScript
+from app.modules.source_media_manager.media_manager_schema import (
+    BulkSegmentReviewResponse,
+    MediaReviewStatus,
+    SegmentReviewResponse,
+    SegmentReviewStatus,
+    SourceMediaResponse,
+    UpdateSegmentReviewResponse,
+    UpdateSourceMediaReviewResponse,
+)
+from app.modules.visual_style.style_schema import OverlayStyle, SubtitleStyle
 from app.modules.output_review.review_schema import OutputReviewStatus, OutputReviewSummary
 from app.schemas.media_schema import MediaFile
 from app.schemas.project_schema import ProjectConfig
@@ -77,6 +89,23 @@ class RenderResponse(BaseModel):
     status: str
 
 
+class UpdateSourceMediaReviewRequest(BaseModel):
+    review_status: MediaReviewStatus
+    user_note: str | None = None
+    media_path: str
+
+
+class UpdateSegmentReviewRequest(BaseModel):
+    review_status: SegmentReviewStatus
+    user_note: str | None = None
+
+
+class BulkSegmentReviewRequest(BaseModel):
+    segment_ids: list[str] = Field(default_factory=list)
+    review_status: SegmentReviewStatus
+    user_note: str | None = None
+
+
 class LatestScriptResponse(BaseModel):
     script: ProductVideoScript | None = None
 
@@ -96,6 +125,7 @@ class JobStatusResponse(BaseModel):
     completed_outputs: int
     failed_outputs: int
     logs: list[JobLogItem]
+    cache_summary: dict[str, Any] | None = None
 
 
 class JobOutputItem(BaseModel):
@@ -270,6 +300,82 @@ class ContentExportFile(BaseModel):
 class ContentExportResponse(BaseModel):
     success: bool
     files: list[ContentExportFile]
+
+
+class VisualStylePresetItem(BaseModel):
+    id: str
+    name: str
+    description: str
+    category: str
+    recommended_for: list[str] = Field(default_factory=list)
+    subtitle: SubtitleStyle | None = None
+    overlay: OverlayStyle | None = None
+
+
+class VisualStylePresetsResponse(BaseModel):
+    presets: list[VisualStylePresetItem]
+
+
+class VisualStylePreviewRequest(BaseModel):
+    preset_id: str
+    sample_text: str = "Nhỏ gọn, dễ dùng, phù hợp mỗi ngày"
+    resolution: str = "1080x1920"
+
+
+class VisualStylePreviewResponse(BaseModel):
+    success: bool
+    preview_image_path: str
+    preview_image_url: str | None = None
+
+
+class UpdateProjectVisualStyleRequest(BaseModel):
+    preset_id: str
+
+
+class UpdateProjectVisualStyleResponse(BaseModel):
+    success: bool
+    visual_style: dict[str, Any]
+
+
+class IndustryPresetsResponse(BaseModel):
+    presets: list[IndustryPreset]
+
+
+class ApplyIndustryPresetRequest(BaseModel):
+    preset_id: str
+    apply_visual_style: bool = True
+    apply_timeline: bool = True
+    apply_script_variation: bool = True
+    apply_tts_voice: bool = True
+    apply_edit_strength: bool = True
+
+
+class ApplyIndustryPresetResponse(BaseModel):
+    success: bool
+    project_id: str
+    preset_id: str
+    updated_config: ProjectConfig
+
+
+class ProductInfoImportRequest(RawProductInput):
+    pass
+
+
+class ProductInfoImportResponse(ProductImportResult):
+    pass
+
+
+class UpdateProjectProductInfoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product: ProductInfoNormalized
+
+
+class UpdateProjectProductInfoResponse(BaseModel):
+    success: bool
+    project_id: str
+    product: ProductInfoNormalized
+    updated_config: ProjectConfig
 
 
 class HealthResponse(BaseModel):

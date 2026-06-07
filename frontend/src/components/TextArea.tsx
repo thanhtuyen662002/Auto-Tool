@@ -3,9 +3,10 @@ interface TextAreaProps {
   value: string;
   onChange: (value: string) => void;
   rows?: number;
+  placeholder?: string;
 }
 
-export default function TextArea({ label, value, onChange, rows = 4 }: TextAreaProps) {
+export default function TextArea({ label, value, onChange, rows = 4, placeholder }: TextAreaProps) {
   return (
     <label className="block">
       <span className="mb-1 block text-sm font-medium text-ink">{label}</span>
@@ -14,6 +15,7 @@ export default function TextArea({ label, value, onChange, rows = 4 }: TextAreaP
         lang="vi"
         spellCheck
         rows={rows}
+        placeholder={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />

@@ -28,3 +28,5 @@ class VideoSegment(BaseModel):
     score: float = Field(ge=0, le=1)
     score_detail: SegmentScore | None = None
     tags: list[str] = Field(default_factory=list)
+    user_review_status: str | None = None
+    source_media_review_status: str | None = None

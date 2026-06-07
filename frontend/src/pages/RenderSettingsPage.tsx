@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  analyzeCropSafety,
   analyzeProjectSegments,
+  checkProjectSafety,
+  clearProjectCache,
   createProject,
   generateScriptVariants,
   getGoogleCloudTTSVoices,
@@ -10,9 +13,13 @@ import {
   getLatestScript,
   getPresets,
   getProject,
+  getProjectCacheSummary,
+  getSourceMedia,
   getScriptVariantStyles,
   getTTSProviders,
   getTimelineTemplates,
+  getVisualStyles,
+  getIndustryPresets,
   saveProjectScript,
   scanProject,
   startRender,
@@ -25,7 +32,15 @@ import PresetSelector from '../components/PresetSelector';
 import RenderProgress from '../components/RenderProgress';
 import WarningBox from '../components/WarningBox';
 import ScriptEditorForm from '../components/script/ScriptEditorForm';
-import { DEFAULT_MUSIC_SETTINGS, DEFAULT_TTS_SETTINGS } from '../config/defaults';
+import IndustryPresetSelector from '../components/industry/IndustryPresetSelector';
+import VisualStyleSelector from '../components/visualStyle/VisualStyleSelector';
+import {
+  DEFAULT_CROP_SAFETY_SETTINGS,
+  DEFAULT_CACHE_SETTINGS,
+  DEFAULT_MUSIC_SETTINGS,
+  DEFAULT_TTS_SETTINGS,
+  DEFAULT_VISUAL_STYLE_SETTINGS,
+} from '../config/defaults';
 import {
   DURATION_OPTIONS,
   EDIT_STRENGTH_OPTIONS,
@@ -36,19 +51,27 @@ import {
 } from '../config/simplePresets';
 import type {
   EffectSettings,
+  ApplyIndustryPresetOptions,
+  IndustryPreset,
   JobOutput,
   JobStatus,
+  CacheSummary,
   Preset,
   ProductVideoScript,
   ProjectConfig,
+  CropSafetyAnalyzeResponse,
   ScanResponse,
+  SafetyCheckResult,
   SegmentScoringSummary,
+  SourceMediaSummary,
   ScriptVariantStyle,
   ScriptVariantSummary,
   TimelineTemplateSummary,
   TTSProviderInfo,
   TTSVoiceInfo,
+  VisualStylePreset,
 } from '../types/project';
+import { applyIndustryPresetToConfig, DEFAULT_INDUSTRY_APPLY_OPTIONS } from '../utils/industryPresetApply';
 import {
   defaultProjectConfig,
   formatJson,
@@ -79,6 +102,11 @@ export default function RenderSettingsPage() {
   const [timelineTemplates, setTimelineTemplates] = useState<TimelineTemplateSummary[]>([]);
   const [scriptVariantStyles, setScriptVariantStyles] = useState<ScriptVariantStyle[]>([]);
   const [scriptVariantSummary, setScriptVariantSummary] = useState<ScriptVariantSummary[]>([]);
+  const [visualStylePresets, setVisualStylePresets] = useState<VisualStylePreset[]>([]);
+  const [industryPresets, setIndustryPresets] = useState<IndustryPreset[]>([]);
+  const [industryApplyOptions, setIndustryApplyOptions] = useState<ApplyIndustryPresetOptions>(
+    DEFAULT_INDUSTRY_APPLY_OPTIONS,
+  );
   const [ttsProviders, setTTSProviders] = useState<TTSProviderInfo[]>([]);
   const [googleVoices, setGoogleVoices] = useState<TTSVoiceInfo[]>([]);
   const [loadingGoogleVoices, setLoadingGoogleVoices] = useState(false);
@@ -97,6 +125,13 @@ export default function RenderSettingsPage() {
   const [scriptErrors, setScriptErrors] = useState<string[]>([]);
   const [scriptError, setScriptError] = useState<string | null>(null);
   const [savingScript, setSavingScript] = useState(false);
+  const [safetyResult, setSafetyResult] = useState<SafetyCheckResult | null>(null);
+  const [checkingSafety, setCheckingSafety] = useState(false);
+  const [cropSafety, setCropSafety] = useState<CropSafetyAnalyzeResponse | null>(null);
+  const [cacheSummary, setCacheSummary] = useState<CacheSummary | null>(null);
+  const [cacheBusy, setCacheBusy] = useState(false);
+  const [cacheMessage, setCacheMessage] = useState<string | null>(null);
+  const [sourceMediaSummary, setSourceMediaSummary] = useState<SourceMediaSummary | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -130,6 +165,14 @@ export default function RenderSettingsPage() {
     getTTSProviders()
       .then((response) => setTTSProviders(response.providers))
       .catch((err) => setError(err instanceof Error ? err.message : 'Không thể tải nhà cung cấp giọng đọc.'));
+    getVisualStyles()
+      .then((response) => setVisualStylePresets(response.presets))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Không thể tải style overlay/subtitle.'));
+    getIndustryPresets()
+      .then((response) => setIndustryPresets(response.presets))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Không thể tải danh sách ngành hàng.'));
+    void loadCacheSummary(projectId);
+    void loadSourceMediaSummary(projectId);
   }, [projectId]);
 
   useEffect(() => {
@@ -155,6 +198,19 @@ export default function RenderSettingsPage() {
           const latestScript = await getLatestScript(activePreviewProjectId);
           if (!mounted) return;
           if (latestScript.script) setEditableScript(latestScript.script);
+
+          try {
+            const cropSafetyResult = await analyzeCropSafety(activePreviewProjectId);
+            if (!mounted) return;
+            setCropSafety(cropSafetyResult);
+          } catch (cropErr) {
+            if (!mounted) return;
+            setCropSafety({
+              success: false,
+              error: cropErr instanceof Error ? cropErr.message : 'Không thể đọc báo cáo Crop Safety.',
+            });
+          }
+          void loadCacheSummary(activePreviewProjectId);
           setBusy(false);
         }
       } catch (err) {
@@ -180,6 +236,7 @@ export default function RenderSettingsPage() {
     [config],
   );
   const availableTTSProviders = ttsProviders.length ? ttsProviders : FALLBACK_TTS_PROVIDERS;
+  const safetyBlocked = Boolean(safetyResult?.errors_count);
 
   function setEditableScript(nextScript: ProductVideoScript) {
     setScript(nextScript);
@@ -191,7 +248,55 @@ export default function RenderSettingsPage() {
   function updateConfig(nextConfig: ProjectConfig) {
     setConfig(nextConfig);
     setDirty(true);
+    setSafetyResult(null);
+    setCropSafety(null);
     if (projectId) saveProjectConfig(projectId, nextConfig, true);
+  }
+
+  async function loadCacheSummary(activeProjectId: string) {
+    try {
+      const summary = await getProjectCacheSummary(activeProjectId);
+      setCacheSummary(summary);
+      setCacheMessage(null);
+    } catch {
+      setCacheSummary(null);
+    }
+  }
+
+  async function loadSourceMediaSummary(activeProjectId: string) {
+    try {
+      const response = await getSourceMedia(activeProjectId);
+      setSourceMediaSummary(response.summary);
+    } catch {
+      setSourceMediaSummary(null);
+    }
+  }
+
+  async function handleClearCache() {
+    setCacheBusy(true);
+    setCacheMessage(null);
+    setError(null);
+    try {
+      const activeProjectId = await ensureCurrentProject();
+      const response = await clearProjectCache(activeProjectId);
+      setCacheMessage(response.message || 'Đã xoá cache dự án.');
+      await loadCacheSummary(activeProjectId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể xoá cache dự án.');
+    } finally {
+      setCacheBusy(false);
+    }
+  }
+
+  function updateCache(patch: Partial<NonNullable<ProjectConfig['cache']>>) {
+    if (!config) return;
+    updateConfig({
+      ...config,
+      cache: {
+        ...(config.cache ?? DEFAULT_CACHE_SETTINGS),
+        ...patch,
+      },
+    });
   }
 
   async function ensureCurrentProject(): Promise<string> {
@@ -214,10 +319,27 @@ export default function RenderSettingsPage() {
       setScanResult(result);
       const scoring = await analyzeProjectSegments(activeProjectId);
       setSegmentScoring(scoring);
+      await loadSourceMediaSummary(activeProjectId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể quét video.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleRunSafetyCheck(): Promise<SafetyCheckResult | null> {
+    setCheckingSafety(true);
+    setError(null);
+    try {
+      const activeProjectId = await ensureCurrentProject();
+      const result = await checkProjectSafety(activeProjectId);
+      setSafetyResult(result);
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể chạy Product Info QA.');
+      return null;
+    } finally {
+      setCheckingSafety(false);
     }
   }
 
@@ -227,6 +349,11 @@ export default function RenderSettingsPage() {
     setScriptError(null);
     try {
       const activeProjectId = await ensureCurrentProject();
+      const safety = await checkProjectSafety(activeProjectId);
+      setSafetyResult(safety);
+      if (safety.errors_count > 0) {
+        throw new Error('Product Info QA có lỗi cần sửa trước khi render.');
+      }
       const response = await startRender(activeProjectId, previewOnly);
       if (previewOnly) {
         setPreviewProjectId(activeProjectId);
@@ -234,6 +361,7 @@ export default function RenderSettingsPage() {
         setPreviewJob(null);
         setPreviewOutput(null);
         setScript(null);
+        setCropSafety(null);
         return;
       }
       navigate(`/queue/${activeProjectId}/${response.job_id}`);
@@ -306,6 +434,13 @@ export default function RenderSettingsPage() {
         template_id: preset.timeline_template_id ?? DEFAULT_TEMPLATE_ID,
       },
     });
+  }
+
+  function handleIndustryPreset(presetId: string) {
+    if (!config) return;
+    const preset = industryPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    updateConfig(applyIndustryPresetToConfig(config, preset, industryApplyOptions));
   }
 
   function handleTimelineTemplate(templateId: string) {
@@ -390,11 +525,19 @@ export default function RenderSettingsPage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
         <section className="space-y-5">
           {mode === 'simple' ? (
-            <SimpleSettingsPanel config={config} onChange={updateConfig} />
+            <SimpleSettingsPanel
+              config={config}
+              visualStylePresets={visualStylePresets}
+              industryPresets={industryPresets}
+              onChange={updateConfig}
+            />
           ) : (
             <AdvancedSettingsPanel
               config={config}
               presets={presets}
+              visualStylePresets={visualStylePresets}
+              industryPresets={industryPresets}
+              industryApplyOptions={industryApplyOptions}
               selectedPreset={selectedPreset}
               timelineTemplates={timelineTemplates}
               scriptVariantStyles={scriptVariantStyles}
@@ -405,13 +548,37 @@ export default function RenderSettingsPage() {
               scanResult={scanResult}
               segmentScoring={segmentScoring}
               busy={busy}
+              safetyBlocked={safetyBlocked}
               onPreset={handlePreset}
+              onIndustryApplyOptionsChange={setIndustryApplyOptions}
+              onIndustrySelect={(presetId) =>
+                updateConfig({
+                  ...config,
+                  industry: { preset_id: presetId },
+                })
+              }
+              onIndustryPreset={handleIndustryPreset}
               onTimelineTemplate={handleTimelineTemplate}
               onGenerateScriptVariants={handleGenerateScriptVariants}
               onTTSProviderChange={handleTTSProviderChange}
               onTTSChange={updateTTS}
               onLoadGoogleVoices={handleLoadGoogleVoices}
+              onVisualStyleChange={(presetId) =>
+                updateConfig({
+                  ...config,
+                  visual_style: {
+                    ...(config.visual_style ?? DEFAULT_VISUAL_STYLE_SETTINGS),
+                    preset_id: presetId,
+                  },
+                })
+              }
               onEffectsChange={(effects) => updateConfig({ ...config, effects })}
+              onCropSafetyChange={(patch) =>
+                updateConfig({
+                  ...config,
+                  crop_safety: { ...(config.crop_safety ?? DEFAULT_CROP_SAFETY_SETTINGS), ...patch },
+                })
+              }
               onMusicChange={(patch) =>
                 updateConfig({ ...config, music: { ...(config.music ?? DEFAULT_MUSIC_SETTINGS), ...patch } })
               }
@@ -421,6 +588,27 @@ export default function RenderSettingsPage() {
               onRenderFull={() => handleRender(false)}
             />
           )}
+
+          <ProductSafetyBox
+            result={safetyResult}
+            checking={checkingSafety}
+            onRun={() => void handleRunSafetyCheck()}
+          />
+
+          <SourceMediaSummaryBox
+            summary={sourceMediaSummary}
+            onManage={() => projectId && navigate(`/projects/${projectId}/source-media`)}
+          />
+
+          <CachePanel
+            config={config}
+            summary={cacheSummary}
+            busy={cacheBusy}
+            message={cacheMessage}
+            onChange={updateCache}
+            onRefresh={() => projectId && void loadCacheSummary(projectId)}
+            onClear={() => void handleClearCache()}
+          />
 
           <ApiErrorBox error={error} />
 
@@ -437,7 +625,7 @@ export default function RenderSettingsPage() {
               <button
                 className="rounded-md bg-slate-700 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                 type="button"
-                disabled={busy}
+                disabled={busy || safetyBlocked}
                 onClick={() => handleRender(true)}
               >
                 Render thử
@@ -445,7 +633,7 @@ export default function RenderSettingsPage() {
               <button
                 className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                 type="button"
-                disabled={busy}
+                disabled={busy || safetyBlocked}
                 onClick={() => handleRender(false)}
               >
                 Render toàn bộ
@@ -458,6 +646,7 @@ export default function RenderSettingsPage() {
               job={previewJob}
               output={previewOutput}
               script={script}
+              cropSafety={cropSafety}
               targetDuration={config.render.duration}
               scriptError={scriptError}
               savingScript={savingScript}
@@ -469,7 +658,7 @@ export default function RenderSettingsPage() {
               onSaveScript={handleSaveScript}
               onRenderFull={() => handleRender(false)}
               onRenderPreviewAgain={() => handleRender(true)}
-              fullRenderDisabled={busy || savingScript}
+              fullRenderDisabled={busy || savingScript || safetyBlocked}
             />
           ) : null}
         </section>
@@ -477,7 +666,13 @@ export default function RenderSettingsPage() {
         <aside className="rounded-lg border border-line bg-white p-5 shadow-panel">
           <h2 className="mb-3 text-base font-semibold text-ink">Tóm tắt cấu hình</h2>
           {mode === 'simple' ? (
-            <FriendlySummary config={config} providers={availableTTSProviders} templates={timelineTemplates} />
+            <FriendlySummary
+              config={config}
+              providers={availableTTSProviders}
+              templates={timelineTemplates}
+              visualStylePresets={visualStylePresets}
+              industryPresets={industryPresets}
+            />
           ) : (
             <pre className="max-h-[780px] overflow-auto rounded-md bg-surface p-4 text-xs leading-relaxed text-ink">
               {previewJson}
@@ -510,9 +705,13 @@ function ModeToggle({ mode, onChange }: { mode: SettingsMode; onChange: (mode: S
 
 function SimpleSettingsPanel({
   config,
+  visualStylePresets,
+  industryPresets,
   onChange,
 }: {
   config: ProjectConfig;
+  visualStylePresets: VisualStylePreset[];
+  industryPresets: IndustryPreset[];
   onChange: (config: ProjectConfig) => void;
 }) {
   const countOption = OUTPUT_COUNT_OPTIONS.find((option) => option.value === config.render.output_count)?.id ?? 'custom';
@@ -535,10 +734,36 @@ function SimpleSettingsPanel({
     onChange({ ...config, music: { ...(config.music ?? DEFAULT_MUSIC_SETTINGS), ...patch } });
   }
 
+  function updateCropSafety(patch: Partial<NonNullable<ProjectConfig['crop_safety']>>) {
+    onChange({ ...config, crop_safety: { ...(config.crop_safety ?? DEFAULT_CROP_SAFETY_SETTINGS), ...patch } });
+  }
+
+  function updateVisualStyle(presetId: string) {
+    onChange({
+      ...config,
+      visual_style: {
+        ...(config.visual_style ?? DEFAULT_VISUAL_STYLE_SETTINGS),
+        preset_id: presetId,
+      },
+    });
+  }
+
+  function updateIndustry(presetId: string) {
+    const preset = industryPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    onChange(applyIndustryPresetToConfig(config, preset, DEFAULT_INDUSTRY_APPLY_OPTIONS));
+  }
+
   return (
     <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
       <h2 className="mb-4 text-base font-semibold text-ink">Chế độ đơn giản</h2>
       <div className="grid gap-4 sm:grid-cols-2">
+        <SelectField
+          label="Ngành hàng"
+          value={config.industry?.preset_id ?? 'general_product'}
+          onChange={updateIndustry}
+          options={industryPresets.map((preset) => ({ value: preset.id, label: preset.name }))}
+        />
         <SelectField
           label="Số lượng video đầu ra"
           value={countOption}
@@ -578,6 +803,10 @@ function SimpleSettingsPanel({
             onChange({
               ...config,
               timeline: { ...(config.timeline ?? { template_id: DEFAULT_TEMPLATE_ID }), template_id: option.templateId },
+              visual_style: {
+                ...(config.visual_style ?? DEFAULT_VISUAL_STYLE_SETTINGS),
+                preset_id: option.visualStylePresetId,
+              },
             });
           }}
           options={[
@@ -638,6 +867,29 @@ function SimpleSettingsPanel({
             </span>
           </span>
         </label>
+        <label className="flex items-start gap-3 rounded-md border border-line bg-white p-3 text-sm sm:col-span-2">
+          <input
+            className="mt-1 h-4 w-4 accent-brand"
+            type="checkbox"
+            checked={config.crop_safety?.enabled ?? DEFAULT_CROP_SAFETY_SETTINGS.enabled}
+            onChange={(event) => updateCropSafety({ enabled: event.target.checked })}
+          />
+          <span>
+            <span className="block font-medium text-ink">Tự động bảo vệ sản phẩm khi crop</span>
+            <span className="mt-1 block text-xs text-muted">
+              Tool sẽ hạn chế crop mất sản phẩm, tự dùng nền mờ khi video ngang có chi tiết sát mép.
+            </span>
+          </span>
+        </label>
+      </div>
+      <div className="mt-5 border-t border-line pt-5">
+        <h3 className="mb-3 text-sm font-semibold text-ink">Subtitle / Overlay Style</h3>
+        <VisualStyleSelector
+          presets={visualStylePresets}
+          selectedPresetId={config.visual_style?.preset_id ?? DEFAULT_VISUAL_STYLE_SETTINGS.preset_id}
+          resolution={config.render.resolution}
+          onSelect={updateVisualStyle}
+        />
       </div>
       <div className="mt-4 rounded-md bg-surface p-3 text-sm text-muted">
         Biến thể kịch bản: <span className="font-semibold text-ink">Tự động trộn</span>
@@ -649,6 +901,9 @@ function SimpleSettingsPanel({
 function AdvancedSettingsPanel({
   config,
   presets,
+  visualStylePresets,
+  industryPresets,
+  industryApplyOptions,
   selectedPreset,
   timelineTemplates,
   scriptVariantStyles,
@@ -659,14 +914,20 @@ function AdvancedSettingsPanel({
   scanResult,
   segmentScoring,
   busy,
+  safetyBlocked,
   onPreset,
+  onIndustryApplyOptionsChange,
+  onIndustrySelect,
+  onIndustryPreset,
   onTimelineTemplate,
   onGenerateScriptVariants,
   onTTSProviderChange,
   onTTSChange,
   onLoadGoogleVoices,
+  onVisualStyleChange,
   onMusicChange,
   onEffectsChange,
+  onCropSafetyChange,
   onScan,
   onBack,
   onRenderPreview,
@@ -674,6 +935,9 @@ function AdvancedSettingsPanel({
 }: {
   config: ProjectConfig;
   presets: Preset[];
+  visualStylePresets: VisualStylePreset[];
+  industryPresets: IndustryPreset[];
+  industryApplyOptions: ApplyIndustryPresetOptions;
   selectedPreset: string;
   timelineTemplates: TimelineTemplateSummary[];
   scriptVariantStyles: ScriptVariantStyle[];
@@ -684,14 +948,20 @@ function AdvancedSettingsPanel({
   scanResult: ScanResponse | null;
   segmentScoring: SegmentScoringSummary | null;
   busy: boolean;
+  safetyBlocked: boolean;
   onPreset: (preset: Preset) => void;
+  onIndustryApplyOptionsChange: (options: ApplyIndustryPresetOptions) => void;
+  onIndustrySelect: (presetId: string) => void;
+  onIndustryPreset: (presetId: string) => void;
   onTimelineTemplate: (templateId: string) => void;
   onGenerateScriptVariants: () => void;
   onTTSProviderChange: (provider: string) => void;
   onTTSChange: (patch: Partial<NonNullable<ProjectConfig['tts']>>) => void;
   onLoadGoogleVoices: () => void;
+  onVisualStyleChange: (presetId: string) => void;
   onMusicChange: (patch: Partial<ProjectConfig['music']>) => void;
   onEffectsChange: (effects: EffectSettings) => void;
+  onCropSafetyChange: (patch: Partial<NonNullable<ProjectConfig['crop_safety']>>) => void;
   onScan: () => void;
   onBack: () => void;
   onRenderPreview: () => void;
@@ -702,6 +972,35 @@ function AdvancedSettingsPanel({
       <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
         <h2 className="mb-3 text-base font-semibold text-ink">Mẫu cài đặt</h2>
         <PresetSelector presets={presets} selectedName={selectedPreset} onSelect={onPreset} />
+      </div>
+
+      <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
+        <h2 className="mb-3 text-base font-semibold text-ink">Industry Preset</h2>
+        <IndustryPresetSelector
+          presets={industryPresets}
+          selectedPresetId={config.industry?.preset_id ?? 'general_product'}
+          applyOptions={industryApplyOptions}
+          onApplyOptionsChange={onIndustryApplyOptionsChange}
+          onSelect={onIndustrySelect}
+        />
+        <div className="mt-3 flex flex-wrap gap-3">
+          <button
+            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            type="button"
+            disabled={busy}
+            onClick={() => onIndustryPreset(config.industry?.preset_id ?? 'general_product')}
+          >
+            Apply preset
+          </button>
+          <button
+            className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
+            type="button"
+            disabled={busy}
+            onClick={() => onIndustryPreset('general_product')}
+          >
+            Reset general
+          </button>
+        </div>
       </div>
 
       <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
@@ -717,6 +1016,16 @@ function AdvancedSettingsPanel({
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
+        <h2 className="mb-3 text-base font-semibold text-ink">Subtitle / Overlay Style</h2>
+        <VisualStyleSelector
+          presets={visualStylePresets}
+          selectedPresetId={config.visual_style?.preset_id ?? DEFAULT_VISUAL_STYLE_SETTINGS.preset_id}
+          resolution={config.render.resolution}
+          onSelect={onVisualStyleChange}
+        />
       </div>
 
       <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
@@ -767,6 +1076,8 @@ function AdvancedSettingsPanel({
         <EffectSliders effects={config.effects} onChange={onEffectsChange} />
       </div>
 
+      <CropSafetyPanel config={config} onChange={onCropSafetyChange} />
+
       {scanResult ? <ScanResult scanResult={scanResult} segmentScoring={segmentScoring} /> : null}
 
       <div className="flex flex-wrap items-center gap-3">
@@ -789,7 +1100,7 @@ function AdvancedSettingsPanel({
         <button
           className="rounded-md bg-slate-700 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
           type="button"
-          disabled={busy}
+          disabled={busy || safetyBlocked}
           onClick={onRenderPreview}
         >
           Render thử
@@ -797,7 +1108,7 @@ function AdvancedSettingsPanel({
         <button
           className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           type="button"
-          disabled={busy}
+          disabled={busy || safetyBlocked}
           onClick={onRenderFull}
         >
           Render toàn bộ
@@ -950,10 +1261,84 @@ function MusicPanel({
   );
 }
 
+function CropSafetyPanel({
+  config,
+  onChange,
+}: {
+  config: ProjectConfig;
+  onChange: (patch: Partial<NonNullable<ProjectConfig['crop_safety']>>) => void;
+}) {
+  const cropSafety = config.crop_safety ?? DEFAULT_CROP_SAFETY_SETTINGS;
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
+      <h2 className="mb-3 text-base font-semibold text-ink">Crop Safety</h2>
+      <div className="grid gap-3">
+        <label className="flex items-start gap-3 rounded-md border border-line bg-white p-3 text-sm">
+          <input
+            className="mt-1 h-4 w-4 accent-brand"
+            type="checkbox"
+            checked={cropSafety.enabled}
+            onChange={(event) => onChange({ enabled: event.target.checked })}
+          />
+          <span>
+            <span className="block font-medium text-ink">Tự động bảo vệ sản phẩm khi crop</span>
+            <span className="mt-1 block text-xs text-muted">
+              Ưu tiên giữ vùng sản phẩm trong khung 9:16, giảm rủi ro bị overlay hoặc zoom cắt mất.
+            </span>
+          </span>
+        </label>
+
+        <SelectField
+          label="Chế độ crop"
+          value={cropSafety.mode}
+          onChange={(mode) => onChange({ mode })}
+          options={[
+            { value: 'auto_safe', label: 'Auto Safe' },
+            { value: 'center_crop', label: 'Center Crop' },
+            { value: 'fit_blur_background', label: 'Fit Blur Background' },
+          ]}
+        />
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="flex items-start gap-3 rounded-md bg-surface p-3 text-sm">
+            <input
+              className="mt-1 h-4 w-4 accent-brand"
+              type="checkbox"
+              checked={cropSafety.allow_blur_background}
+              disabled={!cropSafety.enabled}
+              onChange={(event) => onChange({ allow_blur_background: event.target.checked })}
+            />
+            <span>
+              <span className="block font-medium text-ink">Cho phép nền mờ</span>
+              <span className="mt-1 block text-xs text-muted">Dùng khi video ngang dễ mất chi tiết hai bên.</span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3 rounded-md bg-surface p-3 text-sm">
+            <input
+              className="mt-1 h-4 w-4 accent-brand"
+              type="checkbox"
+              checked={cropSafety.reduce_zoom_on_risk}
+              disabled={!cropSafety.enabled}
+              onChange={(event) => onChange({ reduce_zoom_on_risk: event.target.checked })}
+            />
+            <span>
+              <span className="block font-medium text-ink">Giảm zoom khi rủi ro</span>
+              <span className="mt-1 block text-xs text-muted">Hạn chế zoom motion làm sản phẩm tràn khỏi khung.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PreviewSection({
   job,
   output,
   script,
+  cropSafety,
   targetDuration,
   scriptError,
   savingScript,
@@ -967,6 +1352,7 @@ function PreviewSection({
   job: JobStatus | null;
   output: JobOutput | null;
   script: ProductVideoScript | null;
+  cropSafety: CropSafetyAnalyzeResponse | null;
   targetDuration: number;
   scriptError: string | null;
   savingScript: boolean;
@@ -989,6 +1375,7 @@ function PreviewSection({
 
       <RenderProgress job={job} />
       <WarningBox warnings={warnings} />
+      <CropSafetyStatusBox result={cropSafety} />
 
       {done && output ? (
         <div className="space-y-3 rounded-md bg-surface p-4">
@@ -1047,20 +1434,84 @@ function PreviewSection({
   );
 }
 
+function CropSafetyStatusBox({ result }: { result: CropSafetyAnalyzeResponse | null }) {
+  if (!result) return null;
+
+  if (!result.success) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <span className="font-semibold">Crop Safety chưa có dữ liệu.</span>
+        <span className="mt-1 block">{result.error ?? 'Render preview xong rồi thử lại.'}</span>
+      </div>
+    );
+  }
+
+  const warnings = result.warnings_summary ?? {};
+  const warningEntries = Object.entries(warnings);
+  const score = result.average_crop_safety_score ?? 0;
+  const scoreLabel = `${Math.round(score * 100)}%`;
+  const badgeClass =
+    score >= 0.78
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : score >= 0.60
+        ? 'border-amber-200 bg-amber-50 text-amber-800'
+        : 'border-red-200 bg-red-50 text-red-700';
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-ink">Crop Safety</h2>
+          <p className="mt-1 text-sm text-muted">
+            Đã phân tích {result.total_clips_analyzed ?? 0} cảnh trong video thử.
+          </p>
+        </div>
+        <span className={`rounded-md border px-3 py-1.5 text-sm font-semibold ${badgeClass}`}>
+          Điểm an toàn {scoreLabel}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+        <Metric label="Cảnh dùng nền mờ" value={result.fallback_to_blur_background ?? 0} />
+        <Metric label="Số cảnh báo crop" value={warningEntries.reduce((total, [, count]) => total + count, 0)} />
+      </div>
+
+      {warningEntries.length ? (
+        <ul className="mt-3 space-y-2 text-sm">
+          {warningEntries.slice(0, 6).map(([warning, count]) => (
+            <li className="rounded-md bg-surface px-3 py-2 text-muted" key={warning}>
+              <span className="font-semibold text-ink">{count}x</span> {formatCropWarning(warning)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function FriendlySummary({
   config,
   providers,
   templates,
+  visualStylePresets,
+  industryPresets,
 }: {
   config: ProjectConfig;
   providers: TTSProviderInfo[];
   templates: TimelineTemplateSummary[];
+  visualStylePresets: VisualStylePreset[];
+  industryPresets: IndustryPreset[];
 }) {
   const style = findVideoStyle(config.timeline?.template_id);
   const edit = findEditStrength(config.effects);
   const voice = findVoice(config.tts?.voice);
   const provider = providers.find((item) => item.id === (config.tts?.provider ?? 'edge_tts'));
   const template = templates.find((item) => item.id === config.timeline?.template_id);
+  const visualStyle = visualStylePresets.find(
+    (item) => item.id === (config.visual_style?.preset_id ?? DEFAULT_VISUAL_STYLE_SETTINGS.preset_id),
+  );
+  const industry = industryPresets.find((item) => item.id === (config.industry?.preset_id ?? 'general_product'));
+  const cropSafety = config.crop_safety ?? DEFAULT_CROP_SAFETY_SETTINGS;
   const musicSummary = !config.music.enabled
       ? 'Tắt'
     : config.music.duck_under_voice
@@ -1070,14 +1521,17 @@ function FriendlySummary({
   return (
     <dl className="grid gap-3 text-sm">
       <SummaryRow label="Dự án" value={config.product.name || config.project_name} />
+      <SummaryRow label="Industry" value={industry?.name ?? config.industry?.preset_id ?? 'general_product'} />
       <SummaryRow label="Đầu ra" value={`${config.render.output_count} video x ${config.render.duration}s`} />
       <SummaryRow label="Phong cách" value={style?.summaryLabel ?? config.timeline?.template_id ?? 'Tuỳ chỉnh'} />
       <SummaryRow label="Mức chỉnh sửa" value={edit?.summaryLabel ?? 'Tuỳ chỉnh'} />
       <SummaryRow label="Giọng đọc" value={voice?.summaryLabel ?? config.tts?.voice ?? '-'} />
       <SummaryRow label="Tạo giọng đọc" value={provider?.name ?? config.tts?.provider ?? '-'} />
       <SummaryRow label="Nhạc nền" value={musicSummary} />
+      <SummaryRow label="Crop Safety" value={cropSafety.enabled ? `Bật (${cropSafety.mode})` : 'Tắt'} />
       <SummaryRow label="Dòng thời gian" value={template?.name ?? config.timeline?.template_id ?? '-'} />
       <SummaryRow label="Kịch bản" value="Tự động trộn" />
+      <SummaryRow label="Subtitle / Overlay" value={visualStyle?.name ?? config.visual_style?.preset_id ?? '-'} />
     </dl>
   );
 }
@@ -1125,6 +1579,233 @@ function ScanResult({
   );
 }
 
+function ProductSafetyBox({
+  result,
+  checking,
+  onRun,
+}: {
+  result: SafetyCheckResult | null;
+  checking: boolean;
+  onRun: () => void;
+}) {
+  const status = result
+    ? result.errors_count > 0
+      ? 'error'
+      : result.warnings_count > 0
+        ? 'warning'
+        : 'passed'
+    : 'idle';
+  const statusText =
+    status === 'passed'
+      ? 'Thông tin sản phẩm đủ để render'
+      : status === 'warning'
+        ? `Có ${result?.warnings_count ?? 0} cảnh báo cần xem lại`
+        : status === 'error'
+          ? `Có ${result?.errors_count ?? 0} lỗi cần sửa trước khi render`
+          : 'Chưa chạy Product Info QA';
+  const badgeClass =
+    status === 'passed'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      : status === 'warning'
+        ? 'bg-amber-50 text-amber-800 border-amber-200'
+        : status === 'error'
+          ? 'bg-red-50 text-red-700 border-red-200'
+          : 'bg-surface text-muted border-line';
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-ink">Product Info QA</h2>
+          <p className="mt-1 text-sm text-muted">
+            Kiểm tra thông tin sản phẩm, claim rủi ro và điều kiện render cơ bản.
+          </p>
+        </div>
+        <button
+          className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
+          type="button"
+          disabled={checking}
+          onClick={onRun}
+        >
+          {checking ? 'Đang kiểm tra...' : 'Run Safety Check'}
+        </button>
+      </div>
+
+      <div className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold ${badgeClass}`}>
+        {statusText}
+      </div>
+
+      {result?.warnings_count ? (
+        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Warning không chặn render. Bạn vẫn có thể tiếp tục render với cảnh báo sau khi đã kiểm tra nội dung.
+        </p>
+      ) : null}
+
+      {result?.issues.length ? (
+        <ul className="mt-3 max-h-56 space-y-2 overflow-auto text-sm">
+          {result.issues.map((issue, index) => (
+            <li
+              className={`rounded-md border px-3 py-2 ${
+                issue.severity === 'error'
+                  ? 'border-red-200 bg-red-50 text-red-700'
+                  : issue.severity === 'warning'
+                    ? 'border-amber-200 bg-amber-50 text-amber-800'
+                    : 'border-line bg-surface text-muted'
+              }`}
+              key={`${issue.category}-${issue.field ?? 'field'}-${index}`}
+            >
+              <span className="font-semibold">{issue.severity.toUpperCase()}</span>
+              {issue.field ? <span className="ml-1 text-xs opacity-80">({issue.field})</span> : null}
+              <span className="block">{issue.message}</span>
+              {issue.suggestion ? <span className="mt-1 block text-xs opacity-80">{issue.suggestion}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function SourceMediaSummaryBox({
+  summary,
+  onManage,
+}: {
+  summary: SourceMediaSummary | null;
+  onManage: () => void;
+}) {
+  const usableSegments = summary?.usable_segments ?? 0;
+  const totalMedia = summary?.total_media ?? 0;
+  const excludedMedia = summary?.excluded_media ?? 0;
+  const favoriteSegments = summary?.favorite_segments ?? 0;
+  const lowSegmentWarning = Boolean(summary && usableSegments > 0 && usableSegments < 6);
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-ink">Source media</h2>
+          <p className="mt-1 text-sm text-muted">
+            {summary
+              ? `${totalMedia} videos, ${excludedMedia} excluded, ${usableSegments} usable segments, ${favoriteSegments} favorite`
+              : 'Chưa có summary. Hãy quét video hoặc mở Source Media Manager.'}
+          </p>
+        </div>
+        <button
+          className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
+          type="button"
+          onClick={onManage}
+        >
+          Manage Source Media
+        </button>
+      </div>
+      {lowSegmentWarning ? (
+        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Số segment khả dụng hơi ít. Bạn có thể thêm video nguồn hoặc bỏ exclude một số segment.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CachePanel({
+  config,
+  summary,
+  busy,
+  message,
+  onChange,
+  onRefresh,
+  onClear,
+}: {
+  config: ProjectConfig;
+  summary: CacheSummary | null;
+  busy: boolean;
+  message: string | null;
+  onChange: (patch: Partial<NonNullable<ProjectConfig['cache']>>) => void;
+  onRefresh: () => void;
+  onClear: () => void;
+}) {
+  const cache = config.cache ?? DEFAULT_CACHE_SETTINGS;
+  const items = summary?.items ?? {};
+  const itemCount = Object.values(items).reduce((total, count) => total + count, 0);
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-ink">Performance Cache</h2>
+          <p className="mt-1 text-sm text-muted">
+            Tái sử dụng metadata, crop safety, TTS và overlay khi input chưa thay đổi.
+          </p>
+        </div>
+        <span
+          className={`rounded-md border px-3 py-1.5 text-sm font-semibold ${
+            cache.enabled
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              : 'border-line bg-surface text-muted'
+          }`}
+        >
+          {cache.enabled ? 'Đang bật' : 'Đang tắt'}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+        <Metric label="Cache hit" value={summary?.hits ?? 0} />
+        <Metric label="Cache miss" value={summary?.misses ?? 0} />
+        <Metric label="Dung lượng" value={formatCacheSize(summary?.cache_size_mb ?? 0)} />
+        <Metric label="Số mục" value={itemCount} />
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <label className="flex items-start gap-3 rounded-md bg-surface p-3 text-sm">
+          <input
+            className="mt-1 h-4 w-4 accent-brand"
+            type="checkbox"
+            checked={cache.enabled}
+            onChange={(event) => onChange({ enabled: event.target.checked })}
+          />
+          <span>
+            <span className="block font-medium text-ink">Bật cache render</span>
+            <span className="mt-1 block text-xs text-muted">Giúp preview và render lại nhanh hơn.</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 rounded-md bg-surface p-3 text-sm">
+          <input
+            className="mt-1 h-4 w-4 accent-brand"
+            type="checkbox"
+            checked={cache.clear_cache_before_render}
+            disabled={!cache.enabled}
+            onChange={(event) => onChange({ clear_cache_before_render: event.target.checked })}
+          />
+          <span>
+            <span className="block font-medium text-ink">Xoá cache trước render</span>
+            <span className="mt-1 block text-xs text-muted">Dùng khi nghi cache cũ gây sai kết quả.</span>
+          </span>
+        </label>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button
+          className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
+          type="button"
+          disabled={busy}
+          onClick={onRefresh}
+        >
+          Làm mới
+        </button>
+        <button
+          className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+          type="button"
+          disabled={busy}
+          onClick={onClear}
+        >
+          {busy ? 'Đang xoá...' : 'Xoá cache'}
+        </button>
+        {message ? <span className="self-center text-sm text-emerald-700">{message}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 function SelectField({
   label,
   value,
@@ -1163,6 +1844,11 @@ function Metric({ label, value }: { label: string; value: number | string }) {
   );
 }
 
+function formatCacheSize(sizeMb: number): string {
+  if (sizeMb >= 1024) return `${(sizeMb / 1024).toFixed(2)} GB`;
+  return `${sizeMb.toFixed(1)} MB`;
+}
+
 function findVideoStyle(templateId?: string | null) {
   return VIDEO_STYLE_OPTIONS.find((option) => option.templateId === templateId);
 }
@@ -1194,10 +1880,22 @@ function formatStatus(status: string): string {
 
 function collectPreviewWarnings(output: JobOutput | null, job: JobStatus | null): string[] {
   const outputWarnings = output?.warnings ?? [];
+  const cropWarnings = output?.crop_safety?.warnings ?? [];
   const logWarnings = (job?.logs ?? [])
     .filter((log) => log.level.toLowerCase() === 'warning')
     .map((log) => log.message);
-  return Array.from(new Set([...outputWarnings, ...logWarnings]));
+  return Array.from(new Set([...outputWarnings, ...cropWarnings, ...logWarnings]));
+}
+
+function formatCropWarning(warning: string): string {
+  const labels: Record<string, string> = {
+    important_content_near_edge: 'Nội dung quan trọng nằm gần mép khung',
+    landscape_video_may_lose_side_content: 'Video ngang có thể mất chi tiết hai bên',
+    overlay_may_cover_important_content: 'Overlay đáy có thể che vùng quan trọng',
+    zoom_motion_may_cut_content: 'Zoom motion có thể cắt mất sản phẩm',
+    blur_background_disabled_fallback_center_crop: 'Nền mờ đang tắt nên dùng crop giữa',
+  };
+  return labels[warning] ?? warning;
 }
 
 function googleLanguageCode(voice?: string, language?: string): string {

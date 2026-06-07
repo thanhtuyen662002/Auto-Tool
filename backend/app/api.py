@@ -6,6 +6,7 @@ import threading
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +19,17 @@ from app.adapters.ffmpeg_adapter import FFmpegError
 from app.modules.media_scanner.scanner import MediaScanner
 from app.modules.content_manager.content_schema import build_content_summary
 from app.modules.content_manager.content_service import ContentService
+from app.modules.cache.cache_service import CacheService
+from app.modules.content_safety.safety_guard_service import SafetyGuardService
+from app.modules.content_safety.safety_schema import SafetyCheckResult, SafetyIssue, build_safety_result
+from app.modules.industry_presets.industry_registry import get_industry_preset
+from app.modules.industry_presets.industry_preset_service import IndustryPresetService
+from app.modules.industry_presets.industry_schema import IndustryPreset, IndustrySettings
 from app.modules.output_review.review_service import OutputQualityReviewService, build_review_rows
+from app.modules.product_import import ProductImportService, suggest_industry_preset, to_project_product_info
+from app.modules.product_import.product_import_schema import ProductInfoNormalized
+from app.modules.product_import.product_normalizer import ProductNormalizer
+from app.modules.product_import.product_validator import ProductValidator
 from app.modules.output_review.rerender_service import RerenderService
 from app.modules.render_worker.render_worker import render_project
 from app.modules.segment_scoring.segment_scorer import SegmentScorer, build_scoring_report
@@ -26,18 +37,27 @@ from app.modules.segmenter.segmenter import Segmenter
 from app.modules.script_variants.script_variant_generator import ScriptVariantGenerator
 from app.modules.script_variants.variant_registry import list_variant_styles
 from app.modules.script_writer.script_writer import ProductVideoScript
+from app.modules.source_media_manager.media_manager_service import MediaManagerService, build_source_media_summary
+from app.modules.source_media_manager.segment_review_service import SegmentReviewService
 from app.modules.timeline_templates.template_registry import list_timeline_templates
 from app.modules.tts.tts_manager import list_tts_providers
 from app.modules.tts.providers.google_cloud_tts_provider import list_google_cloud_voices
 from app.modules.tts.providers.base import TTSProviderError
+from app.modules.visual_style.style_registry import get_visual_style_preset, list_visual_style_presets
+from app.modules.visual_style.visual_style_service import VisualStyleService
 from app.presets import get_default_presets
 from app.schemas.api_schema import (
     AppSettings,
+    ApplyIndustryPresetRequest,
+    ApplyIndustryPresetResponse,
+    BulkSegmentReviewRequest,
+    BulkSegmentReviewResponse,
     ContentExportFile,
     ContentExportResponse,
     ContentItemsResponse,
     ExportContentRequest,
     HealthResponse,
+    IndustryPresetsResponse,
     GenerateScriptVariantsRequest,
     GenerateScriptVariantsResponse,
     JobResultsResponse,
@@ -45,6 +65,8 @@ from app.schemas.api_schema import (
     LatestScriptResponse,
     OutputReviewResponse,
     PresetItem,
+    ProductInfoImportRequest,
+    ProductInfoImportResponse,
     ProjectCreateResponse,
     ProjectDetailResponse,
     RenderRequest,
@@ -52,10 +74,12 @@ from app.schemas.api_schema import (
     RerenderRequest,
     RerenderResponse,
     ScanResponse,
+    SegmentReviewResponse,
     SegmentScoringResponse,
     ScriptVariantStyleItem,
     ScriptVariantStylesResponse,
     ScriptVariantSummaryItem,
+    SourceMediaResponse,
     TTSProviderItem,
     TTSProvidersResponse,
     TTSVoiceItem,
@@ -68,10 +92,22 @@ from app.schemas.api_schema import (
     UpdateOutputReviewResponse,
     UpdateContentItemRequest,
     UpdateContentItemResponse,
+    UpdateProjectProductInfoRequest,
+    UpdateProjectProductInfoResponse,
+    UpdateProjectVisualStyleRequest,
+    UpdateProjectVisualStyleResponse,
+    UpdateSegmentReviewRequest,
+    UpdateSegmentReviewResponse,
+    UpdateSourceMediaReviewRequest,
+    UpdateSourceMediaReviewResponse,
+    VisualStylePresetItem,
+    VisualStylePresetsResponse,
+    VisualStylePreviewRequest,
+    VisualStylePreviewResponse,
 )
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir, write_json
-from app.utils.app_paths import frontend_dist_dir
+from app.utils.app_paths import app_data_dir, frontend_dist_dir
 from app.utils.path_utils import resolve_path
 
 
@@ -132,6 +168,11 @@ def create_app() -> FastAPI:
         saved = database.update_app_settings(settings.model_dump(mode="json"))
         return AppSettings.model_validate(saved)
 
+    @app.post("/api/product-info/import", response_model=ProductInfoImportResponse)
+    def import_product_info(request: ProductInfoImportRequest) -> ProductInfoImportResponse:
+        result = ProductImportService().import_product_info(request)
+        return ProductInfoImportResponse.model_validate(result.model_dump(mode="json"))
+
     @app.post("/api/projects", response_model=ProjectCreateResponse)
     def create_project(config: ProjectConfig) -> ProjectCreateResponse:
         database.init_db()
@@ -173,6 +214,44 @@ def create_app() -> FastAPI:
         _get_project_or_404(project_id)
         database.update_project_custom_script(project_id, script.model_dump(mode="json"))
         return LatestScriptResponse(script=script)
+
+    @app.post("/api/projects/{project_id}/safety-check", response_model=SafetyCheckResult)
+    def check_project_safety(project_id: str) -> SafetyCheckResult:
+        project = _get_project_or_404(project_id)
+        try:
+            config = _apply_app_settings(ProjectConfig.model_validate(project["config"]))
+        except ValidationError as exc:
+            return _validation_error_safety_result(exc)
+        return SafetyGuardService().check_before_render(config)
+
+    @app.put("/api/projects/{project_id}/product-info", response_model=UpdateProjectProductInfoResponse)
+    def update_project_product_info(
+        project_id: str,
+        request: UpdateProjectProductInfoRequest,
+    ) -> UpdateProjectProductInfoResponse:
+        project = _get_project_or_404(project_id)
+        config = ProjectConfig.model_validate(project["config"])
+        product = _prepare_product_info_for_project(request.product)
+        industry = (
+            IndustrySettings(preset_id=product.industry_preset_id)
+            if product.industry_preset_id
+            else config.industry
+        )
+        updated_config = config.model_copy(
+            update={
+                "product": to_project_product_info(product),
+                "industry": industry,
+            }
+        )
+        updated = database.update_project_config(project_id, updated_config.model_dump(mode="json"))
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+        return UpdateProjectProductInfoResponse(
+            success=True,
+            project_id=project_id,
+            product=product,
+            updated_config=updated_config,
+        )
 
     @app.post("/api/projects/{project_id}/scan", response_model=ScanResponse)
     def scan_project(project_id: str) -> ScanResponse:
@@ -238,10 +317,129 @@ def create_app() -> FastAPI:
             report_path=str(report_path),
         )
 
+    @app.get("/api/projects/{project_id}/source-media", response_model=SourceMediaResponse)
+    def get_project_source_media(project_id: str) -> SourceMediaResponse:
+        _get_project_or_404(project_id)
+        try:
+            media_items = MediaManagerService().get_source_media_items(project_id)
+        except (FFmpegError, FileNotFoundError, NotADirectoryError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        summary = build_source_media_summary(media_items, [])
+        segment_reviews = database.list_segment_reviews(project_id)
+        summary = summary.model_copy(
+            update={
+                "excluded_segments": sum(
+                    1 for item in segment_reviews if item.get("review_status") in {"excluded", "bad"}
+                ),
+                "favorite_segments": sum(
+                    1 for item in segment_reviews if item.get("review_status") == "favorite"
+                ),
+            }
+        )
+        return SourceMediaResponse(
+            summary=summary,
+            items=media_items,
+        )
+
+    @app.put(
+        "/api/projects/{project_id}/source-media/review",
+        response_model=UpdateSourceMediaReviewResponse,
+    )
+    def update_project_source_media_review(
+        project_id: str,
+        request: UpdateSourceMediaReviewRequest,
+    ) -> UpdateSourceMediaReviewResponse:
+        _get_project_or_404(project_id)
+        try:
+            item = MediaManagerService().update_media_review(
+                project_id=project_id,
+                media_path=request.media_path,
+                review_status=request.review_status,
+                user_note=request.user_note,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return UpdateSourceMediaReviewResponse(success=True, item=item)
+
+    @app.get("/api/projects/{project_id}/segments", response_model=SegmentReviewResponse)
+    def get_project_segments(
+        project_id: str,
+        source_path: str | None = Query(default=None),
+        status: str | None = Query(default=None),
+        min_score: float | None = Query(default=None),
+        tag: str | None = Query(default=None),
+    ) -> SegmentReviewResponse:
+        _get_project_or_404(project_id)
+        try:
+            items = SegmentReviewService().get_segment_review_items(
+                project_id=project_id,
+                source_path=source_path,
+                status=status,
+                min_score=min_score,
+                tag=tag,
+            )
+        except (FFmpegError, FileNotFoundError, NotADirectoryError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return SegmentReviewResponse(items=items)
+
+    @app.put(
+        "/api/projects/{project_id}/segments/{segment_id}/review",
+        response_model=UpdateSegmentReviewResponse,
+    )
+    def update_project_segment_review(
+        project_id: str,
+        segment_id: str,
+        request: UpdateSegmentReviewRequest,
+    ) -> UpdateSegmentReviewResponse:
+        _get_project_or_404(project_id)
+        try:
+            item = SegmentReviewService().update_segment_review(
+                project_id=project_id,
+                segment_id=segment_id,
+                review_status=request.review_status,
+                user_note=request.user_note,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return UpdateSegmentReviewResponse(success=True, item=item)
+
+    @app.post(
+        "/api/projects/{project_id}/segments/bulk-review",
+        response_model=BulkSegmentReviewResponse,
+    )
+    def bulk_update_project_segment_review(
+        project_id: str,
+        request: BulkSegmentReviewRequest,
+    ) -> BulkSegmentReviewResponse:
+        _get_project_or_404(project_id)
+        try:
+            updated_count = SegmentReviewService().bulk_update_segment_review(
+                project_id=project_id,
+                segment_ids=request.segment_ids,
+                review_status=request.review_status,
+                user_note=request.user_note,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return BulkSegmentReviewResponse(success=True, updated_count=updated_count)
+
     @app.post("/api/projects/{project_id}/render", response_model=RenderResponse)
     def render_project_endpoint(project_id: str, request: RenderRequest) -> RenderResponse:
         project = _get_project_or_404(project_id)
-        config = ProjectConfig.model_validate(project["config"])
+        try:
+            config = _apply_app_settings(ProjectConfig.model_validate(project["config"]))
+        except ValidationError as exc:
+            safety_result = _validation_error_safety_result(exc)
+            raise HTTPException(
+                status_code=400,
+                detail=_safety_error_detail(safety_result),
+            ) from exc
+        safety_result = SafetyGuardService().check_before_render(config)
+        if safety_result.errors_count:
+            raise HTTPException(
+                status_code=400,
+                detail=_safety_error_detail(safety_result),
+            )
         # Validate output folder writability before queuing job
         try:
             out_dir = Path(config.output_folder)
@@ -267,6 +465,10 @@ def create_app() -> FastAPI:
         database.create_job(job_id, project_id, request.preview_only, total_outputs)
         database.add_job_log(job_id, "info", "Tác vụ render đã được đưa vào hàng đợi.")
 
+        for issue in safety_result.issues:
+            if issue.severity == "warning":
+                database.add_job_log(job_id, "warning", f"Safety check: {issue.message}")
+
         thread = threading.Thread(target=run_render_job, args=(job_id,), daemon=True)
         thread.start()
         return RenderResponse(job_id=job_id, status="queued")
@@ -283,6 +485,41 @@ def create_app() -> FastAPI:
             summary=service.build_summary(scores),
             outputs=build_review_rows(project_id, scores),
         )
+
+    @app.post("/api/projects/{project_id}/crop-safety/analyze", response_model=None)
+    def analyze_project_crop_safety(project_id: str) -> dict[str, Any]:
+        _get_project_or_404(project_id)
+        report_path = _latest_crop_safety_report_path(project_id)
+        if report_path is None:
+            return {
+                "success": False,
+                "error": "No timeline available. Render preview or build timelines first.",
+            }
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=500, detail=f"Could not read crop safety report: {exc}") from exc
+        return {
+            "success": True,
+            "total_clips_analyzed": report.get("total_clips_analyzed", 0),
+            "average_crop_safety_score": report.get("average_crop_safety_score", 0),
+            "fallback_to_blur_background": report.get("fallback_to_blur_background", 0),
+            "warnings_summary": report.get("warnings_summary", {}),
+            "report_path": str(report_path),
+        }
+
+    @app.get("/api/projects/{project_id}/cache/summary", response_model=None)
+    def get_project_cache_summary(project_id: str) -> dict[str, Any]:
+        project = _get_project_or_404(project_id)
+        config = ProjectConfig.model_validate(project["config"])
+        return CacheService.for_project(config).summary()
+
+    @app.post("/api/projects/{project_id}/cache/clear", response_model=None)
+    def clear_project_cache(project_id: str) -> dict[str, Any]:
+        project = _get_project_or_404(project_id)
+        config = ProjectConfig.model_validate(project["config"])
+        CacheService.for_project(config).clear()
+        return {"success": True, "message": "Đã xoá cache dự án."}
 
     @app.put(
         "/api/projects/{project_id}/outputs/{output_index}/review",
@@ -422,6 +659,83 @@ def create_app() -> FastAPI:
         ]
         return TTSProvidersResponse(providers=providers)
 
+    @app.get("/api/visual-styles", response_model=VisualStylePresetsResponse)
+    def get_visual_styles() -> VisualStylePresetsResponse:
+        presets = [
+            VisualStylePresetItem.model_validate(preset.model_dump(mode="json"))
+            for preset in list_visual_style_presets()
+        ]
+        return VisualStylePresetsResponse(presets=presets)
+
+    @app.post("/api/visual-styles/preview", response_model=VisualStylePreviewResponse)
+    def preview_visual_style(request: VisualStylePreviewRequest) -> VisualStylePreviewResponse:
+        try:
+            path = VisualStyleService().preview_style(
+                preset_id=request.preset_id,
+                sample_text=request.sample_text,
+                resolution=request.resolution,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return VisualStylePreviewResponse(
+            success=True,
+            preview_image_path=path,
+            preview_image_url=f"/api/files/image?path={quote(path)}",
+        )
+
+    @app.put("/api/projects/{project_id}/visual-style", response_model=UpdateProjectVisualStyleResponse)
+    def update_project_visual_style(
+        project_id: str,
+        request: UpdateProjectVisualStyleRequest,
+    ) -> UpdateProjectVisualStyleResponse:
+        project = _get_project_or_404(project_id)
+        config = ProjectConfig.model_validate(project["config"])
+        preset = get_visual_style_preset(request.preset_id)
+        visual_style = config.visual_style.model_copy(update={"preset_id": preset.id, "custom_overrides": None})
+        updated_config = config.model_copy(update={"visual_style": visual_style})
+        updated = database.update_project_config(project_id, updated_config.model_dump(mode="json"))
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+        return UpdateProjectVisualStyleResponse(
+            success=True,
+            visual_style=visual_style.model_dump(mode="json"),
+        )
+
+    @app.get("/api/industry-presets", response_model=IndustryPresetsResponse)
+    def get_industry_presets() -> IndustryPresetsResponse:
+        return IndustryPresetsResponse(presets=IndustryPresetService().list_presets())
+
+    @app.get("/api/industry-presets/{preset_id}", response_model=IndustryPreset)
+    def get_industry_preset_detail(preset_id: str) -> IndustryPreset:
+        return IndustryPresetService().get_preset(preset_id)
+
+    @app.put("/api/projects/{project_id}/industry-preset", response_model=ApplyIndustryPresetResponse)
+    def apply_project_industry_preset(
+        project_id: str,
+        request: ApplyIndustryPresetRequest,
+    ) -> ApplyIndustryPresetResponse:
+        project = _get_project_or_404(project_id)
+        config = ProjectConfig.model_validate(project["config"])
+        updated_config = IndustryPresetService().apply_preset_to_config(
+            config,
+            request.preset_id,
+            apply_visual_style=request.apply_visual_style,
+            apply_timeline=request.apply_timeline,
+            apply_script_variation=request.apply_script_variation,
+            apply_tts_voice=request.apply_tts_voice,
+            apply_edit_strength=request.apply_edit_strength,
+        )
+        updated = database.update_project_config(project_id, updated_config.model_dump(mode="json"))
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+        preset_id = updated_config.industry.preset_id if updated_config.industry else request.preset_id
+        return ApplyIndustryPresetResponse(
+            success=True,
+            project_id=project_id,
+            preset_id=preset_id or request.preset_id,
+            updated_config=updated_config,
+        )
+
     @app.post("/api/tts/google-cloud/voices", response_model=TTSVoicesResponse)
     def get_google_cloud_tts_voices(request: TTSVoicesRequest) -> TTSVoicesResponse:
         settings = _get_app_settings()
@@ -484,6 +798,7 @@ def create_app() -> FastAPI:
             completed_outputs=job["completed_outputs"],
             failed_outputs=job["failed_outputs"],
             logs=logs,
+            cache_summary=job.get("results", {}).get("cache_summary"),
         )
 
     @app.get("/api/jobs/{job_id}/results", response_model=JobResultsResponse)
@@ -501,6 +816,32 @@ def create_app() -> FastAPI:
         if not database.is_known_output_path(str(video_path)):
             raise HTTPException(status_code=403, detail="Video path is not registered as a render output.")
         return FileResponse(video_path, media_type="video/mp4", filename=video_path.name)
+
+    @app.get("/api/files/image", response_model=None)
+    def get_image_file(path: str = Query(...)) -> FileResponse:
+        image_path = Path(path).expanduser().resolve()
+        if not image_path.exists() or not image_path.is_file():
+            raise HTTPException(status_code=404, detail=f"Image file not found: {image_path}")
+        if image_path.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
+            raise HTTPException(status_code=400, detail="Only PNG/JPG image preview files are supported.")
+        try:
+            image_path.relative_to(app_data_dir().resolve())
+        except ValueError as exc:
+            raise HTTPException(status_code=403, detail="Image path is not a registered Auto Tool preview asset.") from exc
+        media_type = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
+        return FileResponse(image_path, media_type=media_type, filename=image_path.name)
+
+    @app.get("/api/files/thumbnail", response_model=None)
+    def get_thumbnail_file(path: str = Query(...)) -> FileResponse:
+        image_path = Path(path).expanduser().resolve()
+        if not image_path.exists() or not image_path.is_file():
+            raise HTTPException(status_code=404, detail=f"Thumbnail not found: {image_path}")
+        if image_path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+            raise HTTPException(status_code=400, detail="Only JPG/PNG thumbnail files are supported.")
+        if "thumbnails" not in [part.lower() for part in image_path.parts]:
+            raise HTTPException(status_code=403, detail="Path is not an Auto Tool thumbnail.")
+        media_type = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
+        return FileResponse(image_path, media_type=media_type, filename=image_path.name)
 
     @app.get("/api/presets", response_model=list[PresetItem])
     def get_presets() -> list[PresetItem]:
@@ -563,6 +904,7 @@ def run_render_job(job_id: str) -> None:
             config,
             preview_only=job["preview_only"],
             custom_script=custom_script,
+            project_id=job["project_id"],
             progress_callback=progress_callback,
             log_callback=log_callback,
         )
@@ -577,7 +919,13 @@ def run_render_job(job_id: str) -> None:
             completed_outputs=summary["successful_outputs"],
             failed_outputs=summary["failed_outputs"],
             output_folder=summary["output_folder"],
-            results_json=json.dumps({"outputs": summary["outputs"]}, ensure_ascii=False),
+            results_json=json.dumps(
+                {
+                    "outputs": summary["outputs"],
+                    "cache_summary": summary.get("cache_summary"),
+                },
+                ensure_ascii=False,
+            ),
         )
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
@@ -647,7 +995,13 @@ def run_rerender_job(job_id: str, request_payload: dict[str, Any], rerender_outp
             completed_outputs=summary["successful_outputs"],
             failed_outputs=summary["failed_outputs"],
             output_folder=summary["output_folder"],
-            results_json=json.dumps({"outputs": summary["outputs"]}, ensure_ascii=False),
+            results_json=json.dumps(
+                {
+                    "outputs": summary["outputs"],
+                    "cache_summary": summary.get("cache_summary"),
+                },
+                ensure_ascii=False,
+            ),
         )
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
@@ -707,6 +1061,69 @@ def _apply_app_settings(config: ProjectConfig) -> ProjectConfig:
     return config.model_copy(update=updates) if updates else config
 
 
+def _validation_error_safety_result(exc: ValidationError) -> SafetyCheckResult:
+    issues: list[SafetyIssue] = []
+    for error in exc.errors():
+        loc = ".".join(str(part) for part in error.get("loc", [])) or "config"
+        issues.append(
+            SafetyIssue(
+                severity="error",
+                category="invalid_project_config",
+                field=loc,
+                message=f"Project config không hợp lệ ở '{loc}': {error.get('msg', 'Validation error')}",
+                suggestion="Sửa lại thông tin sản phẩm hoặc tạo lại project từ form.",
+            )
+        )
+    return build_safety_result(issues)
+
+
+def _safety_error_detail(safety_result: SafetyCheckResult) -> dict[str, Any]:
+    return {
+        "success": False,
+        "error": "Product info safety check failed",
+        "issues": [issue.model_dump(mode="json") for issue in safety_result.issues],
+    }
+
+
+def _prepare_product_info_for_project(product: ProductInfoNormalized) -> ProductInfoNormalized:
+    normalized = ProductNormalizer().normalize(product)
+    industry_id = normalized.industry_preset_id or suggest_industry_preset(normalized)
+    industry = get_industry_preset(industry_id)
+    normalized = ProductNormalizer().normalize(
+        normalized.model_copy(
+            update={
+                "industry_preset_id": industry.id,
+                "hashtag_suggestions": normalized.hashtag_suggestions or industry.hashtag_suggestions,
+            }
+        )
+    )
+    issues = ProductValidator().validate(normalized)
+    errors = [issue for issue in issues if issue.severity == "error"]
+    if errors:
+        detail = "; ".join(issue.message for issue in errors)
+        raise HTTPException(status_code=400, detail=detail)
+    warnings = [*normalized.warnings, *[issue.message for issue in issues if issue.severity == "warning"]]
+    missing_fields = [issue.field for issue in issues if issue.severity == "error"]
+    return normalized.model_copy(
+        update={
+            "warnings": _dedupe_text(warnings),
+            "missing_fields": _dedupe_text(missing_fields),
+        }
+    )
+
+
+def _dedupe_text(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for value in values:
+        text = " ".join(str(value).strip().split())
+        if not text or text in seen:
+            continue
+        cleaned.append(text)
+        seen.add(text)
+    return cleaned
+
+
 def _normalize_config(config: ProjectConfig) -> ProjectConfig:
     base_dir = Path.cwd()
     music_updates: dict[str, str] = {}
@@ -739,6 +1156,24 @@ def _get_job_or_404(job_id: str) -> dict[str, Any]:
     if not job:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
     return job
+
+
+def _latest_crop_safety_report_path(project_id: str) -> Path | None:
+    jobs = database.get_project_jobs(project_id, include_preview=True)
+    for job in reversed(jobs):
+        output_folder = job.get("output_folder")
+        if output_folder:
+            report_path = Path(output_folder) / "crop_safety_report.json"
+            if report_path.exists():
+                return report_path
+        for output in reversed(job.get("results", {}).get("outputs", [])):
+            timeline_file = output.get("timeline_file") if isinstance(output, dict) else None
+            if not timeline_file:
+                continue
+            report_path = Path(timeline_file).parent / "crop_safety_report.json"
+            if report_path.exists():
+                return report_path
+    return None
 
 
 def _mount_frontend(app: FastAPI) -> None:

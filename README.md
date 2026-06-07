@@ -16,6 +16,7 @@ Dự án đang ở giai đoạn MVP có CLI, FastAPI local, React UI và bản W
 - Product-aware Timeline Templates để dựng cấu trúc `Hook -> Product -> Demo -> Benefit -> CTA`.
 - Build timeline weighted random theo điểm chất lượng segment, tag và template slot cho nhiều output.
 - Render visual recut bằng FFmpeg theo tỷ lệ dọc `1080x1920`.
+- Crop Safety Guard phân tích frame mẫu để giảm rủi ro crop mất sản phẩm, tự fallback sang nền mờ khi video ngang có nội dung sát mép.
 - Generate script/subtitle bằng Gemini, có hỗ trợ nhiều API key và tự xoay key khi key lỗi.
 - Script Variant Generator tạo script khác nhau cho từng video trong batch, ưu tiên style phù hợp với timeline template.
 - Cho phép nhập Gemini API keys trên giao diện.
@@ -281,6 +282,7 @@ GET  /api/projects/{project_id}
 POST /api/projects/{project_id}/scan
 POST /api/projects/{project_id}/analyze-segments
 POST /api/projects/{project_id}/render
+POST /api/projects/{project_id}/crop-safety/analyze
 GET  /api/projects/{project_id}/latest-script
 PUT  /api/projects/{project_id}/script
 GET  /api/jobs/{job_id}
@@ -420,6 +422,13 @@ Ví dụ rút gọn:
     "fade_in": 0.5,
     "fade_out": 0.8,
     "duck_under_voice": false
+  },
+  "crop_safety": {
+    "enabled": true,
+    "mode": "auto_safe",
+    "allow_blur_background": true,
+    "reduce_zoom_on_risk": true,
+    "reduce_overlay_on_risk": true
   }
 }
 ```
@@ -443,6 +452,7 @@ examples/outputs/kaw-xmax10-2026-05-31-093000/
   video_001_timeline.json
   video_001_log.json
   video_002.mp4
+  crop_safety_report.json
   segment_scoring_report.json
   script_variants.json
   project_summary.json
@@ -461,6 +471,7 @@ examples/outputs/preview/
   preview_001_voice_normalized.wav
   preview_001_voice_text.txt
   preview_001_log.json
+  crop_safety_report.json
   segment_scoring_report.json
   script_variants.json
   project_summary.json
@@ -778,6 +789,262 @@ Subtitle được tạo theo duration voice thật:
 - Voice ngắn hơn video quá 2 giây: log warning `voice_shorter_than_video`, video vẫn giữ đủ duration và phần cuối im lặng.
 - Voice dài hơn video quá 1 giây: log warning `voice_longer_than_video`, final render cắt voice theo duration video.
 - Subtitle cuối luôn bị clamp trước cuối video ít nhất 0.1 giây.
+
+## Overlay & Subtitle Style Presets
+
+Backend có thư viện preset style cho overlay và subtitle tại:
+
+```txt
+backend/app/modules/visual_style/
+```
+
+Các preset mặc định:
+
+- `clean_review_light`
+- `cute_pastel_shop`
+- `tech_dark_neon`
+- `beauty_soft_glow`
+- `food_warm_label`
+- `sale_bold_red`
+- `fashion_minimal`
+- `transparent_caption_box`
+
+Config project có thêm:
+
+```json
+{
+  "visual_style": {
+    "preset_id": "clean_review_light",
+    "custom_overrides": null
+  }
+}
+```
+
+Khi render, backend tạo thêm:
+
+```txt
+video_001_overlay.png
+video_001_sub.ass
+```
+
+Pipeline sẽ ưu tiên burn overlay PNG + subtitle ASS. Nếu ASS hoặc overlay style lỗi, render không crash toàn batch; backend fallback về drawbox/SRT cũ và ghi warning trong `video_001_log.json`.
+
+API style:
+
+```txt
+GET  /api/visual-styles
+POST /api/visual-styles/preview
+PUT  /api/projects/{project_id}/visual-style
+```
+
+Frontend hiển thị style selector ở Simple mode và Advanced mode trong trang render settings. Simple video style tự map sang preset subtitle/overlay phù hợp:
+
+- `ugc_reviewer_natural` -> `clean_review_light`
+- `product_showcase_clean` -> `transparent_caption_box`
+- `fast_tiktok_recut` -> `sale_bold_red`
+- `problem_solution` -> `clean_review_light`
+
+## Crop Safety & Product Visibility Guard
+
+Crop Safety Guard là lớp kiểm tra rule-based trước khi render visual. Backend sample một vài frame trong mỗi clip, tính saliency theo lưới, ước lượng rủi ro nội dung quan trọng nằm sát mép hoặc sát vùng overlay đáy, rồi gắn crop metadata vào timeline.
+
+Các mode hiện có:
+
+- `auto_safe`: mặc định. Smart crop theo vùng nổi bật, tự dùng nền mờ khi video ngang có nguy cơ mất chi tiết hai bên.
+- `center_crop`: crop giữa truyền thống, dùng khi muốn kết quả nhất quán và không cần bảo vệ sát mép.
+- `fit_blur_background`: luôn giữ full frame bằng nền mờ phía sau, hữu ích cho video ngang hoặc video quay sản phẩm sát mép.
+
+Config:
+
+```json
+{
+  "crop_safety": {
+    "enabled": true,
+    "mode": "auto_safe",
+    "allow_blur_background": true,
+    "reduce_zoom_on_risk": true,
+    "reduce_overlay_on_risk": true
+  }
+}
+```
+
+Khi render, backend ghi:
+
+```txt
+crop_safety_report.json
+video_001_log.json -> crop_safety
+video_001_timeline.json -> crop_mode, crop_box, crop_safety_score
+```
+
+API đọc báo cáo mới nhất:
+
+```txt
+POST /api/projects/{project_id}/crop-safety/analyze
+```
+
+Frontend hiển thị checkbox Crop Safety trong Simple Mode, panel chi tiết trong Advanced Mode và báo cáo sau khi render preview. Đây là heuristic kỹ thuật, không phải AI nhận diện sản phẩm 100%; vẫn nên xem preview trước khi render full batch.
+
+## Product Info Import
+
+Auto Tool hỗ trợ import và chuẩn hóa thông tin sản phẩm trước khi tạo script. Tính năng này giúp người dùng không phải nhập thủ công toàn bộ form khi đã có mô tả sản phẩm từ shop, file nội bộ hoặc nội dung copy sẵn.
+
+Supported Input Formats:
+
+- Manual: nhập trực tiếp bằng form như cũ.
+- Paste text/TXT: dán mô tả sản phẩm dạng nhiều dòng.
+- JSON: hỗ trợ alias như `name`, `product_name`, `ten_san_pham`, `brand_name`, `benefits`, `specifications`.
+- CSV: hỗ trợ header đơn giản như `name,brand,description,features,cta`; MVP chỉ lấy dòng đầu tiên.
+
+Backend API:
+
+```txt
+POST /api/product-info/import
+PUT  /api/projects/{project_id}/product-info
+```
+
+Ví dụ request import:
+
+```json
+{
+  "input_type": "text",
+  "raw_text": "Máy Chiếu 4K Android KAW XMAX10\nThương hiệu: KAW\nĐộ sáng 10.000 Lumens\nHỗ trợ 4K\nAndroid 9.0"
+}
+```
+
+Kết quả import sẽ trả về:
+
+- Tên sản phẩm, thương hiệu, mô tả ngắn.
+- Điểm nổi bật đã làm sạch.
+- Thông số được cung cấp rõ ràng.
+- CTA.
+- Ngành hàng gợi ý.
+- Hashtag gợi ý.
+- Claim risk warnings.
+- Missing fields.
+- Confidence score.
+
+Product Validation:
+
+- Error nếu thiếu `name`.
+- Error nếu thiếu cả `description` và `features`.
+- Warning nếu thiếu `brand`, `cta` hoặc ngành hàng.
+- Warning nếu có claim mạnh như `tốt nhất`, `số 1`, `100% hiệu quả`, `chữa bệnh`, `hết mụn`, `trắng bật tông`.
+- Với ngành mỹ phẩm, mẹ và bé, đồ ăn/uống, validator cảnh báo kỹ hơn với claim sức khỏe/làm đẹp.
+
+Lưu ý pháp lý: Auto Tool chỉ chuẩn hóa thông tin dựa trên nội dung người dùng cung cấp. Tool không tự xác minh thông số sản phẩm, không crawl website, không tự bịa claim và không tạo thông số mới. Người dùng cần kiểm tra lại nội dung trước khi render hoặc đăng video quảng cáo.
+
+Khi product có `specs`, script prompt sẽ nhận thêm:
+
+```txt
+Thông số được cung cấp:
+- Độ sáng: 10.000 Lumens
+- Hệ điều hành: Android 9.0
+```
+
+Gemini/script generator chỉ được dùng specs trong danh sách này và không được tự bịa thông số kỹ thuật mới.
+
+## Product Info QA Và Script Safety Guard
+
+Auto Tool có thêm lớp kiểm tra rule-based trước khi render và sau khi tạo script để giảm rủi ro nội dung sai thông tin sản phẩm.
+
+API:
+
+```txt
+POST /api/projects/{project_id}/safety-check
+```
+
+Safety Guard kiểm tra:
+
+- Product info có thiếu tên, mô tả hoặc điểm nổi bật không.
+- Claim rủi ro như `tốt nhất`, `số 1`, `100% hiệu quả`, `chữa bệnh`, `hết mụn`, `trắng bật tông`.
+- Ngành nhạy cảm như mỹ phẩm, đồ ăn/uống, mẹ và bé có claim sức khỏe/làm đẹp quá mạnh không.
+- Script còn placeholder như `{product_name}`, `{brand}`, `{feature}`, `CTA:`, `Hook:` không.
+- Script có bịa thông số kỹ thuật ngoài product info không, ví dụ `pin 5000mAh`, `IPX7`, `Bluetooth 5.0`, `UPF`, `Lumens`.
+- Caption có rỗng/quá dài/claim mạnh không.
+- Hashtag có quá nhiều, thiếu `#`, có khoảng trắng hoặc lệch ngành rõ ràng không.
+
+Render Blocking Rules:
+
+- Error sẽ chặn render preview/full batch.
+- Warning không chặn render nhưng được ghi vào job log, `project_summary.json` hoặc `video_001_log.json`.
+- Nếu script generated có error, tool thử dùng fallback script an toàn trước khi render tiếp.
+
+Log output:
+
+```json
+{
+  "safety_check": {
+    "passed": true,
+    "warnings_count": 1,
+    "errors_count": 0,
+    "issues": []
+  }
+}
+```
+
+Mỗi video log có thêm:
+
+```json
+{
+  "script_safety": {
+    "passed": true,
+    "warnings_count": 0,
+    "errors_count": 0,
+    "issues": [],
+    "fallback_used": false
+  }
+}
+```
+
+Safety Guard chỉ là lớp kiểm tra rule-based để giảm rủi ro nội dung sai. Nó không thay thế việc người dùng kiểm tra thông tin sản phẩm, claim quảng cáo và quy định nền tảng trước khi đăng.
+
+## Industry Preset Pack
+
+Auto Tool có Industry Preset Pack để gợi ý cấu hình theo ngành hàng sản phẩm. Preset ngành chỉ là điểm bắt đầu; người dùng vẫn nên render preview và chỉnh lại từng setting trước khi render full batch.
+
+Supported Product Categories:
+
+- `general_product`: Sản phẩm tổng quát.
+- `tech_electronics`: Công nghệ / Điện tử.
+- `beauty_cosmetics`: Mỹ phẩm / Làm đẹp.
+- `fashion_accessories`: Thời trang / Phụ kiện.
+- `home_lifestyle`: Gia dụng / Tiện ích nhà cửa.
+- `mom_baby`: Mẹ và bé.
+- `food_beverage`: Đồ ăn / Đồ uống.
+- `fast_sale_trending`: Sale nhanh / Sản phẩm trend.
+
+Industry preset ảnh hưởng các nhóm setting sau:
+
+- Video style và timeline template.
+- Mức độ chỉnh sửa.
+- Overlay/subtitle visual style.
+- Giọng đọc TTS.
+- Script variation và preferred script styles.
+- Caption tone và hashtag gợi ý.
+
+API:
+
+```txt
+GET /api/industry-presets
+GET /api/industry-presets/{preset_id}
+PUT /api/projects/{project_id}/industry-preset
+```
+
+Config project có thêm:
+
+```json
+{
+  "industry": {
+    "preset_id": "tech_electronics"
+  },
+  "script_variation": {
+    "mode": "auto_mix",
+    "preferred_variant_ids": ["benefit_first", "reviewer_natural", "use_case_scene"]
+  }
+}
+```
+
+Trong Simple Mode, chọn ngành hàng sẽ tự set các gợi ý chính nhưng người dùng vẫn override được từng field. Trong Advanced Mode, người dùng chọn preset và bấm Apply để áp dụng lại; nếu muốn quay về cấu hình an toàn thì dùng `general_product`.
 - Tool không dùng `atempo` để ép voice dài khớp video, tránh giọng bị nhanh/chậm bất thường.
 
 Mỗi `video_001_log.json` có thêm block `tts` và `subtitle_sync` để debug provider, raw voice, normalized voice và active subtitle duration.
@@ -869,6 +1136,7 @@ Sau khi rerender, review endpoint sẽ ưu tiên file mới nhất theo output i
 - Resolution là `1080x1920`.
 - Music folder/file tồn tại nếu bật nhạc nền.
 - Render preview trước khi render full batch.
+- Kiểm tra Crop Safety score/cảnh báo sau preview, đặc biệt với video ngang hoặc sản phẩm sát mép.
 - Xem lại script/subtitle sau preview.
 - Nếu render full batch không dùng custom script, kiểm tra `script_variants.json`.
 - Kiểm tra warning/error trong Result page.
@@ -1041,10 +1309,167 @@ Và tổng kết toàn batch trong `project_summary.json`:
     "total_runtime_seconds": 180.5,
     "average_time_per_video": 36.1,
     "slowest_step": "render_visual",
-    "slowest_output_index": 3
+    "slowest_output_index": 3,
+    "cache_saved_estimated_seconds": 38.0
   }
 }
 ```
+
+---
+
+## Performance Cache
+
+Auto Tool dùng file-based cache để render preview/rerender nhanh hơn khi input chưa thay đổi. Cache nằm trong:
+
+```txt
+outputs/{project_name}/.cache/
+  media_metadata/
+  segment_scores/
+  crop_safety/
+  scripts/
+  tts/
+  overlays/
+```
+
+Các bước đang được cache:
+
+- Video metadata từ `ffprobe`.
+- Segment scoring result.
+- Crop safety analysis.
+- Script variants theo product/render/timeline settings.
+- TTS voice file theo text, provider, voice, rate và duration.
+- Overlay asset theo style preset và resolution.
+- Style preview image theo preset, resolution và sample text.
+
+Cache key có tính đến đường dẫn file, dung lượng file, modified time và config liên quan. Nếu video nguồn thay đổi nội dung hoặc thời gian sửa file, metadata/score/crop cache cũ sẽ không được dùng.
+
+Config mẫu:
+
+```json
+{
+  "cache": {
+    "enabled": true,
+    "cache_media_metadata": true,
+    "cache_segment_scoring": true,
+    "cache_crop_safety": true,
+    "cache_tts": true,
+    "cache_overlay_assets": true,
+    "clear_cache_before_render": false
+  }
+}
+```
+
+API cache:
+
+```txt
+GET  /api/projects/{project_id}/cache/summary
+POST /api/projects/{project_id}/cache/clear
+```
+
+Frontend có panel `Performance Cache` trong trang Render Settings để xem cache hit/miss, dung lượng cache và xoá cache. Nếu nghi output bị ảnh hưởng bởi cache cũ, bấm `Xoá cache` rồi render lại. Cache JSON bị hỏng sẽ được bỏ qua và pipeline sẽ chạy lại bước tương ứng, không làm crash batch.
+
+`project_summary.json` có thêm:
+
+```json
+{
+  "cache_summary": {
+    "enabled": true,
+    "hits": 42,
+    "misses": 18,
+    "cache_size_mb": 245.7,
+    "media_metadata_hits": 5,
+    "segment_score_hits": 20,
+    "crop_safety_hits": 12,
+    "tts_hits": 3,
+    "overlay_hits": 2
+  }
+}
+```
+
+Mỗi `video_001_log.json` có block:
+
+```json
+{
+  "cache": {
+    "segment_score_cache_hits": 6,
+    "crop_safety_cache_hits": 6,
+    "tts_cache_hit": true,
+    "overlay_cache_hit": true
+  }
+}
+```
+
+---
+
+## Source Media Manager
+
+Source Media Manager cho phép kiểm soát video nguồn và segment trước khi render full batch. Luồng sử dụng:
+
+```txt
+1. Tạo project
+2. Scan video nguồn
+3. Mở Source Media Manager
+4. Exclude video nguồn xấu
+5. View segments của video còn lại
+6. Đánh dấu segment đẹp là Favorite hoặc Good
+7. Exclude/Bad các segment không muốn dùng
+8. Render preview/full batch
+```
+
+API:
+
+```txt
+GET  /api/projects/{project_id}/source-media
+PUT  /api/projects/{project_id}/source-media/review
+GET  /api/projects/{project_id}/segments
+PUT  /api/projects/{project_id}/segments/{segment_id}/review
+POST /api/projects/{project_id}/segments/bulk-review
+```
+
+Config:
+
+```json
+{
+  "source_media": {
+    "respect_user_exclusions": true,
+    "prefer_favorite_segments": true,
+    "allow_excluded_fallback": false
+  }
+}
+```
+
+Quy tắc render:
+
+- Video hoặc segment được đánh dấu `excluded` hoặc `bad` sẽ không được dùng khi render.
+- Segment `favorite` hoặc `good` được ưu tiên khi dựng timeline.
+- Segment `pending` vẫn được dùng nếu quality score đủ tốt.
+- Favorite segment có score kỹ thuật quá thấp vẫn được phép dùng, nhưng log warning `favorite_segment_has_low_quality_score`.
+- Tool không dùng lại excluded segment trừ khi `allow_excluded_fallback=true`.
+
+Review status được lưu trong SQLite để API đọc nhanh và đồng thời backup ra:
+
+```txt
+source_media_reviews.json
+segment_reviews.json
+```
+
+Render output có thêm:
+
+```json
+{
+  "source_media_summary": {
+    "total_media": 8,
+    "excluded_media": 1,
+    "total_segments": 120,
+    "segments_after_user_filter": 76,
+    "favorite_segments_used": 4
+  }
+}
+```
+
+Mỗi `video_001_log.json` có `source_media_filter`, còn `video_001_timeline.json` có `user_review_status` và `source_media_review_status` ở từng clip để debug vì sao timeline chọn segment đó.
+
+Source Media Manager không xoá file gốc, không tải video từ nền tảng khác, không chỉnh sửa watermark và không thay thế việc người dùng kiểm tra quyền sử dụng media.
 
 ---
 

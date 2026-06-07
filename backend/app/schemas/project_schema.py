@@ -2,15 +2,33 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.modules.industry_presets.industry_schema import IndustrySettings
+from app.modules.visual_style.style_schema import VisualStyleSettings
+
+
+class ProductSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+
+    @field_validator("name", "value")
+    @classmethod
+    def clean_text(cls, value: str) -> str:
+        return " ".join(value.strip().split())
+
 
 class ProductInfo(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
-    brand: str = Field(min_length=1)
+    brand: str = ""
     description: str = Field(min_length=1)
     features: list[str] = Field(min_length=1)
+    specs: list[ProductSpec] = Field(default_factory=list)
     cta: str = Field(min_length=1)
+    validation_warnings: list[str] = Field(default_factory=list)
+    hashtag_suggestions: list[str] = Field(default_factory=list)
 
     @field_validator("features")
     @classmethod
@@ -18,6 +36,24 @@ class ProductInfo(BaseModel):
         cleaned = [item.strip() for item in value if item.strip()]
         if not cleaned:
             raise ValueError("features must contain at least one non-empty item")
+        return cleaned
+
+    @field_validator("name", "brand", "description", "cta")
+    @classmethod
+    def clean_text(cls, value: str) -> str:
+        return " ".join(value.strip().split())
+
+    @field_validator("validation_warnings", "hashtag_suggestions")
+    @classmethod
+    def clean_text_list(cls, value: list[str]) -> list[str]:
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for item in value:
+            text = " ".join(str(item).strip().split())
+            if not text or text in seen:
+                continue
+            cleaned.append(text)
+            seen.add(text)
         return cleaned
 
 
@@ -100,6 +136,20 @@ class ScriptVariationSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: str = Field(default="auto_mix", min_length=1)
+    preferred_variant_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("preferred_variant_ids")
+    @classmethod
+    def clean_preferred_variant_ids(cls, value: list[str]) -> list[str]:
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for item in value:
+            variant_id = item.strip()
+            if not variant_id or variant_id in seen:
+                continue
+            cleaned.append(variant_id)
+            seen.add(variant_id)
+        return cleaned
 
 
 class TTSSettings(BaseModel):
@@ -123,6 +173,45 @@ class TTSSettings(BaseModel):
         return value.strip().lower().replace("-", "_")
 
 
+class CropSafetySettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    mode: str = "auto_safe"
+    allow_blur_background: bool = True
+    reduce_zoom_on_risk: bool = True
+    reduce_overlay_on_risk: bool = True
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, value: str) -> str:
+        cleaned = value.strip().lower().replace("-", "_")
+        allowed = {"auto_safe", "center_crop", "fit_blur_background"}
+        if cleaned not in allowed:
+            raise ValueError(f"crop safety mode must be one of: {', '.join(sorted(allowed))}")
+        return cleaned
+
+
+class CacheSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    cache_media_metadata: bool = True
+    cache_segment_scoring: bool = True
+    cache_crop_safety: bool = True
+    cache_tts: bool = True
+    cache_overlay_assets: bool = True
+    clear_cache_before_render: bool = False
+
+
+class SourceMediaSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    respect_user_exclusions: bool = True
+    prefer_favorite_segments: bool = True
+    allow_excluded_fallback: bool = False
+
+
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -137,3 +226,8 @@ class ProjectConfig(BaseModel):
     timeline: TimelineSettings = Field(default_factory=TimelineSettings)
     script_variation: ScriptVariationSettings = Field(default_factory=ScriptVariationSettings)
     tts: TTSSettings = Field(default_factory=TTSSettings)
+    visual_style: VisualStyleSettings = Field(default_factory=VisualStyleSettings)
+    industry: IndustrySettings | None = None
+    crop_safety: CropSafetySettings = Field(default_factory=CropSafetySettings)
+    cache: CacheSettings = Field(default_factory=CacheSettings)
+    source_media: SourceMediaSettings = Field(default_factory=SourceMediaSettings)

@@ -103,6 +103,33 @@ def init_db() -> None:
                 UNIQUE(project_id, output_index),
                 FOREIGN KEY (project_id) REFERENCES projects(project_id)
             );
+
+            CREATE TABLE IF NOT EXISTS source_media_reviews (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                media_path TEXT NOT NULL,
+                review_status TEXT NOT NULL,
+                user_note TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(project_id, media_path),
+                FOREIGN KEY (project_id) REFERENCES projects(project_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS segment_reviews (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                segment_id TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                start REAL NOT NULL,
+                end REAL NOT NULL,
+                review_status TEXT NOT NULL,
+                user_note TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(project_id, segment_id),
+                FOREIGN KEY (project_id) REFERENCES projects(project_id)
+            );
             """
         )
         _ensure_column(conn, "projects", "latest_script_json", "TEXT")
@@ -139,6 +166,19 @@ def get_project(project_id: str) -> dict[str, Any] | None:
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM projects WHERE project_id = ?", (project_id,)).fetchone()
     return _row_to_project(row) if row else None
+
+
+def update_project_config(project_id: str, config: dict[str, Any]) -> dict[str, Any] | None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE projects
+            SET config_json = ?, updated_at = ?
+            WHERE project_id = ?
+            """,
+            (json.dumps(config, ensure_ascii=False), _now(), project_id),
+        )
+    return get_project(project_id)
 
 
 def update_project_latest_script(project_id: str, script: dict[str, Any]) -> None:
@@ -469,6 +509,150 @@ def update_output_content_item(
     return get_output_content_item(project_id, output_index)
 
 
+def upsert_source_media_review(
+    project_id: str,
+    media_path: str,
+    review_status: str,
+    user_note: str | None = None,
+) -> dict[str, Any]:
+    now = _now()
+    review_id = _source_media_review_id(project_id, media_path)
+    with get_connection() as conn:
+        existing = conn.execute(
+            """
+            SELECT created_at
+            FROM source_media_reviews
+            WHERE project_id = ? AND media_path = ?
+            """,
+            (project_id, media_path),
+        ).fetchone()
+        created_at = existing["created_at"] if existing else now
+        conn.execute(
+            """
+            INSERT INTO source_media_reviews (
+                id, project_id, media_path, review_status, user_note, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(project_id, media_path) DO UPDATE SET
+                review_status = excluded.review_status,
+                user_note = excluded.user_note,
+                updated_at = excluded.updated_at
+            """,
+            (review_id, project_id, media_path, review_status, user_note, created_at, now),
+        )
+    review = get_source_media_review(project_id, media_path)
+    assert review is not None
+    return review
+
+
+def get_source_media_review(project_id: str, media_path: str) -> dict[str, Any] | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM source_media_reviews
+            WHERE project_id = ? AND media_path = ?
+            """,
+            (project_id, media_path),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def list_source_media_reviews(project_id: str) -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM source_media_reviews
+            WHERE project_id = ?
+            ORDER BY updated_at DESC
+            """,
+            (project_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def upsert_segment_review(
+    project_id: str,
+    segment_id: str,
+    source_path: str,
+    start: float,
+    end: float,
+    review_status: str,
+    user_note: str | None = None,
+) -> dict[str, Any]:
+    now = _now()
+    review_id = _segment_review_id(project_id, segment_id)
+    with get_connection() as conn:
+        existing = conn.execute(
+            """
+            SELECT created_at
+            FROM segment_reviews
+            WHERE project_id = ? AND segment_id = ?
+            """,
+            (project_id, segment_id),
+        ).fetchone()
+        created_at = existing["created_at"] if existing else now
+        conn.execute(
+            """
+            INSERT INTO segment_reviews (
+                id, project_id, segment_id, source_path, start, end,
+                review_status, user_note, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(project_id, segment_id) DO UPDATE SET
+                source_path = excluded.source_path,
+                start = excluded.start,
+                end = excluded.end,
+                review_status = excluded.review_status,
+                user_note = excluded.user_note,
+                updated_at = excluded.updated_at
+            """,
+            (
+                review_id,
+                project_id,
+                segment_id,
+                source_path,
+                float(start),
+                float(end),
+                review_status,
+                user_note,
+                created_at,
+                now,
+            ),
+        )
+    review = get_segment_review(project_id, segment_id)
+    assert review is not None
+    return review
+
+
+def get_segment_review(project_id: str, segment_id: str) -> dict[str, Any] | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM segment_reviews
+            WHERE project_id = ? AND segment_id = ?
+            """,
+            (project_id, segment_id),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def list_segment_reviews(project_id: str) -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM segment_reviews
+            WHERE project_id = ?
+            ORDER BY source_path ASC, start ASC
+            """,
+            (project_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_app_settings() -> dict[str, Any]:
     with get_connection() as conn:
         row = conn.execute("SELECT value_json FROM app_settings WHERE key = ?", ("default",)).fetchone()
@@ -580,3 +764,11 @@ def _output_review_id(project_id: str, output_index: int) -> str:
 
 def _output_content_item_id(project_id: str, output_index: int) -> str:
     return f"{project_id}:content:{output_index}"
+
+
+def _source_media_review_id(project_id: str, media_path: str) -> str:
+    return f"{project_id}:media:{media_path}"
+
+
+def _segment_review_id(project_id: str, segment_id: str) -> str:
+    return f"{project_id}:segment:{segment_id}"

@@ -4,6 +4,7 @@ import random
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.crop_safety.crop_schema import CropBox
 from app.schemas.media_schema import VideoSegment
 
 
@@ -19,7 +20,16 @@ class TimelineClip(BaseModel):
     slot_name: str | None = None
     text_role: str | None = None
     segment_score: float | None = None
+    segment_score_cache_hit: bool | None = None
     tags: list[str] = Field(default_factory=list)
+    crop_box: CropBox | None = None
+    crop_mode: str | None = None
+    crop_safety_score: float | None = None
+    crop_warnings: list[str] = Field(default_factory=list)
+    effective_zoom_motion: int | None = None
+    crop_cache_hit: bool | None = None
+    user_review_status: str | None = None
+    source_media_review_status: str | None = None
 
 
 class Timeline(BaseModel):
@@ -113,6 +123,8 @@ class TimelineBuilder:
                     end=clipped_end,
                     duration=clipped_duration,
                     speed=round(speed, 3),
+                    user_review_status=segment.user_review_status,
+                    source_media_review_status=segment.source_media_review_status,
                 )
             )
             elapsed += rendered_duration
@@ -144,8 +156,14 @@ class TimelineBuilder:
     @staticmethod
     def _segment_weight(segment: VideoSegment) -> float:
         if segment.score_detail is not None:
-            return max(0.1, segment.score_detail.overall_score)
-        return max(0.1, segment.score)
+            score = max(0.1, segment.score_detail.overall_score)
+        else:
+            score = max(0.1, segment.score)
+        if segment.user_review_status == "favorite":
+            return score * 2.2
+        if segment.user_review_status == "good":
+            return score * 1.5
+        return score
 
     @staticmethod
     def _pick_speed(speed_variation: int, rng: random.Random) -> float:

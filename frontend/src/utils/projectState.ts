@@ -1,5 +1,14 @@
 import type { ProjectConfig } from '../types/project';
-import { createDefaultProjectConfig, DEFAULT_MUSIC_SETTINGS, DEFAULT_TTS_SETTINGS } from '../config/defaults';
+import {
+  createDefaultProjectConfig,
+  DEFAULT_CACHE_SETTINGS,
+  DEFAULT_CROP_SAFETY_SETTINGS,
+  DEFAULT_INDUSTRY_SETTINGS,
+  DEFAULT_MUSIC_SETTINGS,
+  DEFAULT_SOURCE_MEDIA_SETTINGS,
+  DEFAULT_TTS_SETTINGS,
+  DEFAULT_VISUAL_STYLE_SETTINGS,
+} from '../config/defaults';
 
 const CONFIG_PREFIX = 'auto-tool:project-config:';
 const DIRTY_PREFIX = 'auto-tool:project-dirty:';
@@ -20,14 +29,31 @@ export function loadProjectConfig(projectId: string): ProjectConfig | null {
     const config = JSON.parse(raw) as ProjectConfig;
     return {
       ...config,
+      product: {
+        ...config.product,
+        specs: config.product.specs ?? [],
+        validation_warnings: config.product.validation_warnings ?? [],
+        hashtag_suggestions: config.product.hashtag_suggestions ?? [],
+      },
       ai: {
         ...config.ai,
         gemini_api_keys: config.ai.gemini_api_keys ?? [],
       },
       music: config.music ? { ...DEFAULT_MUSIC_SETTINGS, ...config.music } : { ...DEFAULT_MUSIC_SETTINGS },
       timeline: config.timeline ?? { template_id: 'ugc_reviewer_natural' },
-      script_variation: config.script_variation ?? { mode: 'auto_mix' },
+      script_variation: config.script_variation ?? { mode: 'auto_mix', preferred_variant_ids: [] },
       tts: config.tts ? { ...DEFAULT_TTS_SETTINGS, ...config.tts } : { ...DEFAULT_TTS_SETTINGS },
+      visual_style: config.visual_style
+        ? { ...DEFAULT_VISUAL_STYLE_SETTINGS, ...config.visual_style }
+        : { ...DEFAULT_VISUAL_STYLE_SETTINGS },
+      industry: config.industry ? { ...DEFAULT_INDUSTRY_SETTINGS, ...config.industry } : { ...DEFAULT_INDUSTRY_SETTINGS },
+      crop_safety: config.crop_safety
+        ? { ...DEFAULT_CROP_SAFETY_SETTINGS, ...config.crop_safety }
+        : { ...DEFAULT_CROP_SAFETY_SETTINGS },
+      cache: config.cache ? { ...DEFAULT_CACHE_SETTINGS, ...config.cache } : { ...DEFAULT_CACHE_SETTINGS },
+      source_media: config.source_media
+        ? { ...DEFAULT_SOURCE_MEDIA_SETTINGS, ...config.source_media }
+        : { ...DEFAULT_SOURCE_MEDIA_SETTINGS },
     };
   } catch {
     return null;

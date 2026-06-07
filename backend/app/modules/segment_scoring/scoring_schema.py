@@ -20,4 +20,4 @@ class SegmentScore(BaseModel):
     is_rejected: bool
     reject_reasons: list[str]
     tags: list[str] = Field(default_factory=list)
-
+    cache_hit: bool = False

@@ -40,7 +40,11 @@ def timed_call(metrics: dict[str, Any], key: str, action):
         metrics[key] = round(max(0.0, perf_counter() - start), 3)
 
 
-def performance_summary(outputs: list[dict[str, Any]], total_runtime_seconds: float) -> dict[str, Any]:
+def performance_summary(
+    outputs: list[dict[str, Any]],
+    total_runtime_seconds: float,
+    cache_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     output_metrics: list[tuple[int, str, float]] = []
     for output in outputs:
         try:
@@ -67,4 +71,8 @@ def performance_summary(outputs: list[dict[str, Any]], total_runtime_seconds: fl
         "average_time_per_video": round(average, 3),
         "slowest_step": slowest[1],
         "slowest_output_index": slowest[0],
+        "cache_saved_estimated_seconds": round(
+            float((cache_summary or {}).get("cache_saved_estimated_seconds") or 0.0),
+            3,
+        ),
     }

@@ -76,6 +76,7 @@ def test_project_render_preview_api_flow(tmp_path, monkeypatch):
         config,
         preview_only=False,
         custom_script=None,
+        project_id=None,
         progress_callback=None,
         log_callback=None,
     ):

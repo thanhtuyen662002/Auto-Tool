@@ -7,6 +7,7 @@ from typing import Any
 
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_media_duration, run_ffmpeg
 from app.modules.audio.audio_normalizer import normalize_audio_for_render
+from app.modules.cache.cache_service import CacheService
 from app.modules.script_writer.length_guard import prepare_script_for_tts
 from app.modules.script_writer.script_writer import ProductVideoScript, SubtitleLine
 from app.modules.script_writer.timing import build_subtitle_timeline
@@ -22,12 +23,20 @@ MAX_INTER_LINE_SILENCE = 0.28
 
 
 class VoiceGenerator:
-    def __init__(self, tts_manager: Any | None = None) -> None:
+    def __init__(
+        self,
+        tts_manager: Any | None = None,
+        cache_service: CacheService | None = None,
+        cache_enabled: bool = True,
+    ) -> None:
         self.tts_manager = tts_manager or TTSManager()
+        self.cache_service = cache_service
+        self.cache_enabled = cache_enabled
         self.warnings: list[str] = []
         self.last_subtitle_timeline: list[SubtitleLine] = []
         self.last_tts_result: TTSResult | None = None
         self.last_voice_duration: float | None = None
+        self.last_cache_hit = False
 
     def generate_voiceover(
         self,
@@ -43,6 +52,7 @@ class VoiceGenerator:
         self.last_subtitle_timeline = []
         self.last_tts_result = None
         self.last_voice_duration = None
+        self.last_cache_hit = False
         settings = self._settings(tts_settings, language, filename)
         script, guard_warnings = prepare_script_for_tts(script, target_duration, language)
         self.warnings.extend(guard_warnings)
@@ -60,6 +70,10 @@ class VoiceGenerator:
         text_path.write_text(voice_text, encoding="utf-8")
 
         voice_path = target_dir / filename
+        cache_key = self._cache_key(voice_text, settings, target_duration)
+        if cache_key and self._restore_from_cache(cache_key, voice_path):
+            return str(voice_path)
+
         used_timed_generation = False
         if target_duration and target_duration > 0 and voice_chunks:
             used_timed_generation = True
@@ -77,6 +91,7 @@ class VoiceGenerator:
         if not used_timed_generation:
             self.warnings.extend(self._provider_warnings())
         self._read_final_voice_duration(generated_path)
+        self._store_cache(cache_key, generated_path, settings)
         return generated_path
 
     def _generate_timed_voiceover(
@@ -466,6 +481,75 @@ class VoiceGenerator:
         )
         self.last_tts_result = tts_result
         return tts_result
+
+    def _cache_key(self, voice_text: str, settings: TTSSettings, target_duration: float | None) -> str | None:
+        if not self.cache_service or not self.cache_service.enabled or not self.cache_enabled:
+            return None
+        return self.cache_service.keys.build_tts_key(
+            voice_text,
+            settings.voice,
+            settings.provider,
+            settings.rate,
+            pitch=settings.pitch,
+            volume=settings.volume,
+            output_format=settings.output_format,
+            target_duration=target_duration,
+        )
+
+    def _restore_from_cache(self, cache_key: str, voice_path: Path) -> bool:
+        if not self.cache_service:
+            return False
+        cached = self.cache_service.get_json("tts", cache_key)
+        if not cached:
+            return False
+        cached_path = cached.get("cached_path")
+        if not cached_path or not Path(str(cached_path)).exists():
+            return False
+        try:
+            shutil.copy2(str(cached_path), voice_path)
+            timeline = cached.get("subtitle_timeline") or []
+            self.last_subtitle_timeline = [SubtitleLine.model_validate(item) for item in timeline]
+            result_payload = cached.get("tts_result")
+            if isinstance(result_payload, dict):
+                self.last_tts_result = TTSResult.model_validate(result_payload).model_copy(
+                    update={"output_path": str(voice_path)}
+                )
+            self._read_final_voice_duration(str(voice_path))
+            if self.last_tts_result is not None:
+                self.last_tts_result = self.last_tts_result.model_copy(
+                    update={"output_path": str(voice_path), "duration": self.last_voice_duration}
+                )
+            self.last_cache_hit = True
+            return True
+        except Exception as exc:
+            logger.warning("KhÃ´ng thá»ƒ dÃ¹ng TTS cache, sáº½ táº¡o láº¡i: %s", exc)
+            return False
+
+    def _store_cache(self, cache_key: str | None, generated_path: str, settings: TTSSettings) -> None:
+        if not cache_key or not self.cache_service:
+            return
+        cached_path = self.cache_service.set_file(cache_key, generated_path)
+        if not cached_path:
+            return
+        result = self.last_tts_result
+        if result is None:
+            result = TTSResult(
+                provider=settings.provider,
+                output_path=generated_path,
+                duration=self.last_voice_duration,
+                format=Path(generated_path).suffix.lower().lstrip(".") or settings.output_format,
+                success=True,
+                warnings=list(self.warnings),
+            )
+        self.cache_service.set_json(
+            cache_key,
+            {
+                "cached_path": cached_path,
+                "tts_result": result.model_dump(mode="json"),
+                "voice_duration": self.last_voice_duration,
+                "subtitle_timeline": [line.model_dump(mode="json") for line in self.last_subtitle_timeline],
+            },
+        )
 
     def _provider_warnings(self) -> list[str]:
         if self.last_tts_result is not None:

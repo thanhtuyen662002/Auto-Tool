@@ -59,5 +59,30 @@
   },
   "timeline": {
     "template_id": "ugc_reviewer_natural"
+  },
+  "visual_style": {
+    "preset_id": "fashion_minimal",
+    "custom_overrides": null
+  },
+  "crop_safety": {
+    "enabled": true,
+    "mode": "auto_safe",
+    "allow_blur_background": true,
+    "reduce_zoom_on_risk": true,
+    "reduce_overlay_on_risk": true
+  },
+  "cache": {
+    "enabled": true,
+    "cache_media_metadata": true,
+    "cache_segment_scoring": true,
+    "cache_crop_safety": true,
+    "cache_tts": true,
+    "cache_overlay_assets": true,
+    "clear_cache_before_render": false
+  },
+  "source_media": {
+    "respect_user_exclusions": true,
+    "prefer_favorite_segments": true,
+    "allow_excluded_fallback": false
   }
 }

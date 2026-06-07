@@ -5,7 +5,7 @@ export const OUTPUT_COUNT_OPTIONS = [
   { id: '3', label: '3 video', value: 3 },
   { id: '5', label: '5 video', value: 5 },
   { id: '10', label: '10 video', value: 10 },
-  { id: 'custom', label: 'Tuỳ chỉnh', value: null },
+  { id: 'custom', label: 'Tùy chỉnh', value: null },
 ];
 
 export const DURATION_OPTIONS = [
@@ -21,24 +21,28 @@ export const VIDEO_STYLE_OPTIONS = [
     label: 'Review tự nhiên',
     summaryLabel: 'Review tự nhiên',
     templateId: 'ugc_reviewer_natural',
+    visualStylePresetId: 'clean_review_light',
   },
   {
     id: 'product_showcase_clean',
     label: 'Showcase sản phẩm sạch đẹp',
     summaryLabel: 'Showcase sạch đẹp',
     templateId: 'product_showcase_clean',
+    visualStylePresetId: 'transparent_caption_box',
   },
   {
     id: 'fast_tiktok_recut',
     label: 'Cắt nhanh kiểu TikTok',
     summaryLabel: 'Cắt nhanh TikTok',
     templateId: 'fast_tiktok_recut',
+    visualStylePresetId: 'sale_bold_red',
   },
   {
     id: 'problem_solution',
     label: 'Vấn đề -> Giải pháp',
     summaryLabel: 'Vấn đề -> Giải pháp',
     templateId: 'problem_solution',
+    visualStylePresetId: 'clean_review_light',
   },
 ];
 

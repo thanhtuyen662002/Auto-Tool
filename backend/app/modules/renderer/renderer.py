@@ -3,7 +3,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from app.adapters.ffmpeg_adapter import run_ffmpeg
+from app.adapters.ffmpeg_adapter import FFmpegError, run_ffmpeg
+from app.modules.crop_safety.crop_strategy import build_crop_video_filter
 from app.modules.timeline_builder.timeline_builder import Timeline, TimelineClip
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir
@@ -62,17 +63,37 @@ class Renderer:
         fps = config.render.fps
         raw_duration = max(0.05, clip.end - clip.start)
 
-        filters = [
-            f"scale={width}:{height}:force_original_aspect_ratio=increase",
-            f"crop={width}:{height}",
-            "setsar=1",
-            f"fps={fps}",
-            f"setpts=PTS/{clip.speed:.6f}",
-        ]
-        if config.effects.grain > 0:
-            grain_strength = max(1, min(100, config.effects.grain))
-            filters.append(f"noise=alls={grain_strength}:allf=t+u")
+        filtergraph = build_crop_video_filter(
+            crop_mode=clip.crop_mode,
+            crop_box=clip.crop_box,
+            target_width=width,
+            target_height=height,
+            fps=fps,
+            speed=clip.speed,
+            grain=config.effects.grain,
+        )
+        try:
+            self._run_render_clip_ffmpeg(clip, output_path, raw_duration, fps, filtergraph)
+        except FFmpegError:
+            fallback_filter = build_crop_video_filter(
+                crop_mode="center_crop",
+                crop_box=None,
+                target_width=width,
+                target_height=height,
+                fps=fps,
+                speed=clip.speed,
+                grain=config.effects.grain,
+            )
+            self._run_render_clip_ffmpeg(clip, output_path, raw_duration, fps, fallback_filter)
 
+    @staticmethod
+    def _run_render_clip_ffmpeg(
+        clip: TimelineClip,
+        output_path: Path,
+        raw_duration: float,
+        fps: int,
+        filtergraph: str,
+    ) -> None:
         run_ffmpeg(
             [
                 "-y",
@@ -82,8 +103,8 @@ class Renderer:
                 f"{raw_duration:.3f}",
                 "-i",
                 clip.source_path,
-                "-vf",
-                ",".join(filters),
+                "-filter_complex",
+                filtergraph,
                 "-an",
                 "-c:v",
                 "libx264",

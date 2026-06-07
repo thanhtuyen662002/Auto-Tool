@@ -20,17 +20,48 @@ import type {
   TTSProvidersResponse,
   TTSVoicesResponse,
   AppSettings,
+  ApplyIndustryPresetOptions,
+  ApplyIndustryPresetResponse,
   ContentExportResponse,
   ContentItemsResponse,
   OutputContentItem,
   PublishStatus,
   UpdateContentItemResponse,
+  VisualStylePresetsResponse,
+  VisualStylePreviewResponse,
+  IndustryPreset,
+  IndustryPresetsResponse,
+  ProductImportResult,
+  ProductInfoNormalized,
+  RawProductInput,
+  SafetyCheckResult,
+  CropSafetyAnalyzeResponse,
+  UpdateProjectProductInfoResponse,
+  CacheSummary,
+  ClearCacheResponse,
+  BulkSegmentReviewResponse,
+  MediaReviewStatus,
+  SegmentReviewResponse,
+  SegmentReviewStatus,
+  SourceMediaResponse,
+  UpdateSegmentReviewResponse,
+  UpdateSourceMediaReviewResponse,
 } from '../types/project';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
 
 export function videoFileUrl(path: string): string {
   return `${API_BASE_URL}/api/files/video?path=${encodeURIComponent(path)}`;
+}
+
+export function assetFileUrl(pathOrUrl: string): string {
+  if (pathOrUrl.startsWith('/')) return `${API_BASE_URL}${pathOrUrl}`;
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  return `${API_BASE_URL}/api/files/image?path=${encodeURIComponent(pathOrUrl)}`;
+}
+
+export function thumbnailFileUrl(path: string): string {
+  return `${API_BASE_URL}/api/files/thumbnail?path=${encodeURIComponent(path)}`;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -241,5 +272,156 @@ export function exportProjectContent(
   return request<ContentExportResponse>(`/api/projects/${projectId}/content/export`, {
     method: 'POST',
     body: JSON.stringify({ formats }),
+  });
+}
+
+export function getVisualStyles(): Promise<VisualStylePresetsResponse> {
+  return request<VisualStylePresetsResponse>('/api/visual-styles');
+}
+
+export function previewVisualStyle(
+  presetId: string,
+  sampleText: string,
+  resolution = '1080x1920',
+): Promise<VisualStylePreviewResponse> {
+  return request<VisualStylePreviewResponse>('/api/visual-styles/preview', {
+    method: 'POST',
+    body: JSON.stringify({
+      preset_id: presetId,
+      sample_text: sampleText,
+      resolution,
+    }),
+  });
+}
+
+export function updateProjectVisualStyle(
+  projectId: string,
+  presetId: string,
+): Promise<{ success: boolean; visual_style: { preset_id: string; custom_overrides?: Record<string, unknown> | null } }> {
+  return request(`/api/projects/${projectId}/visual-style`, {
+    method: 'PUT',
+    body: JSON.stringify({ preset_id: presetId }),
+  });
+}
+
+export function getIndustryPresets(): Promise<IndustryPresetsResponse> {
+  return request<IndustryPresetsResponse>('/api/industry-presets');
+}
+
+export function getIndustryPreset(presetId: string): Promise<IndustryPreset> {
+  return request<IndustryPreset>(`/api/industry-presets/${presetId}`);
+}
+
+export function applyIndustryPresetToProject(
+  projectId: string,
+  presetId: string,
+  options: ApplyIndustryPresetOptions,
+): Promise<ApplyIndustryPresetResponse> {
+  return request<ApplyIndustryPresetResponse>(`/api/projects/${projectId}/industry-preset`, {
+    method: 'PUT',
+    body: JSON.stringify({ preset_id: presetId, ...options }),
+  });
+}
+
+export function importProductInfo(payload: RawProductInput): Promise<ProductImportResult> {
+  return request<ProductImportResult>('/api/product-info/import', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateProjectProductInfo(
+  projectId: string,
+  product: ProductInfoNormalized,
+): Promise<UpdateProjectProductInfoResponse> {
+  return request<UpdateProjectProductInfoResponse>(`/api/projects/${projectId}/product-info`, {
+    method: 'PUT',
+    body: JSON.stringify({ product }),
+  });
+}
+
+export function checkProjectSafety(projectId: string): Promise<SafetyCheckResult> {
+  return request<SafetyCheckResult>(`/api/projects/${projectId}/safety-check`, {
+    method: 'POST',
+  });
+}
+
+export function analyzeCropSafety(projectId: string): Promise<CropSafetyAnalyzeResponse> {
+  return request<CropSafetyAnalyzeResponse>(`/api/projects/${projectId}/crop-safety/analyze`, {
+    method: 'POST',
+  });
+}
+
+export function getProjectCacheSummary(projectId: string): Promise<CacheSummary> {
+  return request<CacheSummary>(`/api/projects/${projectId}/cache/summary`);
+}
+
+export function clearProjectCache(projectId: string): Promise<ClearCacheResponse> {
+  return request<ClearCacheResponse>(`/api/projects/${projectId}/cache/clear`, {
+    method: 'POST',
+  });
+}
+
+export function getSourceMedia(projectId: string): Promise<SourceMediaResponse> {
+  return request<SourceMediaResponse>(`/api/projects/${projectId}/source-media`);
+}
+
+export function updateSourceMediaReview(
+  projectId: string,
+  mediaPath: string,
+  reviewStatus: MediaReviewStatus,
+  userNote?: string | null,
+): Promise<UpdateSourceMediaReviewResponse> {
+  return request<UpdateSourceMediaReviewResponse>(`/api/projects/${projectId}/source-media/review`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      media_path: mediaPath,
+      review_status: reviewStatus,
+      user_note: userNote ?? null,
+    }),
+  });
+}
+
+export function getSourceSegments(
+  projectId: string,
+  filters: { sourcePath?: string | null; status?: string | null; minScore?: number | null; tag?: string | null } = {},
+): Promise<SegmentReviewResponse> {
+  const params = new URLSearchParams();
+  if (filters.sourcePath) params.set('source_path', filters.sourcePath);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.minScore != null) params.set('min_score', String(filters.minScore));
+  if (filters.tag) params.set('tag', filters.tag);
+  const query = params.toString();
+  return request<SegmentReviewResponse>(`/api/projects/${projectId}/segments${query ? `?${query}` : ''}`);
+}
+
+export function updateSegmentReview(
+  projectId: string,
+  segmentId: string,
+  reviewStatus: SegmentReviewStatus,
+  userNote?: string | null,
+): Promise<UpdateSegmentReviewResponse> {
+  return request<UpdateSegmentReviewResponse>(`/api/projects/${projectId}/segments/${segmentId}/review`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      review_status: reviewStatus,
+      user_note: userNote ?? null,
+    }),
+  });
+}
+
+export function bulkUpdateSegmentReview(
+  projectId: string,
+  segmentIds: string[],
+  reviewStatus: SegmentReviewStatus,
+  userNote?: string | null,
+): Promise<BulkSegmentReviewResponse> {
+  return request<BulkSegmentReviewResponse>(`/api/projects/${projectId}/segments/bulk-review`, {
+    method: 'POST',
+    body: JSON.stringify({
+      segment_ids: segmentIds,
+      review_status: reviewStatus,
+      user_note: userNote ?? null,
+    }),
   });
 }

@@ -4,6 +4,9 @@ import hashlib
 from collections import Counter
 from typing import Any
 
+from pydantic import ValidationError
+
+from app.modules.cache.cache_service import CacheService
 from app.modules.segment_scoring.frame_sampler import FrameSampler
 from app.modules.segment_scoring.scoring_schema import SegmentScore
 from app.modules.segment_scoring.segment_analyzer import SegmentAnalyzer
@@ -20,20 +23,38 @@ class SegmentScorer:
         sampler: FrameSampler | None = None,
         analyzer: SegmentAnalyzer | None = None,
         max_frames: int = 5,
+        cache_service: CacheService | None = None,
+        cache_enabled: bool = True,
+        settings_hash: str | None = None,
     ) -> None:
         self.sampler = sampler or FrameSampler()
         self.analyzer = analyzer or SegmentAnalyzer()
         self.max_frames = max_frames
+        self.cache_service = cache_service
+        self.cache_enabled = cache_enabled
+        self.settings_hash = settings_hash or _settings_hash(max_frames)
 
     def score_segment(self, segment: VideoSegment) -> SegmentScore:
         segment_id = segment.id or _segment_id(segment)
+        cache_key = self._cache_key(segment)
+        if cache_key:
+            cached = self.cache_service.get_json("segment_scores", cache_key)
+            if cached:
+                try:
+                    return SegmentScore.model_validate(cached).model_copy(update={"cache_hit": True})
+                except ValidationError:
+                    pass
+
         try:
             frames = self.sampler.sample_frames(segment.source_path, segment.start, segment.end, self.max_frames)
             if not frames:
-                return self._rejected_score(segment, segment_id, ["no_frames"])
+                score = self._rejected_score(segment, segment_id, ["no_frames"])
+                self._store_score(cache_key, score)
+                return score
 
             metrics = self.analyzer.analyze_frames(frames)
             score = self._build_score(segment, segment_id, metrics)
+            self._store_score(cache_key, score)
             return score
         except Exception as exc:
             logger.warning(
@@ -43,7 +64,9 @@ class SegmentScorer:
                 segment.end,
                 exc,
             )
-            return self._rejected_score(segment, segment_id, ["analysis_failed"])
+            score = self._rejected_score(segment, segment_id, ["analysis_failed"])
+            self._store_score(cache_key, score)
+            return score
 
     def score_segments(self, segments: list[VideoSegment]) -> list[VideoSegment]:
         scored: list[VideoSegment] = []
@@ -98,6 +121,20 @@ class SegmentScorer:
             reject_reasons=reject_reasons,
             tags=tags,
         )
+
+    def _cache_key(self, segment: VideoSegment) -> str | None:
+        if not self.cache_service or not self.cache_service.enabled or not self.cache_enabled:
+            return None
+        return self.cache_service.keys.build_segment_score_key(
+            segment.source_path,
+            segment.start,
+            segment.end,
+            self.settings_hash,
+        )
+
+    def _store_score(self, cache_key: str | None, score: SegmentScore) -> None:
+        if cache_key and self.cache_service:
+            self.cache_service.set_json(cache_key, score.model_copy(update={"cache_hit": False}).model_dump(mode="json"))
 
     @staticmethod
     def _rejected_score(segment: VideoSegment, segment_id: str, reasons: list[str]) -> SegmentScore:
@@ -205,4 +242,9 @@ def build_scoring_report(segments: list[VideoSegment]) -> dict[str, Any]:
 
 def _segment_id(segment: VideoSegment) -> str:
     raw_value = f"{segment.source_path}|{segment.start:.3f}|{segment.end:.3f}".encode("utf-8")
+    return hashlib.sha1(raw_value).hexdigest()[:12]
+
+
+def _settings_hash(max_frames: int) -> str:
+    raw_value = f"segment_scorer_v1|max_frames={max_frames}".encode("utf-8")
     return hashlib.sha1(raw_value).hexdigest()[:12]

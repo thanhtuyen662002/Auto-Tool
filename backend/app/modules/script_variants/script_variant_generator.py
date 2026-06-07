@@ -7,6 +7,8 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.adapters.gemini_adapter import GeminiAdapter, ScriptGenerationError
+from app.modules.industry_presets.industry_preset_service import IndustryPresetService
+from app.modules.industry_presets.industry_schema import IndustryPreset
 from app.modules.script_variants.variant_prompt_builder import build_script_variant_prompt
 from app.modules.script_variants.variant_registry import VariantPlanner, get_variant_style
 from app.modules.script_variants.variant_schema import (
@@ -38,11 +40,16 @@ class ScriptVariantGenerator:
     ) -> list[ProductVideoScript]:
         self.warnings = []
         self.results = []
-        planned_styles = VariantPlanner().plan_variants(output_count, timeline_template_id)
+        industry = _industry_for_config(config)
+        preferred_ids = (
+            list(config.script_variation.preferred_variant_ids)
+            or (list(industry.preferred_script_variant_ids) if industry else [])
+        )
+        planned_styles = VariantPlanner().plan_variants(output_count, timeline_template_id, preferred_ids)
         scripts: list[ProductVideoScript] = []
 
         for output_index, style in enumerate(planned_styles, start=1):
-            result = self._generate_one(config, output_count, output_index, timeline_template_id, style)
+            result = self._generate_one(config, output_count, output_index, timeline_template_id, style, industry)
             self.results.append(result)
             scripts.append(self._to_product_script(result, config))
 
@@ -64,6 +71,7 @@ class ScriptVariantGenerator:
         output_index: int,
         timeline_template_id: str | None,
         style: ScriptVariantStyle,
+        industry: IndustryPreset | None,
     ) -> ScriptVariantResult:
         request = ScriptVariantRequest(
             output_index=output_index,
@@ -73,6 +81,12 @@ class ScriptVariantGenerator:
             timeline_template_id=timeline_template_id,
             variant_style_id=style.id,
             language=config.ai.language,
+            industry_preset_id=industry.id if industry else None,
+            industry_name=industry.name if industry else None,
+            caption_tone=industry.caption_tone if industry else None,
+            preferred_script_variant_ids=list(industry.preferred_script_variant_ids) if industry else [],
+            hashtag_suggestions=list(industry.hashtag_suggestions) if industry else [],
+            industry_notes=list(industry.notes) if industry else [],
         )
         adapter = self.gemini_adapter or GeminiAdapter(
             api_key=None,
@@ -95,7 +109,7 @@ class ScriptVariantGenerator:
             )
             logger.warning(warning)
             self.warnings.append(warning)
-            return self._fallback_result(config, output_index, style)
+            return self._fallback_result(config, output_index, style, industry)
 
     def _to_product_script(self, result: ScriptVariantResult, config: ProjectConfig) -> ProductVideoScript:
         raw_script = ProductVideoScript.model_validate(result.model_dump(mode="json"))
@@ -107,8 +121,9 @@ class ScriptVariantGenerator:
         config: ProjectConfig,
         output_index: int,
         style: ScriptVariantStyle,
+        industry: IndustryPreset | None,
     ) -> ScriptVariantResult:
-        fallback = _fallback_payload(config, style, output_index)
+        fallback = _fallback_payload(config, style, output_index, industry)
         fallback["output_index"] = output_index
         fallback["variant_style_id"] = style.id
         return ScriptVariantResult.model_validate(fallback)
@@ -129,18 +144,33 @@ def build_script_variants_report(
     config: ProjectConfig,
     variants: list[ScriptVariantResult],
 ) -> dict[str, Any]:
+    industry = _industry_for_config(config)
     return {
         "project_name": config.project_name,
+        "industry_preset_id": industry.id if industry else None,
+        "caption_tone": industry.caption_tone if industry else None,
+        "hashtag_suggestions": list(industry.hashtag_suggestions) if industry else [],
         "total_variants": len(variants),
         "variants": [variant.model_dump(mode="json") for variant in variants],
     }
 
 
-def _fallback_payload(config: ProjectConfig, style: ScriptVariantStyle, output_index: int) -> dict[str, Any]:
+def _industry_for_config(config: ProjectConfig) -> IndustryPreset | None:
+    if not config.industry or not config.industry.preset_id:
+        return None
+    return IndustryPresetService().get_preset(config.industry.preset_id)
+
+
+def _fallback_payload(
+    config: ProjectConfig,
+    style: ScriptVariantStyle,
+    output_index: int,
+    industry: IndustryPreset | None = None,
+) -> dict[str, Any]:
     product = config.product
     feature = product.features[(output_index - 1) % len(product.features)]
     second_feature = product.features[output_index % len(product.features)]
-    common_hashtags = ["#review", "#sanpham", "#muasam"]
+    common_hashtags = list(industry.hashtag_suggestions[:4]) if industry else ["#review", "#sanpham", "#muasam"]
     payloads: dict[str, dict[str, Any]] = {
         "problem_hook": {
             "hook": f"Bạn muốn dùng {product.name} tiện hơn mỗi ngày?",
@@ -206,6 +236,9 @@ def _fallback_payload(config: ProjectConfig, style: ScriptVariantStyle, output_i
     selected = payloads.get(style.id, payloads["reviewer_natural"])
     voiceover = selected["voiceover"]
     return {
+        "industry_preset_id": industry.id if industry else None,
+        "caption_tone": industry.caption_tone if industry else None,
+        "hashtag_suggestions_used": list(industry.hashtag_suggestions) if industry else [],
         "hook": selected["hook"],
         "voiceover": [{"time_hint": "", "text": text} for text in voiceover],
         "subtitles": [{"start_hint": None, "end_hint": None, "text": text} for text in voiceover],

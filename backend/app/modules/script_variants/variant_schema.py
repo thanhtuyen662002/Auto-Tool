@@ -28,6 +28,12 @@ class ScriptVariantRequest(BaseModel):
     timeline_template_id: str | None = None
     variant_style_id: str = Field(min_length=1)
     language: str = "vi"
+    industry_preset_id: str | None = None
+    industry_name: str | None = None
+    caption_tone: str | None = None
+    preferred_script_variant_ids: list[str] = Field(default_factory=list)
+    hashtag_suggestions: list[str] = Field(default_factory=list)
+    industry_notes: list[str] = Field(default_factory=list)
 
 
 class ScriptVariantResult(BaseModel):
@@ -35,10 +41,12 @@ class ScriptVariantResult(BaseModel):
 
     output_index: int = Field(gt=0)
     variant_style_id: str = Field(min_length=1)
+    industry_preset_id: str | None = None
+    caption_tone: str | None = None
+    hashtag_suggestions_used: list[str] = Field(default_factory=list)
     hook: str = Field(min_length=1)
     voiceover: list[VoiceoverLine] = Field(min_length=1)
     subtitles: list[SubtitleLine] = Field(min_length=1)
     cta: str = Field(min_length=1)
     caption: str = Field(min_length=1)
     hashtags: list[str] = Field(default_factory=list)
-
