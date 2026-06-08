@@ -1,0 +1,119 @@
+{
+  "project_name": "projector-kaw-xmax10-v02-test",
+  "source_folder": "../../sample_videos/real_product_test_pack/projector_kaw_xmax10",
+  "output_folder": "../../outputs/v02_test_pack/projector_kaw_xmax10",
+  "product": {
+    "name": "Máy Chiếu 4K Android KAW XMAX10",
+    "brand": "KAW",
+    "description": "Máy chiếu giải trí gia đình nhỏ gọn, phù hợp phòng ngủ, phòng khách và văn phòng nhỏ.",
+    "features": [
+      "Hỗ trợ 4K",
+      "Android 9.0",
+      "Độ sáng 10.000 Lumens",
+      "Thiết kế xám đen sang trọng",
+      "Có thể dùng để xem phim, học tập, họp nhanh"
+    ],
+    "specs": [
+      {
+        "name": "Độ phân giải hỗ trợ",
+        "value": "4K"
+      },
+      {
+        "name": "Hệ điều hành",
+        "value": "Android 9.0"
+      },
+      {
+        "name": "Độ sáng",
+        "value": "10.000 Lumens"
+      }
+    ],
+    "cta": "Xem thông tin sản phẩm ngay",
+    "hashtag_suggestions": [
+      "#maychieu",
+      "#congnghe",
+      "#reviewcongnghe"
+    ]
+  },
+  "render": {
+    "output_count": 3,
+    "duration": 12,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "fps": 30
+  },
+  "effects": {
+    "cut_intensity": 65,
+    "speed_variation": 30,
+    "grain": 12,
+    "zoom_motion": 20,
+    "overlay_height": 22,
+    "subtitle_size": 54
+  },
+  "ai": {
+    "text_model": "gemini-3.1-flash-lite",
+    "tone": "friendly_reviewer",
+    "language": "vi",
+    "gemini_api_keys": []
+  },
+  "music": {
+    "enabled": false,
+    "source_folder": null,
+    "source_file": null,
+    "volume": 0.12,
+    "fade_in": 0.5,
+    "fade_out": 0.8,
+    "duck_under_voice": false
+  },
+  "industry": {
+    "preset_id": "tech_electronics"
+  },
+  "timeline": {
+    "template_id": "product_showcase_clean"
+  },
+  "visual_style": {
+    "preset_id": "tech_dark_neon",
+    "custom_overrides": null
+  },
+  "script_variation": {
+    "mode": "auto_mix",
+    "preferred_variant_ids": [
+      "benefit_first",
+      "reviewer_natural",
+      "use_case_scene"
+    ]
+  },
+  "tts": {
+    "provider": "edge_tts",
+    "fallback_provider": "silent",
+    "voice": "vi-VN-NamMinhNeural",
+    "language": "vi",
+    "api_key": null,
+    "credentials_json_path": null,
+    "access_token": null,
+    "rate": "+0%",
+    "pitch": "+0Hz",
+    "volume": "+0%",
+    "output_format": "mp3"
+  },
+  "cache": {
+    "enabled": true,
+    "cache_media_metadata": true,
+    "cache_segment_scoring": true,
+    "cache_crop_safety": true,
+    "cache_tts": true,
+    "cache_overlay_assets": true,
+    "clear_cache_before_render": false
+  },
+  "crop_safety": {
+    "enabled": true,
+    "mode": "auto_safe",
+    "allow_blur_background": true,
+    "reduce_zoom_on_risk": true,
+    "reduce_overlay_on_risk": true
+  },
+  "source_media": {
+    "respect_user_exclusions": true,
+    "prefer_favorite_segments": true,
+    "allow_excluded_fallback": false
+  }
+}

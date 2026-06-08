@@ -8,8 +8,9 @@ import OutputReviewPage from './pages/OutputReviewPage';
 import AppSettingsPage from './pages/AppSettingsPage';
 import ContentManagerPage from './pages/ContentManagerPage';
 import SourceMediaManagerPage from './pages/SourceMediaManagerPage';
+import ImportInboxPage from './pages/ImportInboxPage';
 
-const FALLBACK_VERSION = '0.1.0-rc1';
+const FALLBACK_VERSION = '0.2.0-rc1';
 
 async function fetchVersion(): Promise<string> {
   try {
@@ -54,6 +55,16 @@ export default function App() {
                   isActive ? 'bg-blue-50 text-brand' : 'text-muted hover:bg-surface hover:text-ink'
                 }`
               }
+              to="/import-inbox"
+            >
+              Import Inbox
+            </NavLink>
+            <NavLink
+              className={({ isActive }) =>
+                `rounded-md px-3 py-2 font-medium ${
+                  isActive ? 'bg-blue-50 text-brand' : 'text-muted hover:bg-surface hover:text-ink'
+                }`
+              }
               to="/app-settings"
             >
               Cài đặt chung
@@ -72,6 +83,7 @@ export default function App() {
           <Route path="/projects/:projectId/review" element={<OutputReviewPage />} />
           <Route path="/projects/:projectId/source-media" element={<SourceMediaManagerPage />} />
           <Route path="/projects/:projectId/content" element={<ContentManagerPage />} />
+          <Route path="/import-inbox" element={<ImportInboxPage />} />
           <Route path="/app-settings" element={<AppSettingsPage />} />
           <Route path="*" element={<Navigate replace to="/" />} />
         </Routes>

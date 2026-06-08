@@ -13,6 +13,9 @@ from app.schemas.project_schema import ProductSpec
 
 class ProductParser:
     def parse(self, raw_input: RawProductInput) -> ProductInfoNormalized:
+        if raw_input.input_type == "shopee_extension":
+            return self._parse_shopee_extension(raw_input)
+
         text = _read_input_text(raw_input)
         if raw_input.input_type == "json":
             return self._parse_json(text)
@@ -58,8 +61,60 @@ class ProductParser:
                         "CSV có nhiều dòng, hiện tại chỉ import dòng đầu tiên.",
                     ]
                 }
-            )
+        )
         return result
+
+    def _parse_shopee_extension(self, raw_input: RawProductInput) -> ProductInfoNormalized:
+        data = raw_input.structured_data or {}
+        if not isinstance(data, dict):
+            raise ValueError("structured_data must be an object for shopee_extension input.")
+
+        fallback = _parse_optional_text(raw_input, self)
+        shopee = data.get("shopee") if isinstance(data.get("shopee"), dict) else {}
+        shop = data.get("shop") if isinstance(data.get("shop"), dict) else {}
+
+        name = _clean_value(data.get("name")) or _clean_value(shopee.get("name")) or fallback.name
+        brand = (
+            _clean_value(data.get("brand"))
+            or _clean_value(shopee.get("brand"))
+            or _brand_from_specs(data)
+            or _brand_from_specs(shopee)
+            or fallback.brand
+        )
+        description_text = (
+            _clean_value(data.get("description"))
+            or _clean_value(shopee.get("description"))
+            or fallback.description
+        )
+        features = _limit_texts(_list_alias(data, "features", "benefits", "highlights"), limit=8, max_length=90)
+        if not features:
+            features = _limit_texts(_features_from_shopee_data(data, shopee), limit=8, max_length=90)
+        if not features:
+            features = _limit_texts(fallback.features, limit=8, max_length=90)
+
+        specs = _specs_from_value(_first_existing(data, "specs", "specifications", "thong_so"))
+        if not specs:
+            specs = _specs_from_value(_first_existing(shopee, "specs", "specifications", "thong_so"))
+        specs = _merge_specs(
+            specs,
+            _commerce_specs_from_shopee(data, shopee, shop),
+            fallback.specs if not specs else [],
+        )
+
+        cta = _clean_value(data.get("cta")) or fallback.cta or ProductInfoNormalized().cta
+        description = _build_shopee_description(name, description_text, features)
+        warnings = _shopee_warnings(data, shopee, name, brand, specs, raw_input.source_url)
+        warnings = _dedupe_texts([*warnings, *fallback.warnings])
+
+        return ProductInfoNormalized(
+            name=name or "",
+            brand=brand,
+            description=description,
+            features=features,
+            specs=specs,
+            cta=cta,
+            warnings=warnings,
+        )
 
     def _parse_text(self, text: str) -> ProductInfoNormalized:
         lines = [_clean_line(line) for line in text.splitlines()]
@@ -123,6 +178,187 @@ def _read_input_text(raw_input: RawProductInput) -> str:
             raise ValueError(f"Không tìm thấy file import: {path}")
         return path.read_text(encoding="utf-8")
     raise ValueError("Cần cung cấp raw_text, file_content hoặc file_path để import sản phẩm.")
+
+
+def _parse_optional_text(raw_input: RawProductInput, parser: ProductParser) -> ProductInfoNormalized:
+    if not raw_input.file_content and not raw_input.raw_text and not raw_input.file_path:
+        return ProductInfoNormalized()
+    return parser._parse_text(_read_input_text(raw_input))
+
+
+def _clean_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        value = json.dumps(value, ensure_ascii=False)
+    cleaned = " ".join(str(value).strip().split())
+    return cleaned or None
+
+
+def _limit_texts(values: list[str], limit: int, max_length: int) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = _clean_line(value)
+        if not text:
+            continue
+        if len(text) > max_length:
+            text = text[: max_length - 3].rstrip() + "..."
+        key = text.casefold()
+        if key in seen:
+            continue
+        cleaned.append(text)
+        seen.add(key)
+        if len(cleaned) >= limit:
+            break
+    return cleaned
+
+
+def _features_from_shopee_data(data: dict[str, Any], shopee: dict[str, Any]) -> list[str]:
+    features: list[str] = []
+    for label, value in [
+        ("Gia", _first_existing(data, "price", "gia") or _first_existing(shopee, "price", "gia")),
+        ("Giam gia", _first_existing(data, "discount") or _first_existing(shopee, "discount")),
+        ("Danh gia", _first_existing(shopee, "rating")),
+        ("Da ban", _first_existing(shopee, "soldCount", "sold_count")),
+    ]:
+        text = _clean_value(value)
+        if text:
+            features.append(f"{label}: {text}")
+
+    variations = data.get("variations") or shopee.get("variations")
+    if isinstance(variations, list):
+        for variation in variations:
+            if not isinstance(variation, dict):
+                continue
+            name = _clean_value(variation.get("name"))
+            options = variation.get("options")
+            if name and isinstance(options, list):
+                option_text = ", ".join(_limit_texts([str(item) for item in options], limit=4, max_length=30))
+                if option_text:
+                    features.append(f"{name}: {option_text}")
+
+    description = _clean_value(data.get("description")) or _clean_value(shopee.get("description"))
+    if description:
+        features.extend(_description_feature_candidates(description))
+    return features
+
+
+def _description_feature_candidates(description: str) -> list[str]:
+    candidates: list[str] = []
+    for line in re.split(r"[\n\r;|]+", description):
+        text = _clean_line(line)
+        if not text or len(text) < 8:
+            continue
+        if len(text) <= 90 or re.match(r"^[-*+•]", line.strip()):
+            candidates.append(text)
+        if len(candidates) >= 6:
+            break
+    return candidates
+
+
+def _brand_from_specs(payload: dict[str, Any]) -> str | None:
+    specs = _first_existing(payload, "specs", "specifications", "thong_so")
+    if not isinstance(specs, dict):
+        return None
+    for key, value in specs.items():
+        normalized_key = _normalize_key(str(key))
+        if normalized_key in {"brand", "thuong hieu", "brand name"}:
+            return _clean_value(value)
+    return None
+
+
+def _commerce_specs_from_shopee(
+    data: dict[str, Any],
+    shopee: dict[str, Any],
+    shop: dict[str, Any],
+) -> list[ProductSpec]:
+    specs: list[ProductSpec] = []
+    for name, value in [
+        ("Gia", _first_existing(data, "price", "gia") or _first_existing(shopee, "price", "gia")),
+        ("Gia goc", _first_existing(data, "originalPrice") or _first_existing(shopee, "originalPrice")),
+        ("Giam gia", _first_existing(data, "discount") or _first_existing(shopee, "discount")),
+        ("Danh gia", _first_existing(shopee, "rating")),
+        ("Da ban", _first_existing(shopee, "soldCount", "sold_count")),
+        ("Luot danh gia", _first_existing(shopee, "reviewCount", "review_count")),
+        ("Shop", _first_existing(shop, "name") or _first_existing(shopee, "shopName", "shop_name")),
+        ("Dia chi shop", _first_existing(shop, "location") or _first_existing(shopee, "shopLocation", "shop_location")),
+    ]:
+        text = _clean_value(value)
+        if text:
+            specs.append(ProductSpec(name=name, value=text))
+    return specs
+
+
+def _merge_specs(*groups: list[ProductSpec]) -> list[ProductSpec]:
+    merged: list[ProductSpec] = []
+    seen: set[tuple[str, str]] = set()
+    for group in groups:
+        for spec in group:
+            key = (_normalize_key(spec.name), spec.value.casefold())
+            if key in seen:
+                continue
+            merged.append(spec)
+            seen.add(key)
+            if len(merged) >= 15:
+                return merged
+    return merged
+
+
+def _build_shopee_description(name: str | None, description: str | None, features: list[str]) -> str:
+    parts = [part for part in [name, description] if part]
+    if not description and features:
+        parts.append(", ".join(features[:3]))
+    if not parts:
+        return ""
+    text = ". ".join(parts)
+    return text[:700].rstrip()
+
+
+def _shopee_warnings(
+    data: dict[str, Any],
+    shopee: dict[str, Any],
+    name: str | None,
+    brand: str | None,
+    specs: list[ProductSpec],
+    source_url: str | None,
+) -> list[str]:
+    warnings = [
+        *_warning_list(data.get("warnings")),
+        *_warning_list(shopee.get("warnings")),
+    ]
+    if not name:
+        warnings.append("Shopee payload does not include product name.")
+    if not brand:
+        warnings.append("Shopee payload does not include brand.")
+    if not specs:
+        warnings.append("Shopee payload does not include specifications.")
+    if not source_url:
+        warnings.append("Shopee payload does not include source_url.")
+    return _dedupe_texts(warnings)
+
+
+def _warning_list(value: Any) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        return [_clean_value(item) or "" for item in value]
+    return [_clean_value(value) or ""]
+
+
+def _dedupe_texts(values: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = _clean_value(value)
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        cleaned.append(text)
+        seen.add(key)
+    return cleaned
 
 
 def _clean_line(value: str) -> str:

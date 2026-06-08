@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import uuid
 from pathlib import Path
@@ -26,8 +27,13 @@ from app.modules.industry_presets.industry_registry import get_industry_preset
 from app.modules.industry_presets.industry_preset_service import IndustryPresetService
 from app.modules.industry_presets.industry_schema import IndustryPreset, IndustrySettings
 from app.modules.output_review.review_service import OutputQualityReviewService, build_review_rows
+from app.modules.product_drafts import CreateProductDraftRequest, ProductDraftService
 from app.modules.product_import import ProductImportService, suggest_industry_preset, to_project_product_info
-from app.modules.product_import.product_import_schema import ProductInfoNormalized
+from app.modules.product_import.product_import_schema import (
+    ProductImportDraftSummary,
+    ProductImportSource,
+    ProductInfoNormalized,
+)
 from app.modules.product_import.product_normalizer import ProductNormalizer
 from app.modules.product_import.product_validator import ProductValidator
 from app.modules.output_review.rerender_service import RerenderService
@@ -67,6 +73,15 @@ from app.schemas.api_schema import (
     PresetItem,
     ProductInfoImportRequest,
     ProductInfoImportResponse,
+    ProductDraft,
+    ProductDraftApplyResponse,
+    ProductDraftListResponse,
+    ProjectListResponse,
+    UpdateProductDraftRequest,
+    CreateProjectFromDraftRequest,
+    CreateProjectFromDraftResponse,
+    DeleteProductDraftResponse,
+    ClearArchivedDraftsResponse,
     ProjectCreateResponse,
     ProjectDetailResponse,
     RenderRequest,
@@ -133,17 +148,28 @@ def _read_version() -> str:
 _APP_VERSION = _read_version()
 
 
+def _allowed_cors_origins() -> list[str]:
+    origins = [
+        "http://localhost",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+    ]
+    extension_origins = [
+        item.strip()
+        for item in os.getenv("ALLOWED_EXTENSION_ORIGINS", "").split(",")
+        if item.strip()
+    ]
+    return [*origins, *extension_origins]
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Auto Tool API", version="0.1.0")
+    app = FastAPI(title="Auto Tool API", version=_APP_VERSION)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost",
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:5173",
-        ],
+        allow_origins=_allowed_cors_origins(),
+        allow_origin_regex=r"chrome-extension://.*",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -170,6 +196,28 @@ def create_app() -> FastAPI:
 
     @app.post("/api/product-info/import", response_model=ProductInfoImportResponse)
     def import_product_info(request: ProductInfoImportRequest) -> ProductInfoImportResponse:
+        if request.save_to_inbox:
+            try:
+                draft = ProductDraftService().create_from_import_request(
+                    CreateProductDraftRequest.model_validate(request.model_dump(mode="json"))
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return ProductInfoImportResponse(
+                success=draft.normalized_product is not None
+                and not any(issue.severity == "error" for issue in draft.validation_issues),
+                product=draft.normalized_product,
+                issues=draft.validation_issues,
+                source=ProductImportSource(name=draft.source.source_name, url=draft.source.source_url),
+                draft=ProductImportDraftSummary(
+                    id=draft.id,
+                    title=draft.title,
+                    status=draft.status.value,
+                    confidence_score=draft.confidence_score,
+                ),
+                import_inbox_url=_import_inbox_url(),
+                raw_preview=_raw_import_preview(request),
+            )
         result = ProductImportService().import_product_info(request)
         return ProductInfoImportResponse.model_validate(result.model_dump(mode="json"))
 
@@ -180,6 +228,21 @@ def create_app() -> FastAPI:
         project_id = str(uuid.uuid4())
         database.create_project(project_id, normalized_config.model_dump(mode="json"))
         return ProjectCreateResponse(project_id=project_id, status="created")
+
+    @app.get("/api/projects", response_model=ProjectListResponse)
+    def list_projects(limit: int = 100, offset: int = 0) -> ProjectListResponse:
+        database.init_db()
+        projects = database.list_projects(limit=limit, offset=offset)
+        return ProjectListResponse(
+            items=[
+                {
+                    "id": project["project_id"],
+                    "project_name": project["config"].get("project_name", project["project_id"]),
+                    "created_at": project["created_at"],
+                }
+                for project in projects
+            ]
+        )
 
     @app.get("/api/projects/{project_id}", response_model=ProjectDetailResponse)
     def get_project(project_id: str) -> ProjectDetailResponse:
@@ -195,6 +258,80 @@ def create_app() -> FastAPI:
             created_at=project["created_at"],
             updated_at=project["updated_at"],
         )
+
+    @app.get("/api/product-drafts", response_model=ProductDraftListResponse)
+    def list_product_drafts(
+        status: str | None = None,
+        source_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> ProductDraftListResponse:
+        try:
+            return ProductDraftService().list_drafts(status=status, source_name=source_name, limit=limit, offset=offset)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/product-drafts/clear-archived", response_model=ClearArchivedDraftsResponse)
+    def clear_archived_product_drafts() -> ClearArchivedDraftsResponse:
+        deleted_count = ProductDraftService().clear_archived()
+        return ClearArchivedDraftsResponse(success=True, deleted_count=deleted_count)
+
+    @app.get("/api/product-drafts/{draft_id}", response_model=ProductDraft)
+    def get_product_draft(draft_id: str) -> ProductDraft:
+        try:
+            return ProductDraftService().get_draft(draft_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.put("/api/product-drafts/{draft_id}", response_model=ProductDraft)
+    def update_product_draft(draft_id: str, request: UpdateProductDraftRequest) -> ProductDraft:
+        try:
+            return ProductDraftService().update_draft(draft_id, request)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/product-drafts/{draft_id}/archive", response_model=ProductDraft)
+    def archive_product_draft(draft_id: str) -> ProductDraft:
+        try:
+            return ProductDraftService().archive_draft(draft_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.delete("/api/product-drafts/{draft_id}", response_model=DeleteProductDraftResponse)
+    def delete_product_draft(draft_id: str) -> DeleteProductDraftResponse:
+        deleted = ProductDraftService().delete_draft(draft_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"Product draft not found: {draft_id}")
+        return DeleteProductDraftResponse(success=True)
+
+    @app.post(
+        "/api/product-drafts/{draft_id}/apply-to-project/{project_id}",
+        response_model=ProductDraftApplyResponse,
+    )
+    def apply_product_draft_to_project(draft_id: str, project_id: str) -> ProductDraftApplyResponse:
+        try:
+            return ProductDraftService().apply_to_project(draft_id, project_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post(
+        "/api/product-drafts/{draft_id}/create-project",
+        response_model=CreateProjectFromDraftResponse,
+    )
+    def create_project_from_product_draft(
+        draft_id: str,
+        request: CreateProjectFromDraftRequest,
+    ) -> CreateProjectFromDraftResponse:
+        try:
+            return ProductDraftService().create_project_from_draft(draft_id, request)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/projects/{project_id}/latest-script", response_model=LatestScriptResponse)
     def get_latest_script(project_id: str) -> LatestScriptResponse:
@@ -1083,6 +1220,22 @@ def _safety_error_detail(safety_result: SafetyCheckResult) -> dict[str, Any]:
         "error": "Product info safety check failed",
         "issues": [issue.model_dump(mode="json") for issue in safety_result.issues],
     }
+
+
+def _raw_import_preview(request: ProductInfoImportRequest) -> str | None:
+    text = request.file_content or request.raw_text
+    if not text and request.structured_data:
+        text = json.dumps(request.structured_data, ensure_ascii=False)
+    if not text and request.file_path:
+        text = request.file_path
+    if not text and request.source_url:
+        text = request.source_url
+    return text[:500] if text else None
+
+
+def _import_inbox_url() -> str:
+    frontend_url = os.getenv("AUTO_TOOL_FRONTEND_URL", "http://localhost:5173").strip().rstrip("/")
+    return f"{frontend_url or 'http://localhost:5173'}/import-inbox"
 
 
 def _prepare_product_info_for_project(product: ProductInfoNormalized) -> ProductInfoNormalized:

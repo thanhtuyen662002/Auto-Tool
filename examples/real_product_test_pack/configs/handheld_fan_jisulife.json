@@ -1,0 +1,119 @@
+{
+  "project_name": "handheld-fan-jisulife-v02-test",
+  "source_folder": "../../sample_videos/real_product_test_pack/handheld_fan_jisulife",
+  "output_folder": "../../outputs/v02_test_pack/handheld_fan_jisulife",
+  "product": {
+    "name": "Quạt cầm tay JisuLife 7 Mini",
+    "brand": "JISULIFE",
+    "description": "Quạt cầm tay mini nhỏ gọn, phù hợp mang theo khi đi học, đi làm, đi chơi.",
+    "features": [
+      "Pin 5000mAh",
+      "5 cấp độ gió",
+      "Thiết kế gập 180 độ",
+      "Có màn hình LED",
+      "Màu trắng, hồng, đen"
+    ],
+    "specs": [
+      {
+        "name": "Pin",
+        "value": "5000mAh"
+      },
+      {
+        "name": "Cấp độ gió",
+        "value": "5 cấp"
+      },
+      {
+        "name": "Thiết kế",
+        "value": "Gập 180 độ"
+      }
+    ],
+    "cta": "Xem mẫu phù hợp với bạn",
+    "hashtag_suggestions": [
+      "#quatcamtay",
+      "#giadung",
+      "#tienich"
+    ]
+  },
+  "render": {
+    "output_count": 3,
+    "duration": 12,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "fps": 30
+  },
+  "effects": {
+    "cut_intensity": 65,
+    "speed_variation": 30,
+    "grain": 12,
+    "zoom_motion": 20,
+    "overlay_height": 22,
+    "subtitle_size": 54
+  },
+  "ai": {
+    "text_model": "gemini-3.1-flash-lite",
+    "tone": "friendly_reviewer",
+    "language": "vi",
+    "gemini_api_keys": []
+  },
+  "music": {
+    "enabled": false,
+    "source_folder": null,
+    "source_file": null,
+    "volume": 0.12,
+    "fade_in": 0.5,
+    "fade_out": 0.8,
+    "duck_under_voice": false
+  },
+  "industry": {
+    "preset_id": "home_lifestyle"
+  },
+  "timeline": {
+    "template_id": "problem_solution"
+  },
+  "visual_style": {
+    "preset_id": "clean_review_light",
+    "custom_overrides": null
+  },
+  "script_variation": {
+    "mode": "auto_mix",
+    "preferred_variant_ids": [
+      "problem_hook",
+      "use_case_scene",
+      "benefit_first"
+    ]
+  },
+  "tts": {
+    "provider": "edge_tts",
+    "fallback_provider": "silent",
+    "voice": "vi-VN-HoaiMyNeural",
+    "language": "vi",
+    "api_key": null,
+    "credentials_json_path": null,
+    "access_token": null,
+    "rate": "+0%",
+    "pitch": "+0Hz",
+    "volume": "+0%",
+    "output_format": "mp3"
+  },
+  "cache": {
+    "enabled": true,
+    "cache_media_metadata": true,
+    "cache_segment_scoring": true,
+    "cache_crop_safety": true,
+    "cache_tts": true,
+    "cache_overlay_assets": true,
+    "clear_cache_before_render": false
+  },
+  "crop_safety": {
+    "enabled": true,
+    "mode": "auto_safe",
+    "allow_blur_background": true,
+    "reduce_zoom_on_risk": true,
+    "reduce_overlay_on_risk": true
+  },
+  "source_media": {
+    "respect_user_exclusions": true,
+    "prefer_favorite_segments": true,
+    "allow_excluded_fallback": false
+  }
+}

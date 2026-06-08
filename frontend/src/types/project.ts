@@ -630,7 +630,7 @@ export interface ApplyIndustryPresetResponse {
   updated_config: ProjectConfig;
 }
 
-export type ProductImportInputType = 'manual' | 'text' | 'json' | 'txt' | 'csv';
+export type ProductImportInputType = 'manual' | 'text' | 'json' | 'txt' | 'csv' | 'shopee_extension';
 
 export interface RawProductInput {
   input_type: ProductImportInputType;
@@ -638,6 +638,37 @@ export interface RawProductInput {
   file_path?: string | null;
   file_content?: string | null;
   source_name?: string | null;
+  source_url?: string | null;
+  structured_data?: Record<string, unknown> | null;
+  save_to_inbox?: boolean;
+  extractor_debug?: ShopeeExtractorDebugReport | null;
+}
+
+export type ExtractorDebugMethod =
+  | 'json_ld'
+  | 'meta'
+  | 'dom_selector'
+  | 'script_state'
+  | 'visible_text'
+  | 'fallback'
+  | 'manual';
+
+export interface ExtractorFieldDebug {
+  field: string;
+  valueFound: boolean;
+  valuePreview?: string;
+  method: ExtractorDebugMethod;
+  confidence: number;
+  warnings: string[];
+}
+
+export interface ShopeeExtractorDebugReport {
+  url: string;
+  extractedAt: string;
+  pageType: 'product' | 'unknown' | 'unsupported';
+  fields: ExtractorFieldDebug[];
+  overallConfidence: number;
+  warnings: string[];
 }
 
 export interface ProductInfoNormalized {
@@ -665,7 +696,19 @@ export interface ProductImportResult {
   success: boolean;
   product?: ProductInfoNormalized | null;
   issues: ProductValidationIssue[];
+  source?: {
+    name?: string | null;
+    url?: string | null;
+  } | null;
+  draft?: {
+    id: string;
+    title: string;
+    status: string;
+    confidence_score: number;
+  } | null;
+  import_inbox_url?: string | null;
   raw_preview?: string | null;
+  error?: string | null;
 }
 
 export interface UpdateProjectProductInfoResponse {
@@ -688,4 +731,78 @@ export interface SafetyCheckResult {
   issues: SafetyIssue[];
   warnings_count: number;
   errors_count: number;
+}
+
+export type ProductDraftStatus = 'new' | 'reviewed' | 'applied' | 'archived';
+
+export interface ProductDraftSource {
+  source_name?: string | null;
+  source_url?: string | null;
+  imported_at: string;
+  imported_by: string;
+}
+
+export interface ProductDraft {
+  id: string;
+  title: string;
+  status: ProductDraftStatus;
+  source: ProductDraftSource;
+  raw_input?: Record<string, unknown> | null;
+  raw_text?: string | null;
+  structured_data?: Record<string, unknown> | null;
+  extractor_debug?: ShopeeExtractorDebugReport | null;
+  normalized_product?: ProductInfoNormalized | null;
+  validation_issues: ProductValidationIssue[];
+  industry_preset_id?: string | null;
+  confidence_score: number;
+  user_note?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductDraftListResponse {
+  items: ProductDraft[];
+  total: number;
+}
+
+export interface ProductDraftUpdateRequest {
+  normalized_product?: ProductInfoNormalized | null;
+  status?: ProductDraftStatus | null;
+  user_note?: string | null;
+}
+
+export interface ProjectListItem {
+  id: string;
+  project_name: string;
+  created_at: string;
+}
+
+export interface ProjectListResponse {
+  items: ProjectListItem[];
+}
+
+export interface CreateProjectFromDraftRequest {
+  project_name: string;
+  source_folder: string;
+  output_folder: string;
+  render: {
+    output_count: number;
+    duration: number;
+  };
+}
+
+export interface ProductDraftApplyResponse {
+  success: boolean;
+  project_id: string;
+  draft_id: string;
+  project_product: ProductInfo;
+  industry_preset_id?: string | null;
+  updated_config?: ProjectConfig | null;
+}
+
+export interface CreateProjectFromDraftResponse {
+  success: boolean;
+  project_id: string;
+  draft_id: string;
+  updated_config?: ProjectConfig | null;
 }

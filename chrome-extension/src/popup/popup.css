@@ -1,0 +1,287 @@
+:root {
+  color: #17202a;
+  background: #f6f7f9;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 380px;
+  background: #f6f7f9;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  min-height: 34px;
+  border: 1px solid #c9d1db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17202a;
+  cursor: pointer;
+  padding: 0 10px;
+}
+
+button:hover:not(:disabled) {
+  border-color: #7a8796;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+button.primary {
+  border-color: #d85617;
+  background: #e85d1f;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+button.ghost {
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  color: #49566a;
+  padding: 0;
+}
+
+.popup-shell {
+  width: 380px;
+  padding: 14px;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.popup-header h1 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.popup-header p {
+  margin: 4px 0 0;
+  color: #536171;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.status-pill {
+  border: 1px solid #d8dee7;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px;
+  min-height: 54px;
+}
+
+.status-pill span,
+.field-stack span,
+.settings-row label,
+.summary-list dt {
+  display: block;
+  color: #637083;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-pill strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+}
+
+.status-pill.ok {
+  border-color: #78b892;
+}
+
+.status-pill.warn {
+  border-color: #e09b5c;
+}
+
+.settings-row {
+  margin-bottom: 12px;
+}
+
+.settings-row .secondary-label {
+  margin-top: 8px;
+}
+
+.input-with-button {
+  display: grid;
+  grid-template-columns: 1fr 64px;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #cfd6df;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17202a;
+  padding: 8px;
+  outline: none;
+}
+
+textarea {
+  resize: vertical;
+}
+
+input:focus,
+textarea:focus {
+  border-color: #2c6cb0;
+  box-shadow: 0 0 0 2px rgba(44, 108, 176, 0.14);
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.preview-panel,
+.empty-panel,
+.result-box {
+  border: 1px solid #d8dee7;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.empty-panel {
+  color: #637083;
+  text-align: center;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.preview-head h2 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.field-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.field-stack label span {
+  margin-bottom: 3px;
+}
+
+.summary-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.summary-list div {
+  min-width: 0;
+}
+
+.summary-list dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.feature-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #2d3745;
+}
+
+.feature-list li {
+  margin: 4px 0;
+  line-height: 1.35;
+}
+
+.warning-box {
+  margin-top: 10px;
+  border-left: 3px solid #e09b5c;
+  background: #fff7ee;
+  padding: 7px 9px;
+}
+
+.warning-box p {
+  margin: 0 0 4px;
+  color: #7b4b18;
+  line-height: 1.35;
+}
+
+.warning-box p:last-child {
+  margin-bottom: 0;
+}
+
+.result-box {
+  margin-top: 10px;
+}
+
+.result-box.success {
+  border-color: #78b892;
+}
+
+.result-box.error {
+  border-color: #d36c65;
+}
+
+.result-box p {
+  margin: 6px 0 0;
+}
+
+.draft-result {
+  margin-top: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.draft-result p {
+  margin: 0;
+}
+
+.draft-result button {
+  margin-top: 4px;
+  width: fit-content;
+}
+
+.result-box pre {
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 8px 0 0;
+  font-size: 11px;
+}

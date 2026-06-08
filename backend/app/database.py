@@ -130,10 +130,44 @@ def init_db() -> None:
                 UNIQUE(project_id, segment_id),
                 FOREIGN KEY (project_id) REFERENCES projects(project_id)
             );
+
+            CREATE TABLE IF NOT EXISTS product_drafts (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                status TEXT NOT NULL,
+
+                source_name TEXT,
+                source_url TEXT,
+                imported_by TEXT,
+                imported_at TEXT,
+
+                raw_input_json TEXT,
+                raw_text TEXT,
+                structured_data_json TEXT,
+                extractor_debug_json TEXT,
+
+                normalized_product_json TEXT,
+                validation_issues_json TEXT,
+
+                industry_preset_id TEXT,
+                confidence_score REAL,
+
+                user_note TEXT,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_product_drafts_status
+            ON product_drafts(status);
+
+            CREATE INDEX IF NOT EXISTS idx_product_drafts_created_at
+            ON product_drafts(created_at);
             """
         )
         _ensure_column(conn, "projects", "latest_script_json", "TEXT")
         _ensure_column(conn, "projects", "custom_script_json", "TEXT")
+        _ensure_column(conn, "product_drafts", "extractor_debug_json", "TEXT")
 
 
 @contextmanager
@@ -166,6 +200,20 @@ def get_project(project_id: str) -> dict[str, Any] | None:
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM projects WHERE project_id = ?", (project_id,)).fetchone()
     return _row_to_project(row) if row else None
+
+
+def list_projects(limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM projects
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (max(1, min(limit, 500)), max(0, offset)),
+        ).fetchall()
+    return [_row_to_project(row) for row in rows]
 
 
 def update_project_config(project_id: str, config: dict[str, Any]) -> dict[str, Any] | None:

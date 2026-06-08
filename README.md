@@ -1,5 +1,147 @@
 # Auto Tool
 
+## Auto Tool v0.2 Overview
+
+Auto Tool v0.2.0-rc1 is a local release candidate focused on a practical product-video workflow:
+
+```txt
+Import product info
+-> Select industry preset
+-> Scan source videos
+-> Review source media
+-> Render preview
+-> Edit script
+-> Render full batch
+-> Review quality
+-> Rerender bad outputs
+-> Manage captions
+-> Export content
+```
+
+The v0.2 pass does not add auto-download, auto-posting, account login, cloud render, multi-user, licensing, watermark removal, or heavy AI vision. It focuses on QA, integration cleanup, release docs, and a repeatable real-product test pack.
+
+## Quick Start
+
+Backend:
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+python -m app.main
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Build checks:
+
+```bash
+cd backend
+pytest
+```
+
+```bash
+cd frontend
+npm run build
+```
+
+## Real Product Test Pack
+
+The v0.2 test pack is in `examples/real_product_test_pack/`. It contains configs, product input text, expected-output notes, and empty media folders under `examples/sample_videos/real_product_test_pack/`.
+
+Place real product videos in one of these folders:
+
+```txt
+examples/sample_videos/real_product_test_pack/projector_kaw_xmax10/
+examples/sample_videos/real_product_test_pack/handheld_fan_jisulife/
+examples/sample_videos/real_product_test_pack/sunscreen_jacket_guno/
+examples/sample_videos/real_product_test_pack/home_gadget_generic/
+```
+
+## v0.2 Smoke Test
+
+From `backend/`:
+
+```bash
+python -m app.tools.v02_smoke_test --config ../examples/real_product_test_pack/configs/projector_kaw_xmax10.json --preview-only --skip-tts-online
+```
+
+Full batch:
+
+```bash
+python -m app.tools.v02_smoke_test --config ../examples/real_product_test_pack/configs/projector_kaw_xmax10.json --full
+```
+
+If no real source videos are present, the smoke test creates synthetic test videos and returns `success_with_warnings`. When real videos exist, it uses them.
+
+## Import Inbox / Product Drafts
+
+Auto Tool can save product imports as local Product Drafts in SQLite. This is used by the Shopee Chrome Extension flow:
+
+```txt
+Shopee product page
+-> Chrome Extension Extract Product Info
+-> Send to Auto Tool
+-> Backend normalizes and validates product info
+-> Draft is saved in Import Inbox
+-> User reviews or edits draft
+-> Apply to existing project or create a new project from draft
+```
+
+Frontend page:
+
+```txt
+/import-inbox
+```
+
+API:
+
+```txt
+GET    /api/product-drafts
+GET    /api/product-drafts/{draft_id}
+PUT    /api/product-drafts/{draft_id}
+POST   /api/product-drafts/{draft_id}/archive
+DELETE /api/product-drafts/{draft_id}
+POST   /api/product-drafts/clear-archived
+POST   /api/product-drafts/{draft_id}/apply-to-project/{project_id}
+POST   /api/product-drafts/{draft_id}/create-project
+GET    /api/projects
+```
+
+Product drafts are stored locally on the user's machine. A draft can contain product description, price, Shopee link, shop info, raw text, normalized product fields, validation warnings, and source metadata. Users can archive or delete drafts at any time. Auto Tool does not cloud-sync drafts and does not send draft data to third-party servers.
+
+Shopee Extension imports also store `extractor_debug`, including field-level extraction method, confidence, missing fields, and warnings. Import responses that save a draft include `import_inbox_url` so the extension can open the Import Inbox or a specific draft directly.
+
+## v0.2 QA Checklist
+
+Use:
+
+```txt
+docs/V0_2_QA_CHECKLIST.md
+docs/V0_2_BUG_BASH.md
+docs/V0_2_PERFORMANCE_BASELINE.md
+docs/SHOPEE_EXTENSION_QA_CHECKLIST.md
+```
+
+The smoke test prints a JSON result with step status, output folder, warnings/errors, and a `performance_baseline` block.
+
+## Known Limitations
+
+- Auto Tool does not download videos from TikTok or other platforms.
+- Auto Tool does not post videos automatically.
+- Auto Tool does not log in to user accounts.
+- Auto Tool does not verify product information on the internet.
+- Segment scoring and crop safety are heuristic and are not guaranteed to be 100% accurate.
+- Quality score is a technical estimate; users still need to watch outputs manually.
+- Edge-TTS needs network access and can fail.
+- Piper needs a local model.
+- Use only media and music you have the right to edit or remix.
+
 Auto Tool là công cụ local hỗ trợ tạo video recut ngắn cho sản phẩm từ một thư mục video nguồn. Mục tiêu hiện tại là cung cấp một pipeline chạy được trên máy cá nhân: scan video, cắt segment, dựng timeline, tạo script bằng Gemini, tạo voice tiếng Việt, burn subtitle/overlay, thêm nhạc nền và xuất nhiều video đầu ra.
 
 Dự án đang ở giai đoạn MVP có CLI, FastAPI local, React UI và bản Windows exe. Tool chưa phải hệ thống production hoàn chỉnh, nhưng đã đủ để developer tiếp tục phát triển các phần segment thông minh, timeline theo sản phẩm và workflow UI tốt hơn.

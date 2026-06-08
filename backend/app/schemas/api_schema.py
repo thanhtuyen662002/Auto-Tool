@@ -6,6 +6,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.content_manager.content_schema import ContentBatchSummary, OutputContentItem, PublishStatus
 from app.modules.industry_presets.industry_schema import IndustryPreset
+from app.modules.product_drafts.product_draft_schema import (
+    ClearArchivedDraftsResponse,
+    CreateProjectFromDraftRequest,
+    CreateProjectFromDraftResponse,
+    DeleteProductDraftResponse,
+    ProductDraft,
+    ProductDraftApplyResponse,
+    ProductDraftListResponse,
+    ProjectListResponse as ProductDraftProjectListResponse,
+    UpdateProductDraftRequest,
+)
 from app.modules.product_import.product_import_schema import ProductImportResult, ProductInfoNormalized, RawProductInput
 from app.modules.script_writer.script_writer import ProductVideoScript
 from app.modules.source_media_manager.media_manager_schema import (
@@ -34,6 +45,10 @@ class ProjectDetailResponse(BaseModel):
     config: ProjectConfig
     created_at: str
     updated_at: str
+
+
+class ProjectListResponse(ProductDraftProjectListResponse):
+    pass
 
 
 class AppSettings(BaseModel):
@@ -358,7 +373,8 @@ class ApplyIndustryPresetResponse(BaseModel):
 
 
 class ProductInfoImportRequest(RawProductInput):
-    pass
+    save_to_inbox: bool = False
+    extractor_debug: dict[str, Any] | None = None
 
 
 class ProductInfoImportResponse(ProductImportResult):

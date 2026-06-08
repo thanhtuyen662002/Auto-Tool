@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
+
 from app.modules.industry_presets.industry_registry import get_industry_preset
 from app.modules.product_import.product_import_schema import (
     ProductImportResult,
+    ProductImportSource,
     ProductInfoNormalized,
     ProductValidationIssue,
     RawProductInput,
@@ -25,6 +28,7 @@ class ProductImportService:
 
     def import_product_info(self, raw_input: RawProductInput) -> ProductImportResult:
         raw_preview = _raw_preview(raw_input)
+        source = _source_info(raw_input)
         try:
             parsed = self.parser.parse(raw_input)
             normalized = self.normalizer.normalize(parsed)
@@ -48,7 +52,13 @@ class ProductImportService:
                 }
             )
             success = not any(issue.severity == "error" for issue in issues)
-            return ProductImportResult(success=success, product=normalized, issues=issues, raw_preview=raw_preview)
+            return ProductImportResult(
+                success=success,
+                product=normalized,
+                issues=issues,
+                source=source,
+                raw_preview=raw_preview,
+            )
         except Exception as exc:
             return ProductImportResult(
                 success=False,
@@ -60,6 +70,7 @@ class ProductImportService:
                         message=f"Không thể import thông tin sản phẩm: {exc}",
                     )
                 ],
+                source=source,
                 raw_preview=raw_preview,
             )
 
@@ -84,6 +95,11 @@ def suggest_industry_preset(product: ProductInfoNormalized) -> str:
             "chuột",
             "loa",
             "camera",
+            "may chieu",
+            "dien thoai",
+            "den led",
+            "do sang",
+            "lumens",
             "sạc",
             "cáp",
             "điện thoại",
@@ -127,11 +143,21 @@ def _confidence_score(product: ProductInfoNormalized, issues: list[ProductValida
 
 def _raw_preview(raw_input: RawProductInput) -> str | None:
     text = raw_input.file_content or raw_input.raw_text
+    if not text and raw_input.structured_data:
+        text = json.dumps(raw_input.structured_data, ensure_ascii=False)
     if not text and raw_input.file_path:
         text = raw_input.file_path
+    if not text and raw_input.source_url:
+        text = raw_input.source_url
     if not text:
         return None
     return text[:500]
+
+
+def _source_info(raw_input: RawProductInput) -> ProductImportSource | None:
+    if not raw_input.source_name and not raw_input.source_url:
+        return None
+    return ProductImportSource(name=raw_input.source_name, url=raw_input.source_url)
 
 
 def _dedupe(values: list[str]) -> list[str]:

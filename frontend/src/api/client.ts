@@ -33,6 +33,13 @@ import type {
   IndustryPresetsResponse,
   ProductImportResult,
   ProductInfoNormalized,
+  ProductDraft,
+  ProductDraftApplyResponse,
+  ProductDraftListResponse,
+  ProductDraftUpdateRequest,
+  ProjectListResponse,
+  CreateProjectFromDraftRequest,
+  CreateProjectFromDraftResponse,
   RawProductInput,
   SafetyCheckResult,
   CropSafetyAnalyzeResponse,
@@ -102,6 +109,10 @@ export function createProject(config: ProjectConfig): Promise<ProjectResponse> {
 
 export function getProject(projectId: string): Promise<ProjectDetail> {
   return request<ProjectDetail>(`/api/projects/${projectId}`);
+}
+
+export function listProjects(): Promise<ProjectListResponse> {
+  return request<ProjectListResponse>('/api/projects');
 }
 
 export function getAppSettings(): Promise<AppSettings> {
@@ -325,6 +336,69 @@ export function applyIndustryPresetToProject(
 
 export function importProductInfo(payload: RawProductInput): Promise<ProductImportResult> {
   return request<ProductImportResult>('/api/product-info/import', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listProductDrafts(filters: {
+  status?: string | null;
+  source_name?: string | null;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<ProductDraftListResponse> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  if (filters.source_name) params.set('source_name', filters.source_name);
+  if (filters.limit != null) params.set('limit', String(filters.limit));
+  if (filters.offset != null) params.set('offset', String(filters.offset));
+  const query = params.toString();
+  return request<ProductDraftListResponse>(`/api/product-drafts${query ? `?${query}` : ''}`);
+}
+
+export function getProductDraft(draftId: string): Promise<ProductDraft> {
+  return request<ProductDraft>(`/api/product-drafts/${draftId}`);
+}
+
+export function updateProductDraft(draftId: string, payload: ProductDraftUpdateRequest): Promise<ProductDraft> {
+  return request<ProductDraft>(`/api/product-drafts/${draftId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function archiveProductDraft(draftId: string): Promise<ProductDraft> {
+  return request<ProductDraft>(`/api/product-drafts/${draftId}/archive`, {
+    method: 'POST',
+  });
+}
+
+export function deleteProductDraft(draftId: string): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/api/product-drafts/${draftId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function clearArchivedProductDrafts(): Promise<{ success: boolean; deleted_count: number }> {
+  return request<{ success: boolean; deleted_count: number }>('/api/product-drafts/clear-archived', {
+    method: 'POST',
+  });
+}
+
+export function applyProductDraftToProject(
+  draftId: string,
+  projectId: string,
+): Promise<ProductDraftApplyResponse> {
+  return request<ProductDraftApplyResponse>(`/api/product-drafts/${draftId}/apply-to-project/${projectId}`, {
+    method: 'POST',
+  });
+}
+
+export function createProjectFromDraft(
+  draftId: string,
+  payload: CreateProjectFromDraftRequest,
+): Promise<CreateProjectFromDraftResponse> {
+  return request<CreateProjectFromDraftResponse>(`/api/product-drafts/${draftId}/create-project`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });

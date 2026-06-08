@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -10,13 +10,15 @@ from app.schemas.project_schema import ProductInfo, ProductSpec
 class RawProductInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    input_type: Literal["manual", "text", "json", "txt", "csv"]
+    input_type: Literal["manual", "text", "json", "txt", "csv", "shopee_extension"]
     raw_text: str | None = None
     file_path: str | None = None
     file_content: str | None = None
     source_name: str | None = None
+    source_url: str | None = None
+    structured_data: dict[str, Any] | None = None
 
-    @field_validator("raw_text", "file_path", "file_content", "source_name")
+    @field_validator("raw_text", "file_path", "file_content", "source_name", "source_url")
     @classmethod
     def clean_optional_text(cls, value: str | None) -> str | None:
         if value is None:
@@ -71,13 +73,33 @@ class ProductValidationIssue(BaseModel):
     suggestion: str | None = None
 
 
+class ProductImportSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    url: str | None = None
+
+
+class ProductImportDraftSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    title: str
+    status: str
+    confidence_score: float = 0.0
+
+
 class ProductImportResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     success: bool
     product: ProductInfoNormalized | None = None
     issues: list[ProductValidationIssue] = Field(default_factory=list)
+    source: ProductImportSource | None = None
+    draft: ProductImportDraftSummary | None = None
+    import_inbox_url: str | None = None
     raw_preview: str | None = None
+    error: str | None = None
 
 
 def to_project_product_info(normalized: ProductInfoNormalized) -> ProductInfo:

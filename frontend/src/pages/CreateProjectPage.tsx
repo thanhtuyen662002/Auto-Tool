@@ -115,6 +115,13 @@ export default function CreateProjectPage() {
   return (
     <main className="mx-auto max-w-7xl px-6 py-6">
       <div className="mb-5">
+        <button
+          className="mb-3 rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
+          type="button"
+          onClick={() => navigate('/import-inbox')}
+        >
+          Open Import Inbox
+        </button>
         <h1 className="text-2xl font-semibold text-ink">Tạo dự án</h1>
           <p className="mt-1 text-sm text-muted">Nhập thông tin sản phẩm và thư mục trên máy để tạo cấu hình render.</p>
       </div>
