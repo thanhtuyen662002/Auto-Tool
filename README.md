@@ -1615,6 +1615,50 @@ Source Media Manager không xoá file gốc, không tải video từ nền tản
 
 ---
 
+## Product Assets From Draft
+
+Chrome Extension có thể gửi image URLs đang hiển thị trên trang sản phẩm Shopee vào Product Draft. Auto Tool không tự crawl thêm ảnh của shop và không tải hàng loạt. Ảnh chỉ được lưu local khi người dùng chọn trong Import Inbox.
+
+Luồng sử dụng:
+
+```txt
+1. Mở Shopee product bằng Chrome Extension và gửi draft vào Auto Tool
+2. Vào Import Inbox và mở draft
+3. Trong Product Assets, chọn ảnh muốn dùng
+4. Bấm Import Assets để tải ảnh đã chọn về local
+5. Đặt role cho ảnh: main_product, reference, poster, thumbnail, description, variation, unused
+6. Khi Create Project from Draft, attach selected assets vào project
+7. Vào Render Settings hoặc /projects/{project_id}/assets để quản lý ảnh đã attach
+```
+
+API:
+
+```txt
+GET    /api/product-drafts/{draft_id}/assets
+POST   /api/product-drafts/{draft_id}/assets/import
+POST   /api/product-drafts/{draft_id}/assets/attach-to-project/{project_id}
+GET    /api/projects/{project_id}/assets
+PUT    /api/product-assets/{asset_id}
+DELETE /api/product-assets/{asset_id}
+GET    /api/product-assets/{asset_id}/file
+```
+
+Ảnh draft chưa có project được lưu ở data app local:
+
+```txt
+data/imported_assets/drafts/{draft_id}/
+```
+
+Ảnh đã attach vào project được lưu ở:
+
+```txt
+{output_folder}/{project_name}/assets/product/
+```
+
+Auto Tool chỉ chấp nhận tải `image/jpeg`, `image/png`, `image/webp`, giới hạn 15MB mỗi ảnh. Người dùng cần tự đảm bảo có quyền sử dụng hình ảnh cho mục đích của mình.
+
+---
+
 ## Known Limitations (v0.1.0-rc1)
 
 Những hạn chế cố ý trong phiên bản này — **không nằm trong scope RC v0.1**:

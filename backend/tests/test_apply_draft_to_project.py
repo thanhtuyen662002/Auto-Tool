@@ -61,6 +61,8 @@ def test_create_project_from_draft_creates_project(tmp_path: Path) -> None:
     assert project.json()["config"]["product"]["name"] == "May chieu KAW XMAX10"
     assert project.json()["config"]["render"]["output_count"] == 3
     assert project.json()["config"]["industry"]["preset_id"] == "tech_electronics"
+    assert project.json()["config"]["music"]["enabled"] is True
+    assert project.json()["config"]["music"]["source_folder"] == "examples/music"
 
 
 def _draft_payload() -> dict:

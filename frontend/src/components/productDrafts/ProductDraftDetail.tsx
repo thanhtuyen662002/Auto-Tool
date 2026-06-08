@@ -11,6 +11,7 @@ import type {
 import TextArea from '../TextArea';
 import TextInput from '../TextInput';
 import NumberInput from '../NumberInput';
+import ProductAssetSelector from '../productAssets/ProductAssetSelector';
 
 interface ProductDraftDetailProps {
   draft: ProductDraft;
@@ -21,7 +22,7 @@ interface ProductDraftDetailProps {
     status: ProductDraftStatus;
     user_note: string | null;
   }) => Promise<void>;
-  onApplyToProject: (projectId: string) => Promise<void>;
+  onApplyToProject: (projectId: string, selectedAssetIds: string[]) => Promise<void>;
   onCreateProject: (payload: CreateProjectFromDraftRequest) => Promise<void>;
   onArchive: () => Promise<void>;
 }
@@ -59,12 +60,14 @@ export default function ProductDraftDetail({
   const [outputCount, setOutputCount] = useState(3);
   const [duration, setDuration] = useState(12);
   const [showRaw, setShowRaw] = useState(false);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
 
   useEffect(() => {
     setProduct(draft.normalized_product ?? EMPTY_PRODUCT);
     setStatus(draft.status);
     setUserNote(draft.user_note ?? '');
     setProjectName(slugify(draft.title));
+    setSelectedAssetIds([]);
   }, [draft]);
 
   const rawJson = useMemo(
@@ -108,6 +111,8 @@ export default function ProductDraftDetail({
       </div>
 
       <ExtractionQuality report={draft.extractor_debug} />
+
+      <ProductAssetSelector draftId={draft.id} onSelectionChange={setSelectedAssetIds} />
 
       <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -256,7 +261,7 @@ export default function ProductDraftDetail({
               className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               type="button"
               disabled={!selectedProjectId || saving}
-              onClick={() => onApplyToProject(selectedProjectId)}
+              onClick={() => onApplyToProject(selectedProjectId, selectedAssetIds)}
             >
               Apply
             </button>
@@ -283,6 +288,8 @@ export default function ProductDraftDetail({
                   source_folder: sourceFolder,
                   output_folder: outputFolder,
                   render: { output_count: outputCount, duration },
+                  attach_selected_assets: selectedAssetIds.length > 0,
+                  selected_asset_ids: selectedAssetIds.length > 0 ? selectedAssetIds : null,
                 })
               }
             >

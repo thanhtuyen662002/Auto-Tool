@@ -33,6 +33,14 @@ def test_music_mix_filter_keeps_music_steady_by_default(monkeypatch):
     assert "asplit=2[voice_for_duck][voice_for_mix]" not in filter_complex
     assert "[voice][music]amix" in filter_complex
     assert "[music][voice]sidechaincompress" not in filter_complex
+    assert len(commands) == 2
+    assert "[1:a]volume=0.1200" in filter_complex
+    assert "afade=t=out:st=11.200:d=0.800,atrim=0:12.000,asetpts=PTS-STARTPTS[music]" in filter_complex
+    assert "afade=t=out:st=11.200:d=0.800,apad,atrim=0:12.000" not in filter_complex
+    assert commands[1][commands[1].index("-filter_complex") + 1] == (
+        "[0:v]drawbox=x=0:y=0:w=iw:h=100:color=black@0.55:t=fill[vout]"
+    )
+    assert commands[1][commands[1].index("-map") + 3] == "1:a:0"
 
 
 def test_music_ducking_filter_splits_voice_when_enabled(monkeypatch):
@@ -59,6 +67,140 @@ def test_music_ducking_filter_splits_voice_when_enabled(monkeypatch):
     assert "[music][voice_for_duck]sidechaincompress" in filter_complex
     assert "[voice_for_mix][music_ducked]amix" in filter_complex
     assert "[voice][music]amix" not in filter_complex
+
+
+def test_overlay_asset_music_filter_does_not_pad_looped_music(monkeypatch):
+    commands: list[list[str]] = []
+
+    def fake_run_ffmpeg(args: list[str]) -> None:
+        commands.append(args)
+
+    monkeypatch.setattr(overlay_renderer, "run_ffmpeg", fake_run_ffmpeg)
+
+    OverlayRenderer()._run_ffmpeg_with_overlay_and_music(
+        visual_video_path="visual.mp4",
+        overlay_asset_path="overlay.png",
+        voice_path="voice.wav",
+        music_path="music.mp3",
+        output_path="final.mp4",
+        video_chain="[0:v][1:v]overlay=0:0[vout]",
+        voice_duration=8.0,
+        duration=12.0,
+        config=_config(),
+    )
+
+    audio_filter = commands[0][commands[0].index("-filter_complex") + 1]
+    video_filter = commands[1][commands[1].index("-filter_complex") + 1]
+    assert len(commands) == 2
+    assert "[1:a]volume=0.1200" in audio_filter
+    assert video_filter == "[0:v][1:v]overlay=0:0[vout]"
+    assert "-loop" in commands[1]
+    assert commands[1][commands[1].index("-map") + 3] == "2:a:0"
+    assert "afade=t=out:st=11.200:d=0.800,atrim=0:12.000,asetpts=PTS-STARTPTS[music]" in audio_filter
+    assert "afade=t=out:st=11.200:d=0.800,apad,atrim=0:12.000" not in audio_filter
+
+
+def test_overlay_asset_render_loops_image_for_full_video(monkeypatch):
+    commands: list[list[str]] = []
+
+    def fake_run_ffmpeg(args: list[str]) -> None:
+        commands.append(args)
+
+    monkeypatch.setattr(overlay_renderer, "run_ffmpeg", fake_run_ffmpeg)
+
+    OverlayRenderer()._render_with_overlay_asset(
+        visual_video_path="visual.mp4",
+        overlay_asset_path="overlay.png",
+        voice_path="voice.wav",
+        subtitle_path="sub.ass",
+        config=_config(),
+        output_path="final.mp4",
+        duration=12.0,
+        voice_duration=8.0,
+        width=1080,
+        height=1920,
+        include_subtitles=True,
+        music_path=None,
+    )
+
+    command = commands[0]
+    filter_complex = command[command.index("-filter_complex") + 1]
+    assert command[command.index("-loop") + 1] == "1"
+    assert command[command.index("-loop") + 2] == "-i"
+    assert command[command.index("-loop") + 3] == "overlay.png"
+    assert "scale=1080:1920[overlay]" in filter_complex
+    assert "overlay=0:0:eof_action=repeat:repeatlast=1[vbase]" in filter_complex
+
+
+def test_custom_overlay_uses_height_box_and_keeps_aspect_ratio(monkeypatch):
+    commands: list[list[str]] = []
+
+    def fake_run_ffmpeg(args: list[str]) -> None:
+        commands.append(args)
+
+    monkeypatch.setattr(overlay_renderer, "run_ffmpeg", fake_run_ffmpeg)
+
+    OverlayRenderer()._render_with_overlay_asset(
+        visual_video_path="visual.mp4",
+        overlay_asset_path="overlay.png",
+        voice_path="voice.wav",
+        subtitle_path="sub.ass",
+        config=_config(overlay_mode="custom", custom_overlay_height_percent=33),
+        output_path="final.mp4",
+        duration=12.0,
+        voice_duration=8.0,
+        width=1080,
+        height=1920,
+        include_subtitles=True,
+        music_path=None,
+    )
+
+    filter_complex = commands[0][commands[0].index("-filter_complex") + 1]
+    assert "scale=w=1080:h=634:force_original_aspect_ratio=decrease[overlay]" in filter_complex
+    assert "overlay=x=(W-w)/2:y=H-h:eof_action=repeat:repeatlast=1[vbase]" in filter_complex
+    assert "scale=1080:1920[overlay]" not in filter_complex
+
+
+def test_render_final_video_can_disable_overlay(tmp_path, monkeypatch):
+    renderer = OverlayRenderer()
+    calls: list[dict] = []
+
+    monkeypatch.setattr(
+        overlay_renderer,
+        "probe_video",
+        lambda path: SimpleNamespace(duration=8.0, width=1080, height=1920),
+    )
+    monkeypatch.setattr(overlay_renderer, "probe_media_duration", lambda path: 8.0)
+
+    def fake_render_with_filters(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(renderer, "_render_with_filters", fake_render_with_filters)
+
+    result = renderer.render_final_video(
+        visual_video_path=str(tmp_path / "visual.mp4"),
+        voice_path=str(tmp_path / "voice.wav"),
+        subtitle_path=str(tmp_path / "video_001_sub.ass"),
+        script=_script(),
+        config=_config(overlay_mode="none"),
+        output_path=str(tmp_path / "video_001.mp4"),
+        fallback_subtitle_path=str(tmp_path / "video_001_sub.srt"),
+    )
+
+    assert result.endswith("video_001.mp4")
+    assert calls[0]["draw_overlay"] is False
+    assert renderer.last_visual_style["overlay_mode"] == "none"
+    assert renderer.last_visual_style["overlay_asset"] is None
+
+
+def test_custom_overlay_folder_uses_first_supported_image(tmp_path):
+    (tmp_path / "readme.txt").write_text("ignore", encoding="utf-8")
+    (tmp_path / "b.jpg").write_bytes(b"fake")
+    (tmp_path / "a.png").write_bytes(b"fake")
+
+    selected = OverlayRenderer._select_custom_overlay_asset(str(tmp_path))
+
+    assert selected.endswith("a.png")
 
 
 def test_overlay_renderer_falls_back_when_ass_style_render_fails(tmp_path, monkeypatch):
@@ -102,7 +244,11 @@ def test_overlay_renderer_falls_back_when_ass_style_render_fails(tmp_path, monke
     assert renderer.last_visual_style["subtitle_format"] == "srt"
 
 
-def _config(duck_under_voice: bool = False) -> ProjectConfig:
+def _config(
+    duck_under_voice: bool = False,
+    overlay_mode: str = "preset",
+    custom_overlay_height_percent: int | None = None,
+) -> ProjectConfig:
     return ProjectConfig.model_validate(
         {
             "project_name": "test",
@@ -144,6 +290,13 @@ def _config(duck_under_voice: bool = False) -> ProjectConfig:
                 "fade_in": 0.5,
                 "fade_out": 0.8,
                 "duck_under_voice": duck_under_voice,
+            },
+            "visual_style": {
+                "preset_id": "clean_review_light",
+                "custom_overrides": None,
+                "overlay_mode": overlay_mode,
+                "custom_overlay_path": None,
+                "custom_overlay_height_percent": custom_overlay_height_percent,
             },
         }
     )

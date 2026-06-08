@@ -9,6 +9,7 @@ import AppSettingsPage from './pages/AppSettingsPage';
 import ContentManagerPage from './pages/ContentManagerPage';
 import SourceMediaManagerPage from './pages/SourceMediaManagerPage';
 import ImportInboxPage from './pages/ImportInboxPage';
+import ProjectAssetsPage from './pages/ProjectAssetsPage';
 
 const FALLBACK_VERSION = '0.2.0-rc1';
 
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="/results/:jobId" element={<ResultPage />} />
           <Route path="/projects/:projectId/review" element={<OutputReviewPage />} />
           <Route path="/projects/:projectId/source-media" element={<SourceMediaManagerPage />} />
+          <Route path="/projects/:projectId/assets" element={<ProjectAssetsPage />} />
           <Route path="/projects/:projectId/content" element={<ContentManagerPage />} />
           <Route path="/import-inbox" element={<ImportInboxPage />} />
           <Route path="/app-settings" element={<AppSettingsPage />} />

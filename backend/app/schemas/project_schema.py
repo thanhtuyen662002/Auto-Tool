@@ -212,6 +212,14 @@ class SourceMediaSettings(BaseModel):
     allow_excluded_fallback: bool = False
 
 
+class ProjectAssetSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    main_product_asset_id: str | None = None
+    reference_asset_ids: list[str] = Field(default_factory=list)
+    poster_asset_ids: list[str] = Field(default_factory=list)
+
+
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -231,3 +239,4 @@ class ProjectConfig(BaseModel):
     crop_safety: CropSafetySettings = Field(default_factory=CropSafetySettings)
     cache: CacheSettings = Field(default_factory=CacheSettings)
     source_media: SourceMediaSettings = Field(default_factory=SourceMediaSettings)
+    assets: ProjectAssetSettings = Field(default_factory=ProjectAssetSettings)

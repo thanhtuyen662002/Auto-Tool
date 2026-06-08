@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   applyProductDraftToProject,
   archiveProductDraft,
+  attachProductDraftAssetsToProject,
   clearArchivedProductDrafts,
   createProjectFromDraft,
   deleteProductDraft,
@@ -133,11 +134,14 @@ export default function ImportInboxPage() {
     }, 'Archived drafts cleared.');
   }
 
-  async function handleApply(projectId: string) {
+  async function handleApply(projectId: string, selectedAssetIds: string[] = []) {
     if (!selectedDraft) return;
     await runAction(async () => {
       await applyProductDraftToProject(selectedDraft.id, projectId);
-    }, 'Draft applied to project.');
+      if (selectedAssetIds.length > 0) {
+        await attachProductDraftAssetsToProject(selectedDraft.id, projectId, selectedAssetIds);
+      }
+    }, selectedAssetIds.length > 0 ? 'Draft and selected assets applied to project.' : 'Draft applied to project.');
   }
 
   async function handleCreateProject(payload: CreateProjectFromDraftRequest) {

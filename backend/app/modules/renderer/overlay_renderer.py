@@ -50,25 +50,54 @@ class OverlayRenderer:
             self.warnings.append(warning)
 
         preset = VisualStyleService().resolve_preset(config.visual_style)
-        overlay_asset_path = str(Path(output_path).with_name(f"{Path(output_path).stem}_overlay.png"))
+        overlay_mode = config.visual_style.overlay_mode
+        generated_overlay_asset_path = str(Path(output_path).with_name(f"{Path(output_path).stem}_overlay.png"))
+        overlay_asset_path = (
+            self._select_custom_overlay_asset(config.visual_style.custom_overlay_path)
+            if overlay_mode == "custom"
+            else generated_overlay_asset_path
+        )
         self.last_visual_style = {
             "preset_id": preset.id,
-            "overlay_asset": overlay_asset_path,
+            "overlay_mode": overlay_mode,
+            "overlay_asset": overlay_asset_path if overlay_mode != "none" else None,
+            "custom_overlay_path": overlay_asset_path if overlay_mode == "custom" else None,
+            "custom_overlay_height_percent": self._custom_overlay_height_percent(config) if overlay_mode == "custom" else None,
             "subtitle_format": "ass" if Path(subtitle_path).suffix.lower() == ".ass" else "srt",
             "ass_subtitle_path": subtitle_path if Path(subtitle_path).suffix.lower() == ".ass" else None,
             "fallback_used": False,
             "warnings": [],
         }
 
-        try:
-            self._build_or_restore_overlay_asset(
-                preset_id=preset.id,
-                width=visual_info.width,
-                height=visual_info.height,
-                output_path=overlay_asset_path,
-                build_action=lambda: build_overlay_asset(preset, visual_info.width, visual_info.height, overlay_asset_path),
-                custom_overrides=config.visual_style.custom_overrides,
+        if overlay_mode == "none":
+            self._render_without_overlay(
+                visual_video_path=visual_video_path,
+                voice_path=voice_path,
+                subtitle_path=subtitle_path,
+                fallback_subtitle_path=fallback_subtitle_path,
+                config=config,
+                output_path=output_path,
+                duration=duration,
+                voice_duration=voice_duration,
+                music_path=music_path,
             )
+            return output_path
+
+        try:
+            if overlay_mode == "preset":
+                self._build_or_restore_overlay_asset(
+                    preset_id=preset.id,
+                    width=visual_info.width,
+                    height=visual_info.height,
+                    output_path=overlay_asset_path,
+                    build_action=lambda: build_overlay_asset(
+                        preset,
+                        visual_info.width,
+                        visual_info.height,
+                        overlay_asset_path,
+                    ),
+                    custom_overrides=config.visual_style.custom_overrides,
+                )
             self._render_with_overlay_asset(
                 visual_video_path=visual_video_path,
                 overlay_asset_path=overlay_asset_path,
@@ -78,6 +107,8 @@ class OverlayRenderer:
                 output_path=output_path,
                 duration=duration,
                 voice_duration=voice_duration,
+                width=visual_info.width,
+                height=visual_info.height,
                 include_subtitles=True,
                 music_path=music_path,
             )
@@ -174,6 +205,75 @@ class OverlayRenderer:
             self.cache_service.set_file(cache_key, result)
         return result
 
+    def _render_without_overlay(
+        self,
+        visual_video_path: str,
+        voice_path: str,
+        subtitle_path: str,
+        fallback_subtitle_path: str | None,
+        config: ProjectConfig,
+        output_path: str,
+        duration: float,
+        voice_duration: float,
+        music_path: str | None,
+    ) -> None:
+        try:
+            self._render_with_filters(
+                visual_video_path=visual_video_path,
+                voice_path=voice_path,
+                subtitle_path=subtitle_path,
+                config=config,
+                output_path=output_path,
+                duration=duration,
+                voice_duration=voice_duration,
+                include_subtitles=True,
+                music_path=music_path,
+                draw_overlay=False,
+            )
+            return
+        except FFmpegError as exc:
+            warning = f"subtitle_burn_failed: Không burn được phụ đề khi tắt overlay, sẽ thử fallback. Lý do: {exc}"
+            logger.warning(warning)
+            self.warnings.append(warning)
+            self.last_visual_style["fallback_used"] = True
+            self.last_visual_style["warnings"].append("subtitle_burn_failed")
+
+        if fallback_subtitle_path:
+            try:
+                self._render_with_filters(
+                    visual_video_path=visual_video_path,
+                    voice_path=voice_path,
+                    subtitle_path=fallback_subtitle_path,
+                    config=config,
+                    output_path=output_path,
+                    duration=duration,
+                    voice_duration=voice_duration,
+                    include_subtitles=True,
+                    music_path=music_path,
+                    draw_overlay=False,
+                )
+                self.last_visual_style["subtitle_format"] = "srt"
+                return
+            except FFmpegError as exc:
+                warning = f"subtitle_burn_failed: Không burn được phụ đề SRT khi tắt overlay, sẽ render không phụ đề. Lý do: {exc}"
+                logger.warning(warning)
+                self.warnings.append(warning)
+                self.last_visual_style["warnings"].append("srt_subtitle_failed")
+
+        self.last_visual_style["subtitle_format"] = "none"
+        self._render_with_filters(
+            visual_video_path=visual_video_path,
+            voice_path=voice_path,
+            subtitle_path=subtitle_path,
+            config=config,
+            output_path=output_path,
+            duration=duration,
+            voice_duration=voice_duration,
+            include_subtitles=False,
+            music_path=music_path,
+            draw_overlay=False,
+        )
+
     def _render_with_overlay_asset(
         self,
         visual_video_path: str,
@@ -184,10 +284,12 @@ class OverlayRenderer:
         output_path: str,
         duration: float,
         voice_duration: float,
+        width: int,
+        height: int,
         include_subtitles: bool,
         music_path: str | None,
     ) -> None:
-        video_chain = "[0:v][1:v]overlay=0:0[vbase]"
+        video_chain = self._overlay_asset_video_chain(width, height, config)
         if include_subtitles:
             subtitle_filter = self._subtitle_filter(subtitle_path, config.effects.subtitle_size)
             video_chain = f"{video_chain};[vbase]{subtitle_filter}[vout]"
@@ -214,6 +316,8 @@ class OverlayRenderer:
                 "-y",
                 "-i",
                 visual_video_path,
+                "-loop",
+                "1",
                 "-i",
                 overlay_asset_path,
                 "-i",
@@ -253,15 +357,20 @@ class OverlayRenderer:
         voice_duration: float,
         include_subtitles: bool,
         music_path: str | None,
+        draw_overlay: bool = True,
     ) -> None:
-        overlay_fraction = max(0.10, min(0.45, config.effects.overlay_height / 100.0))
-        overlay_y = 1.0 - overlay_fraction
-        filters = [
-            f"drawbox=x=0:y=ih*{overlay_y:.4f}:w=iw:h=ih*{overlay_fraction:.4f}:color=black@0.55:t=fill"
-        ]
+        filters = []
+        if draw_overlay:
+            overlay_fraction = max(0.10, min(0.45, config.effects.overlay_height / 100.0))
+            overlay_y = 1.0 - overlay_fraction
+            filters.append(
+                f"drawbox=x=0:y=ih*{overlay_y:.4f}:w=iw:h=ih*{overlay_fraction:.4f}:color=black@0.55:t=fill"
+            )
 
         if include_subtitles:
             filters.append(self._subtitle_filter(subtitle_path, config.effects.subtitle_size))
+        if not filters:
+            filters.append("format=yuv420p")
 
         if music_path:
             self._run_ffmpeg_with_music(
@@ -320,69 +429,50 @@ class OverlayRenderer:
         duration: float,
         config: ProjectConfig,
     ) -> None:
-        fade_out_duration = min(config.music.fade_out, max(0.0, duration / 3.0))
-        fade_out_start = max(0.0, duration - fade_out_duration)
-        fade_in_duration = min(config.music.fade_in, max(0.0, duration / 3.0))
-        music_volume = max(0.0, min(1.0, config.music.volume))
-
-        music_filter = (
-            f"[2:a]volume={music_volume:.4f},"
-            f"afade=t=in:st=0:d={fade_in_duration:.3f},"
-            f"afade=t=out:st={fade_out_start:.3f}:d={fade_out_duration:.3f},"
-            f"apad,atrim=0:{duration:.3f},asetpts=PTS-STARTPTS[music]"
+        mixed_audio_path = self._mix_voice_and_music(
+            voice_path=voice_path,
+            music_path=music_path,
+            output_path=output_path,
+            voice_duration=voice_duration,
+            duration=duration,
+            config=config,
         )
-
-        if config.music.duck_under_voice:
-            audio_filter = (
-                f"[1:a]{self._voice_filter(voice_duration, duration)},asplit=2[voice_for_duck][voice_for_mix];"
-                f"{music_filter};"
-                "[music][voice_for_duck]sidechaincompress=threshold=0.040:ratio=8:attack=20:release=350[music_ducked];"
-                "[voice_for_mix][music_ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
-                "alimiter=limit=0.95[aout]"
+        final_succeeded = False
+        try:
+            run_ffmpeg(
+                [
+                    "-y",
+                    "-i",
+                    visual_video_path,
+                    "-i",
+                    mixed_audio_path,
+                    "-filter_complex",
+                    f"[0:v]{video_filters}[vout]",
+                    "-map",
+                    "[vout]",
+                    "-map",
+                    "1:a:0",
+                    "-t",
+                    f"{duration:.3f}",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "veryfast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "128k",
+                    str(output_path),
+                ]
             )
-        else:
-            audio_filter = (
-                f"[1:a]{self._voice_filter(voice_duration, duration)}[voice];"
-                f"{music_filter};"
-                "[voice][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
-                "alimiter=limit=0.95[aout]"
-            )
-        filter_complex = f"[0:v]{video_filters}[vout];{audio_filter}"
-
-        run_ffmpeg(
-            [
-                "-y",
-                "-i",
-                visual_video_path,
-                "-i",
-                voice_path,
-                "-stream_loop",
-                "-1",
-                "-i",
-                music_path,
-                "-filter_complex",
-                filter_complex,
-                "-map",
-                "[vout]",
-                "-map",
-                "[aout]",
-                "-t",
-                f"{duration:.3f}",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "23",
-                "-pix_fmt",
-                "yuv420p",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "128k",
-                str(output_path),
-            ]
-        )
+            final_succeeded = True
+        finally:
+            if final_succeeded:
+                self._delete_temp_audio_if_success(mixed_audio_path, output_path)
 
     def _run_ffmpeg_with_overlay_and_music(
         self,
@@ -396,20 +486,81 @@ class OverlayRenderer:
         duration: float,
         config: ProjectConfig,
     ) -> None:
+        mixed_audio_path = self._mix_voice_and_music(
+            voice_path=voice_path,
+            music_path=music_path,
+            output_path=output_path,
+            voice_duration=voice_duration,
+            duration=duration,
+            config=config,
+        )
+
+        final_succeeded = False
+        try:
+            run_ffmpeg(
+                [
+                    "-y",
+                    "-i",
+                    visual_video_path,
+                    "-loop",
+                    "1",
+                    "-i",
+                    overlay_asset_path,
+                    "-i",
+                    mixed_audio_path,
+                    "-filter_complex",
+                    video_chain,
+                    "-map",
+                    "[vout]",
+                    "-map",
+                    "2:a:0",
+                    "-t",
+                    f"{duration:.3f}",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "veryfast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "128k",
+                    str(output_path),
+                ]
+            )
+            final_succeeded = True
+        finally:
+            if final_succeeded:
+                self._delete_temp_audio_if_success(mixed_audio_path, output_path)
+
+    def _mix_voice_and_music(
+        self,
+        voice_path: str,
+        music_path: str,
+        output_path: str,
+        voice_duration: float,
+        duration: float,
+        config: ProjectConfig,
+    ) -> str:
+        mixed_audio_path = str(Path(output_path).with_name(f"{Path(output_path).stem}_mixed_audio.wav"))
         fade_out_duration = min(config.music.fade_out, max(0.0, duration / 3.0))
         fade_out_start = max(0.0, duration - fade_out_duration)
         fade_in_duration = min(config.music.fade_in, max(0.0, duration / 3.0))
         music_volume = max(0.0, min(1.0, config.music.volume))
+
         music_filter = (
-            f"[3:a]volume={music_volume:.4f},"
+            f"[1:a]volume={music_volume:.4f},"
             f"afade=t=in:st=0:d={fade_in_duration:.3f},"
             f"afade=t=out:st={fade_out_start:.3f}:d={fade_out_duration:.3f},"
-            f"apad,atrim=0:{duration:.3f},asetpts=PTS-STARTPTS[music]"
+            f"atrim=0:{duration:.3f},asetpts=PTS-STARTPTS[music]"
         )
 
         if config.music.duck_under_voice:
             audio_filter = (
-                f"[2:a]{self._voice_filter(voice_duration, duration)},asplit=2[voice_for_duck][voice_for_mix];"
+                f"[0:a]{self._voice_filter(voice_duration, duration)},asplit=2[voice_for_duck][voice_for_mix];"
                 f"{music_filter};"
                 "[music][voice_for_duck]sidechaincompress=threshold=0.040:ratio=8:attack=20:release=350[music_ducked];"
                 "[voice_for_mix][music_ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
@@ -417,7 +568,7 @@ class OverlayRenderer:
             )
         else:
             audio_filter = (
-                f"[2:a]{self._voice_filter(voice_duration, duration)}[voice];"
+                f"[0:a]{self._voice_filter(voice_duration, duration)}[voice];"
                 f"{music_filter};"
                 "[voice][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
                 "alimiter=limit=0.95[aout]"
@@ -427,38 +578,75 @@ class OverlayRenderer:
             [
                 "-y",
                 "-i",
-                visual_video_path,
-                "-i",
-                overlay_asset_path,
-                "-i",
                 voice_path,
                 "-stream_loop",
                 "-1",
                 "-i",
                 music_path,
                 "-filter_complex",
-                f"{video_chain};{audio_filter}",
-                "-map",
-                "[vout]",
+                audio_filter,
                 "-map",
                 "[aout]",
                 "-t",
                 f"{duration:.3f}",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "23",
-                "-pix_fmt",
-                "yuv420p",
                 "-c:a",
-                "aac",
-                "-b:a",
-                "128k",
-                str(output_path),
+                "pcm_s16le",
+                mixed_audio_path,
             ]
         )
+        return mixed_audio_path
+
+    @staticmethod
+    def _delete_temp_audio_if_success(mixed_audio_path: str, output_path: str) -> None:
+        if not Path(output_path).exists() or Path(output_path).stat().st_size <= 0:
+            return
+        try:
+            Path(mixed_audio_path).unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Không thể xóa file audio tạm %s: %s", mixed_audio_path, exc)
+
+    @classmethod
+    def _overlay_asset_video_chain(cls, width: int, height: int, config: ProjectConfig) -> str:
+        if config.visual_style.overlay_mode == "custom":
+            target_height = max(1, round(height * cls._custom_overlay_height_percent(config) / 100))
+            return (
+                f"[1:v]format=rgba,"
+                f"scale=w={width}:h={target_height}:force_original_aspect_ratio=decrease[overlay];"
+                "[0:v][overlay]overlay=x=(W-w)/2:y=H-h:eof_action=repeat:repeatlast=1[vbase]"
+            )
+        return (
+            f"[1:v]format=rgba,scale={width}:{height}[overlay];"
+            "[0:v][overlay]overlay=0:0:eof_action=repeat:repeatlast=1[vbase]"
+        )
+
+    @staticmethod
+    def _custom_overlay_height_percent(config: ProjectConfig) -> int:
+        configured = config.visual_style.custom_overlay_height_percent
+        if configured is None:
+            configured = config.effects.overlay_height
+        return max(5, min(100, int(configured)))
+
+    @staticmethod
+    def _select_custom_overlay_asset(path: str | None) -> str:
+        if not path:
+            raise FileNotFoundError("Bạn đã chọn custom overlay nhưng chưa nhập đường dẫn ảnh/thư mục overlay.")
+
+        source = Path(path).expanduser()
+        if source.is_dir():
+            candidates = sorted(
+                item
+                for item in source.iterdir()
+                if item.is_file() and item.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
+            )
+            if not candidates:
+                raise FileNotFoundError(f"Không tìm thấy ảnh overlay trong thư mục: {source}")
+            return str(candidates[0])
+
+        if not source.exists():
+            raise FileNotFoundError(f"Không tìm thấy ảnh overlay: {source}")
+        if source.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            raise ValueError("Overlay custom chỉ hỗ trợ ảnh .png, .jpg, .jpeg hoặc .webp.")
+        return str(source)
 
     @staticmethod
     def _subtitle_filter(subtitle_path: str, subtitle_size: int) -> str:

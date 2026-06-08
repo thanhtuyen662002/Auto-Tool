@@ -72,6 +72,7 @@ def render_project(
         "industry_preset": _industry_summary(working_config),
         "safety_check": safety_result.model_dump(mode="json"),
         "source_media_summary": None,
+        "product_assets": _product_assets_summary(working_config),
         "cache_summary": cache_service.summary(),
         "outputs": outputs,
     }
@@ -477,6 +478,18 @@ def _industry_summary(config: ProjectConfig) -> dict[str, Any] | None:
         "timeline_template_id": preset.timeline_template_id,
         "visual_style_preset_id": preset.visual_style_preset_id,
         "caption_tone": preset.caption_tone,
+    }
+
+
+def _product_assets_summary(config: ProjectConfig) -> dict[str, Any]:
+    reference_assets = len(config.assets.reference_asset_ids)
+    poster_assets = len(config.assets.poster_asset_ids)
+    main_asset_id = config.assets.main_product_asset_id
+    return {
+        "total_assets": (1 if main_asset_id else 0) + reference_assets + poster_assets,
+        "main_product_asset_id": main_asset_id,
+        "reference_assets": reference_assets,
+        "poster_assets": poster_assets,
     }
 
 

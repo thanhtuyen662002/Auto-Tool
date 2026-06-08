@@ -264,6 +264,7 @@ def render_one_output(
         output_log["cache"]["overlay_cache_hit"] = bool(overlay_renderer.last_overlay_cache_hit)
         if overlay_renderer.last_visual_style:
             output_log["visual_style"] = overlay_renderer.last_visual_style
+            output_log["overlay_file"] = overlay_renderer.last_visual_style.get("overlay_asset")
 
         qa_result = run_step(
             output_log,
@@ -291,7 +292,7 @@ def render_one_output(
             "script_file": str(script_path),
             "subtitle_file": str(subtitle_path),
             "subtitle_ass_file": str(subtitle_ass_path),
-            "overlay_file": str(overlay_asset_path),
+            "overlay_file": output_log.get("overlay_file"),
             "voice_file": generated_voice_path,
             "normalized_voice_file": normalized_voice_for_render,
             "tts_provider": output_log["tts_provider"],
@@ -338,7 +339,7 @@ def render_one_output(
             "script_file": str(script_path),
             "subtitle_file": str(subtitle_path),
             "subtitle_ass_file": str(subtitle_ass_path),
-            "overlay_file": str(overlay_asset_path),
+            "overlay_file": output_log.get("overlay_file"),
             "voice_file": str(voice_path),
             "normalized_voice_file": str(normalized_voice_path),
             "timeline_file": str(timeline_path),

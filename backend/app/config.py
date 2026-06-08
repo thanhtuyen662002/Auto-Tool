@@ -41,10 +41,21 @@ def load_project_config(config_path: str) -> ProjectConfig:
         music_updates["source_file"] = str(resolve_path(config.music.source_file, base_dir, must_exist=True))
 
     music = config.music.model_copy(update=music_updates) if music_updates else config.music
+    visual_style_updates = {}
+    if config.visual_style.overlay_mode == "custom" and config.visual_style.custom_overlay_path:
+        visual_style_updates["custom_overlay_path"] = str(
+            resolve_path(config.visual_style.custom_overlay_path, base_dir, must_exist=True)
+        )
+    visual_style = (
+        config.visual_style.model_copy(update=visual_style_updates)
+        if visual_style_updates
+        else config.visual_style
+    )
     return config.model_copy(
         update={
             "source_folder": str(resolve_path(config.source_folder, base_dir, must_exist=True)),
             "output_folder": str(resolve_path(config.output_folder, base_dir)),
             "music": music,
+            "visual_style": visual_style,
         }
     )

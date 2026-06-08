@@ -33,7 +33,7 @@ class Renderer:
 
             concat_file = temp_dir / "concat.txt"
             concat_file.write_text(
-                "\n".join(f"file '{path.as_posix()}'" for path in clip_paths) + "\n",
+                "\n".join(f"file '{path.name}'" for path in clip_paths) + "\n",
                 encoding="utf-8",
             )
 

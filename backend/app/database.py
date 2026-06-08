@@ -163,6 +163,44 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_product_drafts_created_at
             ON product_drafts(created_at);
+
+            CREATE TABLE IF NOT EXISTS product_assets (
+                id TEXT PRIMARY KEY,
+                project_id TEXT,
+                draft_id TEXT,
+
+                source_name TEXT,
+                source_url TEXT,
+                original_url TEXT,
+
+                asset_type TEXT NOT NULL,
+                role TEXT NOT NULL,
+                status TEXT NOT NULL,
+
+                filename TEXT,
+                local_path TEXT,
+
+                width INTEGER,
+                height INTEGER,
+                file_size INTEGER,
+                mime_type TEXT,
+
+                quality_score REAL,
+                is_selected INTEGER NOT NULL DEFAULT 0,
+                user_note TEXT,
+
+                warnings_json TEXT,
+                errors_json TEXT,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_product_assets_project_id
+            ON product_assets(project_id);
+
+            CREATE INDEX IF NOT EXISTS idx_product_assets_draft_id
+            ON product_assets(draft_id);
             """
         )
         _ensure_column(conn, "projects", "latest_script_json", "TEXT")

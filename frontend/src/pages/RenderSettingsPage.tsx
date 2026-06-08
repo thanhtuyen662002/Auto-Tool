@@ -14,6 +14,7 @@ import {
   getPresets,
   getProject,
   getProjectCacheSummary,
+  listProjectAssets,
   getSourceMedia,
   getScriptVariantStyles,
   getTTSProviders,
@@ -59,6 +60,7 @@ import type {
   Preset,
   ProductVideoScript,
   ProjectConfig,
+  ProductAsset,
   CropSafetyAnalyzeResponse,
   ScanResponse,
   SafetyCheckResult,
@@ -70,6 +72,7 @@ import type {
   TTSProviderInfo,
   TTSVoiceInfo,
   VisualStylePreset,
+  VisualStyleSettings,
 } from '../types/project';
 import { applyIndustryPresetToConfig, DEFAULT_INDUSTRY_APPLY_OPTIONS } from '../utils/industryPresetApply';
 import {
@@ -132,6 +135,7 @@ export default function RenderSettingsPage() {
   const [cacheBusy, setCacheBusy] = useState(false);
   const [cacheMessage, setCacheMessage] = useState<string | null>(null);
   const [sourceMediaSummary, setSourceMediaSummary] = useState<SourceMediaSummary | null>(null);
+  const [productAssets, setProductAssets] = useState<ProductAsset[]>([]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -173,6 +177,7 @@ export default function RenderSettingsPage() {
       .catch((err) => setError(err instanceof Error ? err.message : 'Không thể tải danh sách ngành hàng.'));
     void loadCacheSummary(projectId);
     void loadSourceMediaSummary(projectId);
+    void loadProductAssets(projectId);
   }, [projectId]);
 
   useEffect(() => {
@@ -269,6 +274,15 @@ export default function RenderSettingsPage() {
       setSourceMediaSummary(response.summary);
     } catch {
       setSourceMediaSummary(null);
+    }
+  }
+
+  async function loadProductAssets(activeProjectId: string) {
+    try {
+      const response = await listProjectAssets(activeProjectId);
+      setProductAssets(response.items);
+    } catch {
+      setProductAssets([]);
     }
   }
 
@@ -563,12 +577,12 @@ export default function RenderSettingsPage() {
               onTTSProviderChange={handleTTSProviderChange}
               onTTSChange={updateTTS}
               onLoadGoogleVoices={handleLoadGoogleVoices}
-              onVisualStyleChange={(presetId) =>
+              onVisualStyleChange={(patch) =>
                 updateConfig({
                   ...config,
                   visual_style: {
                     ...(config.visual_style ?? DEFAULT_VISUAL_STYLE_SETTINGS),
-                    preset_id: presetId,
+                    ...patch,
                   },
                 })
               }
@@ -580,7 +594,7 @@ export default function RenderSettingsPage() {
                 })
               }
               onMusicChange={(patch) =>
-                updateConfig({ ...config, music: { ...(config.music ?? DEFAULT_MUSIC_SETTINGS), ...patch } })
+                updateConfig({ ...config, music: mergeMusicSettings(config.music, patch) })
               }
               onScan={handleScan}
               onBack={() => navigate('/')}
@@ -598,6 +612,11 @@ export default function RenderSettingsPage() {
           <SourceMediaSummaryBox
             summary={sourceMediaSummary}
             onManage={() => projectId && navigate(`/projects/${projectId}/source-media`)}
+          />
+
+          <ProductAssetsSummaryBox
+            assets={productAssets}
+            onManage={() => projectId && navigate(`/projects/${projectId}/assets`)}
           />
 
           <CachePanel
@@ -703,6 +722,66 @@ function ModeToggle({ mode, onChange }: { mode: SettingsMode; onChange: (mode: S
   );
 }
 
+function OverlayModeControls({
+  settings,
+  onChange,
+}: {
+  settings: VisualStyleSettings;
+  onChange: (patch: Partial<VisualStyleSettings>) => void;
+}) {
+  const mode = settings.overlay_mode ?? DEFAULT_VISUAL_STYLE_SETTINGS.overlay_mode ?? 'preset';
+  const customPath = settings.custom_overlay_path ?? DEFAULT_VISUAL_STYLE_SETTINGS.custom_overlay_path ?? 'examples/overlay';
+  const customHeight =
+    settings.custom_overlay_height_percent ?? DEFAULT_VISUAL_STYLE_SETTINGS.custom_overlay_height_percent ?? 33;
+  const options = [
+    { value: 'preset', label: 'Dùng overlay preset' },
+    { value: 'none', label: 'Không dùng overlay' },
+    { value: 'custom', label: 'Dùng ảnh custom' },
+  ];
+
+  return (
+    <div className="mt-4 grid gap-3 rounded-md border border-line bg-white p-3">
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            className={`rounded-md px-3 py-2 text-xs font-semibold ${
+              mode === option.value
+                ? 'bg-brand text-white'
+                : 'border border-line bg-white text-ink hover:border-brand'
+            }`}
+            type="button"
+            onClick={() => onChange({ overlay_mode: option.value })}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'custom' ? (
+        <label className="grid gap-1 text-sm">
+          <span className="font-medium text-ink">Đường dẫn ảnh/thư mục overlay</span>
+          <input
+            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-blue-100"
+            value={customPath}
+            onChange={(event) => onChange({ custom_overlay_path: event.target.value })}
+            placeholder="examples/overlay hoặc D:\\Overlay\\my_overlay.png"
+          />
+        </label>
+      ) : null}
+      {mode === 'custom' ? (
+        <NumberInput
+          label="Chiều cao overlay custom (%)"
+          value={customHeight}
+          min={5}
+          max={100}
+          onChange={(value) => onChange({ custom_overlay_height_percent: value })}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function SimpleSettingsPanel({
   config,
   visualStylePresets,
@@ -721,6 +800,7 @@ function SimpleSettingsPanel({
   const styleValue = findVideoStyle(config.timeline?.template_id)?.id ?? 'custom';
   const editValue = findEditStrength(config.effects)?.id ?? 'custom';
   const voiceValue = findVoice(config.tts?.voice)?.id ?? 'custom';
+  const music = config.music ?? DEFAULT_MUSIC_SETTINGS;
 
   function updateRender(patch: Partial<ProjectConfig['render']>) {
     onChange({ ...config, render: { ...config.render, ...patch } });
@@ -731,19 +811,19 @@ function SimpleSettingsPanel({
   }
 
   function updateMusic(patch: Partial<ProjectConfig['music']>) {
-    onChange({ ...config, music: { ...(config.music ?? DEFAULT_MUSIC_SETTINGS), ...patch } });
+    onChange({ ...config, music: mergeMusicSettings(config.music, patch) });
   }
 
   function updateCropSafety(patch: Partial<NonNullable<ProjectConfig['crop_safety']>>) {
     onChange({ ...config, crop_safety: { ...(config.crop_safety ?? DEFAULT_CROP_SAFETY_SETTINGS), ...patch } });
   }
 
-  function updateVisualStyle(presetId: string) {
+  function updateVisualStyle(patch: Partial<VisualStyleSettings>) {
     onChange({
       ...config,
       visual_style: {
         ...(config.visual_style ?? DEFAULT_VISUAL_STYLE_SETTINGS),
-        preset_id: presetId,
+        ...patch,
       },
     });
   }
@@ -857,7 +937,22 @@ function SimpleSettingsPanel({
           <input
             className="mt-1 h-4 w-4 accent-brand"
             type="checkbox"
-            checked={config.music?.duck_under_voice ?? false}
+            checked={music.enabled}
+            onChange={(event) => updateMusic({ enabled: event.target.checked })}
+          />
+          <span>
+            <span className="block font-medium text-ink">Bật nhạc nền</span>
+            <span className="mt-1 block break-all text-xs text-muted">
+              {music.source_file || music.source_folder || DEFAULT_MUSIC_SETTINGS.source_folder}
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 rounded-md border border-line bg-white p-3 text-sm sm:col-span-2">
+          <input
+            className="mt-1 h-4 w-4 accent-brand disabled:opacity-50"
+            type="checkbox"
+            checked={music.duck_under_voice}
+            disabled={!music.enabled}
             onChange={(event) => updateMusic({ duck_under_voice: event.target.checked })}
           />
           <span>
@@ -888,7 +983,11 @@ function SimpleSettingsPanel({
           presets={visualStylePresets}
           selectedPresetId={config.visual_style?.preset_id ?? DEFAULT_VISUAL_STYLE_SETTINGS.preset_id}
           resolution={config.render.resolution}
-          onSelect={updateVisualStyle}
+          onSelect={(presetId) => updateVisualStyle({ preset_id: presetId })}
+        />
+        <OverlayModeControls
+          settings={config.visual_style ?? DEFAULT_VISUAL_STYLE_SETTINGS}
+          onChange={updateVisualStyle}
         />
       </div>
       <div className="mt-4 rounded-md bg-surface p-3 text-sm text-muted">
@@ -958,7 +1057,7 @@ function AdvancedSettingsPanel({
   onTTSProviderChange: (provider: string) => void;
   onTTSChange: (patch: Partial<NonNullable<ProjectConfig['tts']>>) => void;
   onLoadGoogleVoices: () => void;
-  onVisualStyleChange: (presetId: string) => void;
+  onVisualStyleChange: (patch: Partial<VisualStyleSettings>) => void;
   onMusicChange: (patch: Partial<ProjectConfig['music']>) => void;
   onEffectsChange: (effects: EffectSettings) => void;
   onCropSafetyChange: (patch: Partial<NonNullable<ProjectConfig['crop_safety']>>) => void;
@@ -1024,7 +1123,11 @@ function AdvancedSettingsPanel({
           presets={visualStylePresets}
           selectedPresetId={config.visual_style?.preset_id ?? DEFAULT_VISUAL_STYLE_SETTINGS.preset_id}
           resolution={config.render.resolution}
-          onSelect={onVisualStyleChange}
+          onSelect={(presetId) => onVisualStyleChange({ preset_id: presetId })}
+        />
+        <OverlayModeControls
+          settings={config.visual_style ?? DEFAULT_VISUAL_STYLE_SETTINGS}
+          onChange={onVisualStyleChange}
         />
       </div>
 
@@ -1707,6 +1810,44 @@ function SourceMediaSummaryBox({
   );
 }
 
+function ProductAssetsSummaryBox({
+  assets,
+  onManage,
+}: {
+  assets: ProductAsset[];
+  onManage: () => void;
+}) {
+  const downloaded = assets.filter((asset) => asset.status === 'downloaded' && asset.is_selected);
+  const main = downloaded.find((asset) => asset.role === 'main_product');
+  const references = downloaded.filter((asset) => asset.role === 'reference').length;
+  const posters = downloaded.filter((asset) => asset.role === 'poster').length;
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-ink">Product Assets</h2>
+          <p className="mt-1 text-sm text-muted">
+            Main product image: {main?.filename || 'N/A'} · Reference images: {references} · Poster images: {posters}
+          </p>
+        </div>
+        <button
+          className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
+          type="button"
+          onClick={onManage}
+        >
+          Manage Assets
+        </button>
+      </div>
+      {!downloaded.length ? (
+        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Project chưa có ảnh sản phẩm local. Bạn có thể import ảnh từ Product Draft trước khi render.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function CachePanel({
   config,
   summary,
@@ -1847,6 +1988,17 @@ function Metric({ label, value }: { label: string; value: number | string }) {
 function formatCacheSize(sizeMb: number): string {
   if (sizeMb >= 1024) return `${(sizeMb / 1024).toFixed(2)} GB`;
   return `${sizeMb.toFixed(1)} MB`;
+}
+
+function mergeMusicSettings(
+  current: ProjectConfig['music'] | undefined,
+  patch: Partial<ProjectConfig['music']>,
+): ProjectConfig['music'] {
+  const next = { ...DEFAULT_MUSIC_SETTINGS, ...(current ?? {}), ...patch };
+  if (patch.enabled === true && !next.source_file && !next.source_folder) {
+    next.source_folder = DEFAULT_MUSIC_SETTINGS.source_folder;
+  }
+  return next;
 }
 
 function findVideoStyle(templateId?: string | null) {

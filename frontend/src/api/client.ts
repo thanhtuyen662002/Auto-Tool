@@ -37,6 +37,10 @@ import type {
   ProductDraftApplyResponse,
   ProductDraftListResponse,
   ProductDraftUpdateRequest,
+  ProductAssetListResponse,
+  ProductAssetRole,
+  ProductAssetsImportResponse,
+  AttachDraftAssetsResponse,
   ProjectListResponse,
   CreateProjectFromDraftRequest,
   CreateProjectFromDraftResponse,
@@ -69,6 +73,10 @@ export function assetFileUrl(pathOrUrl: string): string {
 
 export function thumbnailFileUrl(path: string): string {
   return `${API_BASE_URL}/api/files/thumbnail?path=${encodeURIComponent(path)}`;
+}
+
+export function productAssetFileUrl(assetId: string): string {
+  return `${API_BASE_URL}/api/product-assets/${encodeURIComponent(assetId)}/file`;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -401,6 +409,55 @@ export function createProjectFromDraft(
   return request<CreateProjectFromDraftResponse>(`/api/product-drafts/${draftId}/create-project`, {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export function listProductDraftAssets(draftId: string): Promise<ProductAssetListResponse> {
+  return request<ProductAssetListResponse>(`/api/product-drafts/${draftId}/assets`);
+}
+
+export function importProductDraftAssets(
+  draftId: string,
+  payload: {
+    project_id?: string | null;
+    selected_asset_urls?: string[] | null;
+    download_selected?: boolean;
+  },
+): Promise<ProductAssetsImportResponse> {
+  return request<ProductAssetsImportResponse>(`/api/product-drafts/${draftId}/assets/import`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function attachProductDraftAssetsToProject(
+  draftId: string,
+  projectId: string,
+  selectedAssetIds?: string[] | null,
+): Promise<AttachDraftAssetsResponse> {
+  return request<AttachDraftAssetsResponse>(`/api/product-drafts/${draftId}/assets/attach-to-project/${projectId}`, {
+    method: 'POST',
+    body: JSON.stringify({ selected_asset_ids: selectedAssetIds ?? null }),
+  });
+}
+
+export function listProjectAssets(projectId: string): Promise<ProductAssetListResponse> {
+  return request<ProductAssetListResponse>(`/api/projects/${projectId}/assets`);
+}
+
+export function updateProductAsset(
+  assetId: string,
+  payload: { role?: ProductAssetRole | null; is_selected?: boolean | null; user_note?: string | null },
+): Promise<ProductAssetsImportResponse> {
+  return request<ProductAssetsImportResponse>(`/api/product-assets/${assetId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteProductAsset(assetId: string): Promise<ProductAssetsImportResponse> {
+  return request<ProductAssetsImportResponse>(`/api/product-assets/${assetId}`, {
+    method: 'DELETE',
   });
 }
 

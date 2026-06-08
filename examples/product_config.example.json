@@ -76,7 +76,10 @@
   },
   "visual_style": {
     "preset_id": "clean_review_light",
-    "custom_overrides": null
+    "custom_overrides": null,
+    "overlay_mode": "preset",
+    "custom_overlay_path": "./overlay",
+    "custom_overlay_height_percent": 33
   },
   "industry": {
     "preset_id": "general_product"

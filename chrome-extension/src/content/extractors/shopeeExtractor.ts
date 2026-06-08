@@ -1,5 +1,4 @@
 import type { ExtractorFieldDebug, ShopeeExtractorDebugReport, ShopeeRawProduct } from "../../shared/types";
-import { isShopeeUrl, isSupportedShopeeProductPage } from "../../shared/validators";
 import {
   absoluteUrl,
   allTextCandidates,
@@ -91,7 +90,16 @@ export async function extractShopeeProduct(): Promise<ShopeeRawProduct> {
     { value: findBrandFromVisibleText(textBlocks), method: "visible_text", confidence: 0.45 },
   ]);
   const images = extractImages(jsonLd);
-  const shopName = textFromSelectorsSafe(["[data-testid='shop-name']", ".shop-page__info-name", "a[href*='/shop/']"]);
+  const shopResult = pickField("shop", [
+    {
+      value: textFromSelectorsSafe(["[data-testid='shop-name']", ".shop-page__info-name", "a[href*='/shop/']"]),
+      method: "dom_selector",
+      confidence: 0.72,
+    },
+    { value: scriptFallback.shopName, method: "script_state", confidence: 0.68 },
+    { value: findShopNameFromVisibleText(textBlocks), method: "visible_text", confidence: 0.55 },
+  ]);
+  const shopName = shopResult.value;
 
   const product: ShopeeRawProduct = {
     source: "shopee",
@@ -147,14 +155,7 @@ export async function extractShopeeProduct(): Promise<ShopeeRawProduct> {
       images.length > 0 ? 0.78 : 0,
       images.length > 0 ? [] : ["Product images were not found."],
     ),
-    debugObjectField(
-      "shop",
-      Boolean(shopName),
-      shopName,
-      shopName ? "dom_selector" : "fallback",
-      shopName ? 0.72 : 0,
-      shopName ? [] : ["Shop name was not found."],
-    ),
+    shopResult.debug,
   ];
 
   if (!productPage) {
@@ -259,12 +260,80 @@ function extractImages(productJsonLd: JsonObject | undefined): string[] {
   } else if (Array.isArray(image)) {
     values.push(...image.map((item) => (typeof item === "string" ? absoluteUrl(item) : undefined)));
   }
-  values.push(
-    ...Array.from(document.querySelectorAll<HTMLImageElement>("img"))
-      .slice(0, 80)
-      .map((img) => srcFromImage(img)),
-  );
-  return uniqueStrings(values, 20);
+
+  const primaryImages = uniqueProductImageUrls(values, 12);
+  if (primaryImages.length >= 3) {
+    return primaryImages;
+  }
+
+  const domImages = Array.from(document.querySelectorAll<HTMLImageElement>("img"))
+    .slice(0, 120)
+    .filter((img) => isUsableImageElement(img))
+    .map((img) => srcFromImage(img));
+
+  return uniqueProductImageUrls([...primaryImages, ...domImages], 12);
+}
+
+function uniqueProductImageUrls(values: Array<string | undefined>, limit: number): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const url = normalizeProductImageUrl(value);
+    if (!url || seen.has(url)) {
+      continue;
+    }
+    seen.add(url);
+    result.push(url);
+    if (result.length >= limit) {
+      break;
+    }
+  }
+  return result;
+}
+
+function normalizeProductImageUrl(value: string | undefined): string | undefined {
+  const absolute = absoluteUrl(value);
+  if (!absolute || !isLikelyShopeeProductImageUrl(absolute)) {
+    return undefined;
+  }
+  return absolute.replace(/(@resize_[^/?#]+)(?=$|[?#])/i, "");
+}
+
+function isLikelyShopeeProductImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const path = url.pathname.toLowerCase();
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      return false;
+    }
+    if (!host.endsWith("img.susercontent.com")) {
+      return false;
+    }
+    if (!path.includes("/file/")) {
+      return false;
+    }
+    if (/\.(svg|ico|gif)(?:$|[?#])/i.test(path)) {
+      return false;
+    }
+    if (
+      /(?:shoprating|avatar|profile|seller|icon|logo|badge|voucher|productdetailspage|placeholder|sprite)/i.test(path)
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isUsableImageElement(img: HTMLImageElement): boolean {
+  const width = img.naturalWidth || Number(img.getAttribute("width") || 0);
+  const height = img.naturalHeight || Number(img.getAttribute("height") || 0);
+  if ((width > 0 && width < 120) || (height > 0 && height < 120)) {
+    return false;
+  }
+  return true;
 }
 
 function extractVideos(): string[] {
@@ -385,6 +454,43 @@ function findLikelyProductName(textBlocks: string[]): string | undefined {
   });
 }
 
+function findShopNameFromVisibleText(textBlocks: string[]): string | undefined {
+  for (const text of textBlocks) {
+    const normalized = normalizeText(text);
+    const hasShopSignals =
+      normalized.includes("xem shop") ||
+      normalized.includes("chat ngay") ||
+      normalized.includes("ty le phan hoi") ||
+      normalized.includes("nguoi theo doi");
+    if (!hasShopSignals) {
+      continue;
+    }
+
+    const match = text.match(/^(.{2,80}?)(?:online|offline|chat\s*ngay|xem\s*shop)/i);
+    const candidate = cleanShopNameCandidate(match?.[1]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function cleanShopNameCandidate(value: string | undefined): string | undefined {
+  const candidate = cleanText(value);
+  if (!candidate || candidate.length < 2 || candidate.length > 70) {
+    return undefined;
+  }
+  const normalized = normalizeText(candidate);
+  if (
+    /(?:mua ngay|them vao gio hang|chi tiet san pham|mo ta san pham|van chuyen|shopee|voucher|gio hang)/.test(
+      normalized,
+    )
+  ) {
+    return undefined;
+  }
+  return candidate;
+}
+
 function findBrandFromVisibleText(textBlocks: string[]): string | undefined {
   for (const text of textBlocks) {
     const spec = parseSpecificationsFromText(text);
@@ -440,6 +546,11 @@ function readScriptStateFallback(): Record<string, string | undefined> {
     shopId: joined.match(/"shopid"\s*:\s*(\d+)/)?.[1],
     name: cleanScriptString(joined.match(/"name"\s*:\s*"([^"]{5,240})"/)?.[1]),
     brand: cleanScriptString(joined.match(/"brand"\s*:\s*"([^"]{2,120})"/)?.[1]),
+    shopName: firstDefined(
+      cleanScriptString(joined.match(/"shop_name"\s*:\s*"([^"]{2,160})"/)?.[1]),
+      cleanScriptString(joined.match(/"shopname"\s*:\s*"([^"]{2,160})"/)?.[1]),
+      cleanScriptString(joined.match(/"shopName"\s*:\s*"([^"]{2,160})"/)?.[1]),
+    ),
     description: cleanScriptString(joined.match(/"description"\s*:\s*"([^"]{10,800})"/)?.[1]),
     price: joined.match(/"price"\s*:\s*(\d+)/)?.[1],
   };
@@ -567,6 +678,28 @@ function truncate(value: string, maxLength: number): string {
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
+}
+
+function isShopeeUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) {
+    return false;
+  }
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === "https:" && (url.hostname === "shopee.vn" || url.hostname.endsWith(".shopee.vn"));
+  } catch {
+    return false;
+  }
+}
+
+function isSupportedShopeeProductPage(
+  rawUrl: string | undefined,
+  signals: { hasProductTitle?: boolean; hasProductSchema?: boolean; hasPrice?: boolean } = {},
+): boolean {
+  if (!isShopeeUrl(rawUrl) || !rawUrl) {
+    return false;
+  }
+  return rawUrl.includes("-i.") || Boolean(signals.hasProductTitle || signals.hasProductSchema || signals.hasPrice);
 }
 
 function normalizeText(value: string): string {

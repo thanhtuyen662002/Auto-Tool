@@ -166,6 +166,17 @@ class ProductDraftService:
         config = _config_with_product(config, product)
         project_id = str(uuid.uuid4())
         database.create_project(project_id, config.model_dump(mode="json"))
+        if request.attach_selected_assets:
+            from app.modules.product_assets import ProductAssetService
+
+            ProductAssetService().attach_draft_assets_to_project(
+                draft_id,
+                project_id,
+                selected_asset_ids=request.selected_asset_ids,
+            )
+            project = database.get_project(project_id)
+            if project:
+                config = ProjectConfig.model_validate(project["config"])
         self.repository.update(draft_id, {"status": ProductDraftStatus.applied.value})
         return CreateProjectFromDraftResponse(
             success=True,
@@ -261,7 +272,14 @@ def _default_project_config_from_draft(
             language="vi",
             gemini_api_keys=[],
         ),
-        music=MusicSettings(enabled=False),
+        music=MusicSettings(
+            enabled=True,
+            source_folder="examples/music",
+            volume=0.12,
+            fade_in=0.5,
+            fade_out=0.8,
+            duck_under_voice=False,
+        ),
         cache=CacheSettings(),
         crop_safety=CropSafetySettings(),
         source_media=SourceMediaSettings(),

@@ -134,7 +134,8 @@ class CacheService:
             if hasattr(self.stats, miss_name):
                 setattr(self.stats, miss_name, getattr(self.stats, miss_name) + 1)
         self.stats.events.append(CacheEvent(namespace=namespace, key=key, hit=hit))
-        self._log("info", f"cache_{'hit' if hit else 'miss'}: {namespace}")
+        if namespace not in {"segment_scores", "crop_safety"}:
+            self._log("info", f"cache_{'hit' if hit else 'miss'}: {namespace}")
 
     def _record_time(self, key: str, seconds: float) -> None:
         current = getattr(self.stats, key)

@@ -24,6 +24,13 @@ Chrome Extension Manifest V3 for extracting visible product information from the
 
 The popup shows extractor state (`Ready`, `Extracted`, `Sent`), field-level confidence, missing fields, and warnings before Send. If the product name is missing, the preview remains visible but Send is disabled until the user fixes the name.
 
+The extension includes image URLs that are visible or embedded on the current product page in:
+
+- `structured_data.images`
+- `structured_data.shopee.images`
+
+Auto Tool does not download those images immediately. In Import Inbox, the user chooses which Product Assets to import/download and which role each image should have.
+
 The popup lets you configure both:
 
 - Auto Tool API URL, default `http://localhost:8000`
@@ -38,6 +45,8 @@ It does not crawl products in bulk, bypass anti-bot systems, read cookies, read 
 Data is sent only to the configured local Auto Tool API when the user clicks Send to Auto Tool. The extension can store the latest preview in `chrome.storage.local`; use Clear Saved Data in the popup to remove it.
 
 Auto Tool stores received Product Drafts locally in its SQLite database. Drafts may contain product description, price, Shopee URL, shop info, and validation warnings. Users can delete drafts from Import Inbox at any time.
+
+Auto Tool only saves product images locally after the user explicitly selects and imports them. Users are responsible for ensuring they have the right to use downloaded product images for their intended purpose.
 
 Users should review extracted data before rendering advertising videos. The extension does not independently verify product claims.
 

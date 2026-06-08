@@ -69,6 +69,9 @@ class VisualStyleSettings(BaseModel):
 
     preset_id: str = "clean_review_light"
     custom_overrides: dict[str, Any] | None = None
+    overlay_mode: str = "preset"
+    custom_overlay_path: str | None = None
+    custom_overlay_height_percent: int | None = Field(default=None, ge=5, le=100)
 
     @field_validator("preset_id")
     @classmethod
@@ -77,6 +80,23 @@ class VisualStyleSettings(BaseModel):
         if not cleaned:
             raise ValueError("visual_style.preset_id không được để trống.")
         return cleaned
+
+    @field_validator("overlay_mode")
+    @classmethod
+    def clean_overlay_mode(cls, value: str) -> str:
+        cleaned = value.strip().lower().replace("-", "_")
+        allowed = {"preset", "none", "custom"}
+        if cleaned not in allowed:
+            raise ValueError("visual_style.overlay_mode phải là preset, none hoặc custom.")
+        return cleaned
+
+    @field_validator("custom_overlay_path")
+    @classmethod
+    def clean_custom_overlay_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 def _clean_hex_color(value: str) -> str:

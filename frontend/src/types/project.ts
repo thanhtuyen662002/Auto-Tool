@@ -102,6 +102,9 @@ export interface OverlayStyle {
 export interface VisualStyleSettings {
   preset_id: string;
   custom_overrides?: Record<string, unknown> | null;
+  overlay_mode?: 'preset' | 'none' | 'custom' | string;
+  custom_overlay_path?: string | null;
+  custom_overlay_height_percent?: number | null;
 }
 
 export interface IndustrySettings {
@@ -132,6 +135,12 @@ export interface SourceMediaSettings {
   allow_excluded_fallback: boolean;
 }
 
+export interface ProjectAssetSettings {
+  main_product_asset_id?: string | null;
+  reference_asset_ids: string[];
+  poster_asset_ids: string[];
+}
+
 export interface ProjectConfig {
   project_name: string;
   source_folder: string;
@@ -149,6 +158,7 @@ export interface ProjectConfig {
   crop_safety?: CropSafetySettings;
   cache?: CacheSettings;
   source_media?: SourceMediaSettings;
+  assets?: ProjectAssetSettings;
 }
 
 export interface ProjectResponse {
@@ -789,6 +799,8 @@ export interface CreateProjectFromDraftRequest {
     output_count: number;
     duration: number;
   };
+  attach_selected_assets?: boolean;
+  selected_asset_ids?: string[] | null;
 }
 
 export interface ProductDraftApplyResponse {
@@ -805,4 +817,56 @@ export interface CreateProjectFromDraftResponse {
   project_id: string;
   draft_id: string;
   updated_config?: ProjectConfig | null;
+}
+
+export type ProductAssetType = 'image' | 'video' | 'thumbnail' | 'unknown';
+export type ProductAssetRole =
+  | 'main_product'
+  | 'reference'
+  | 'poster'
+  | 'thumbnail'
+  | 'description'
+  | 'variation'
+  | 'unused';
+export type ProductAssetStatus = 'pending' | 'downloaded' | 'failed' | 'skipped';
+
+export interface ProductAsset {
+  id: string;
+  project_id?: string | null;
+  draft_id?: string | null;
+  source_name?: string | null;
+  source_url?: string | null;
+  original_url?: string | null;
+  asset_type: ProductAssetType;
+  role: ProductAssetRole;
+  status: ProductAssetStatus;
+  filename?: string | null;
+  local_path?: string | null;
+  width?: number | null;
+  height?: number | null;
+  file_size?: number | null;
+  mime_type?: string | null;
+  quality_score?: number | null;
+  is_selected: boolean;
+  user_note?: string | null;
+  warnings: string[];
+  errors: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductAssetListResponse {
+  items: ProductAsset[];
+}
+
+export interface ProductAssetsImportResponse {
+  success: boolean;
+  items: ProductAsset[];
+}
+
+export interface AttachDraftAssetsResponse {
+  success: boolean;
+  project_id: string;
+  attached_count: number;
+  items: ProductAsset[];
 }

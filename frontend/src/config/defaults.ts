@@ -3,6 +3,7 @@ import type {
   IndustrySettings,
   MusicSettings,
   ProjectConfig,
+  ProjectAssetSettings,
   RenderSettings,
   TTSSettings,
   VisualStyleSettings,
@@ -55,6 +56,9 @@ export const DEFAULT_TTS_SETTINGS: TTSSettings = {
 export const DEFAULT_VISUAL_STYLE_SETTINGS: VisualStyleSettings = {
   preset_id: 'clean_review_light',
   custom_overrides: null,
+  overlay_mode: 'preset',
+  custom_overlay_path: 'examples/overlay',
+  custom_overlay_height_percent: 33,
 };
 
 export const DEFAULT_INDUSTRY_SETTINGS: IndustrySettings = {
@@ -83,6 +87,12 @@ export const DEFAULT_SOURCE_MEDIA_SETTINGS: SourceMediaSettings = {
   respect_user_exclusions: true,
   prefer_favorite_segments: true,
   allow_excluded_fallback: false,
+};
+
+export const DEFAULT_PROJECT_ASSET_SETTINGS: ProjectAssetSettings = {
+  main_product_asset_id: null,
+  reference_asset_ids: [],
+  poster_asset_ids: [],
 };
 
 export function createDefaultProjectConfig(): ProjectConfig {
@@ -128,5 +138,6 @@ export function createDefaultProjectConfig(): ProjectConfig {
     crop_safety: { ...DEFAULT_CROP_SAFETY_SETTINGS },
     cache: { ...DEFAULT_CACHE_SETTINGS },
     source_media: { ...DEFAULT_SOURCE_MEDIA_SETTINGS },
+    assets: { ...DEFAULT_PROJECT_ASSET_SETTINGS },
   };
 }

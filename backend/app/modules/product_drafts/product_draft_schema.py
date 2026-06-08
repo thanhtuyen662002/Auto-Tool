@@ -118,6 +118,8 @@ class CreateProjectFromDraftRequest(BaseModel):
     source_folder: str
     output_folder: str
     render: CreateProjectFromDraftRenderSettings = Field(default_factory=CreateProjectFromDraftRenderSettings)
+    attach_selected_assets: bool = False
+    selected_asset_ids: list[str] | None = None
 
 
 class CreateProjectFromDraftResponse(BaseModel):

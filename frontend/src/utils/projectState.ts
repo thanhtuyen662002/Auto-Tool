@@ -5,6 +5,7 @@ import {
   DEFAULT_CROP_SAFETY_SETTINGS,
   DEFAULT_INDUSTRY_SETTINGS,
   DEFAULT_MUSIC_SETTINGS,
+  DEFAULT_PROJECT_ASSET_SETTINGS,
   DEFAULT_SOURCE_MEDIA_SETTINGS,
   DEFAULT_TTS_SETTINGS,
   DEFAULT_VISUAL_STYLE_SETTINGS,
@@ -54,6 +55,7 @@ export function loadProjectConfig(projectId: string): ProjectConfig | null {
       source_media: config.source_media
         ? { ...DEFAULT_SOURCE_MEDIA_SETTINGS, ...config.source_media }
         : { ...DEFAULT_SOURCE_MEDIA_SETTINGS },
+      assets: config.assets ? { ...DEFAULT_PROJECT_ASSET_SETTINGS, ...config.assets } : { ...DEFAULT_PROJECT_ASSET_SETTINGS },
     };
   } catch {
     return null;

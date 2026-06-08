@@ -28,6 +28,15 @@ from app.modules.industry_presets.industry_preset_service import IndustryPresetS
 from app.modules.industry_presets.industry_schema import IndustryPreset, IndustrySettings
 from app.modules.output_review.review_service import OutputQualityReviewService, build_review_rows
 from app.modules.product_drafts import CreateProductDraftRequest, ProductDraftService
+from app.modules.product_assets import (
+    AttachDraftAssetsRequest,
+    AttachDraftAssetsResponse,
+    ImportAssetsFromDraftRequest,
+    ProductAssetListResponse,
+    ProductAssetService,
+    ProductAssetsImportResponse,
+    UpdateProductAssetRequest,
+)
 from app.modules.product_import import ProductImportService, suggest_industry_preset, to_project_product_info
 from app.modules.product_import.product_import_schema import (
     ProductImportDraftSummary,
@@ -332,6 +341,89 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/product-drafts/{draft_id}/assets", response_model=ProductAssetListResponse)
+    def list_product_draft_assets(draft_id: str) -> ProductAssetListResponse:
+        try:
+            items = ProductAssetService().list_assets_for_draft(draft_id)
+            return ProductAssetListResponse(items=items)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/product-drafts/{draft_id}/assets/import", response_model=ProductAssetsImportResponse)
+    def import_product_draft_assets(
+        draft_id: str,
+        request: ImportAssetsFromDraftRequest,
+    ) -> ProductAssetsImportResponse:
+        try:
+            payload = request.model_copy(update={"draft_id": draft_id})
+            items = ProductAssetService().import_assets_from_draft(payload)
+            return ProductAssetsImportResponse(success=True, items=items)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post(
+        "/api/product-drafts/{draft_id}/assets/attach-to-project/{project_id}",
+        response_model=AttachDraftAssetsResponse,
+    )
+    def attach_product_draft_assets_to_project(
+        draft_id: str,
+        project_id: str,
+        request: AttachDraftAssetsRequest,
+    ) -> AttachDraftAssetsResponse:
+        try:
+            items = ProductAssetService().attach_draft_assets_to_project(
+                draft_id,
+                project_id,
+                selected_asset_ids=request.selected_asset_ids,
+            )
+            return AttachDraftAssetsResponse(
+                success=True,
+                project_id=project_id,
+                attached_count=len(items),
+                items=items,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/assets", response_model=ProductAssetListResponse)
+    def list_project_assets(project_id: str) -> ProductAssetListResponse:
+        try:
+            return ProductAssetListResponse(items=ProductAssetService().list_assets_for_project(project_id))
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.put("/api/product-assets/{asset_id}", response_model=ProductAssetsImportResponse)
+    def update_product_asset(asset_id: str, request: UpdateProductAssetRequest) -> ProductAssetsImportResponse:
+        try:
+            item = ProductAssetService().update_asset(asset_id, request)
+            return ProductAssetsImportResponse(success=True, items=[item])
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.delete("/api/product-assets/{asset_id}", response_model=ProductAssetsImportResponse)
+    def delete_product_asset(asset_id: str) -> ProductAssetsImportResponse:
+        try:
+            item = ProductAssetService().delete_asset(asset_id)
+            return ProductAssetsImportResponse(success=True, items=[item])
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/product-assets/{asset_id}/file", response_class=FileResponse)
+    def get_product_asset_file(asset_id: str) -> FileResponse:
+        asset = ProductAssetService().repository.get(asset_id)
+        if not asset or not asset.local_path:
+            raise HTTPException(status_code=404, detail=f"Product asset file not found: {asset_id}")
+        path = Path(asset.local_path)
+        if not path.exists() or not path.is_file():
+            raise HTTPException(status_code=404, detail=f"Product asset file not found: {asset_id}")
+        return FileResponse(path, media_type=asset.mime_type or "application/octet-stream", filename=asset.filename)
 
     @app.get("/api/projects/{project_id}/latest-script", response_model=LatestScriptResponse)
     def get_latest_script(project_id: str) -> LatestScriptResponse:
@@ -1285,12 +1377,23 @@ def _normalize_config(config: ProjectConfig) -> ProjectConfig:
     if config.music.source_file:
         music_updates["source_file"] = str(resolve_path(config.music.source_file, base_dir, must_exist=True))
     music = config.music.model_copy(update=music_updates) if music_updates else config.music
+    visual_style_updates: dict[str, str] = {}
+    if config.visual_style.overlay_mode == "custom" and config.visual_style.custom_overlay_path:
+        visual_style_updates["custom_overlay_path"] = str(
+            resolve_path(config.visual_style.custom_overlay_path, base_dir, must_exist=True)
+        )
+    visual_style = (
+        config.visual_style.model_copy(update=visual_style_updates)
+        if visual_style_updates
+        else config.visual_style
+    )
 
     return config.model_copy(
         update={
             "source_folder": str(resolve_path(config.source_folder, base_dir, must_exist=True)),
             "output_folder": str(resolve_path(config.output_folder, base_dir)),
             "music": music,
+            "visual_style": visual_style,
         }
     )
 

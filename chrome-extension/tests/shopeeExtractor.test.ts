@@ -25,6 +25,18 @@ describe("Shopee extractor", () => {
     expect(product.extractorDebug?.overallConfidence).toBeGreaterThan(0.7);
   });
 
+  it("filters Shopee decorative and unrelated images", async () => {
+    loadFixture("shopee_product_basic.html", PRODUCT_URL);
+
+    const product = await extractShopeeProduct();
+    const images = product.images ?? [];
+
+    expect(images).toEqual(["https://down-vn.img.susercontent.com/file/basic.jpg"]);
+    expect(images.some((image) => image.includes("deo.shopeemobile.com"))).toBe(false);
+    expect(images.some((image) => image.includes("shoprating"))).toBe(false);
+    expect(images.some((image) => image === PRODUCT_URL)).toBe(false);
+  });
+
   it("adds a warning when brand is missing", async () => {
     loadFixture("shopee_product_missing_brand.html", "https://shopee.vn/Den-LED-cam-ung-i.321.654");
 
@@ -34,6 +46,17 @@ describe("Shopee extractor", () => {
     expect(product.brand).toBeUndefined();
     expect(product.warnings).toContain("Khong tim thay thuong hieu.");
     expect(brandField?.valueFound).toBe(false);
+  });
+
+  it("extracts shop name from current Shopee visible shop block", async () => {
+    loadFixture("shopee_product_shop_visible_text.html", "https://shopee.vn/product/40180096/7544569713");
+
+    const product = await extractShopeeProduct();
+    const shopField = product.extractorDebug?.fields.find((field) => field.field === "shop");
+
+    expect(product.shopName).toBe("Baby Gaming");
+    expect(shopField?.valueFound).toBe(true);
+    expect(shopField?.method).toBe("visible_text");
   });
 
   it("parses specifications from text labels", async () => {
