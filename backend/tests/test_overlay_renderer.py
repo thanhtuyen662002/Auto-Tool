@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from PIL import Image
+
 from app.modules.renderer import overlay_renderer
 from app.adapters.ffmpeg_adapter import FFmpegError
 from app.modules.renderer.overlay_renderer import OverlayRenderer
@@ -132,33 +134,44 @@ def test_overlay_asset_render_loops_image_for_full_video(monkeypatch):
     assert "overlay=0:0:eof_action=repeat:repeatlast=1[vbase]" in filter_complex
 
 
-def test_custom_overlay_uses_height_box_and_keeps_aspect_ratio(monkeypatch):
-    commands: list[list[str]] = []
+def test_custom_overlay_cover_builds_full_width_bottom_region(tmp_path):
+    source_path = tmp_path / "source.png"
+    output_path = tmp_path / "overlay.png"
+    Image.new("RGBA", (100, 100), (255, 0, 0, 255)).save(source_path)
 
-    def fake_run_ffmpeg(args: list[str]) -> None:
-        commands.append(args)
-
-    monkeypatch.setattr(overlay_renderer, "run_ffmpeg", fake_run_ffmpeg)
-
-    OverlayRenderer()._render_with_overlay_asset(
-        visual_video_path="visual.mp4",
-        overlay_asset_path="overlay.png",
-        voice_path="voice.wav",
-        subtitle_path="sub.ass",
-        config=_config(overlay_mode="custom", custom_overlay_height_percent=33),
-        output_path="final.mp4",
-        duration=12.0,
-        voice_duration=8.0,
+    result = OverlayRenderer._build_custom_overlay_asset(
+        source_path=str(source_path),
+        output_path=str(output_path),
         width=1080,
         height=1920,
-        include_subtitles=True,
-        music_path=None,
+        config=_config(overlay_mode="custom", custom_overlay_height_percent=33),
     )
 
-    filter_complex = commands[0][commands[0].index("-filter_complex") + 1]
-    assert "scale=w=1080:h=634:force_original_aspect_ratio=decrease[overlay]" in filter_complex
-    assert "overlay=x=(W-w)/2:y=H-h:eof_action=repeat:repeatlast=1[vbase]" in filter_complex
-    assert "scale=1080:1920[overlay]" not in filter_complex
+    image = Image.open(result).convert("RGBA")
+    assert image.size == (1080, 1920)
+    assert image.getchannel("A").getbbox() == (0, 1286, 1080, 1920)
+
+
+def test_custom_overlay_contain_keeps_whole_image_centered(tmp_path):
+    source_path = tmp_path / "source.png"
+    output_path = tmp_path / "overlay.png"
+    Image.new("RGBA", (100, 100), (255, 0, 0, 255)).save(source_path)
+
+    result = OverlayRenderer._build_custom_overlay_asset(
+        source_path=str(source_path),
+        output_path=str(output_path),
+        width=1080,
+        height=1920,
+        config=_config(
+            overlay_mode="custom",
+            custom_overlay_height_percent=33,
+            custom_overlay_fit_mode="contain",
+        ),
+    )
+
+    image = Image.open(result).convert("RGBA")
+    assert image.size == (1080, 1920)
+    assert image.getchannel("A").getbbox() == (223, 1286, 857, 1920)
 
 
 def test_render_final_video_can_disable_overlay(tmp_path, monkeypatch):
@@ -248,6 +261,7 @@ def _config(
     duck_under_voice: bool = False,
     overlay_mode: str = "preset",
     custom_overlay_height_percent: int | None = None,
+    custom_overlay_fit_mode: str = "cover",
 ) -> ProjectConfig:
     return ProjectConfig.model_validate(
         {
@@ -297,6 +311,7 @@ def _config(
                 "overlay_mode": overlay_mode,
                 "custom_overlay_path": None,
                 "custom_overlay_height_percent": custom_overlay_height_percent,
+                "custom_overlay_fit_mode": custom_overlay_fit_mode,
             },
         }
     )

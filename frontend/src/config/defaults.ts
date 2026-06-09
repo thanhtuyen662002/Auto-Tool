@@ -59,6 +59,7 @@ export const DEFAULT_VISUAL_STYLE_SETTINGS: VisualStyleSettings = {
   overlay_mode: 'preset',
   custom_overlay_path: 'examples/overlay',
   custom_overlay_height_percent: 33,
+  custom_overlay_fit_mode: 'cover',
 };
 
 export const DEFAULT_INDUSTRY_SETTINGS: IndustrySettings = {

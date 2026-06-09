@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PIL import Image
+
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_media_duration, probe_video, run_ffmpeg
 from app.modules.cache.cache_service import CacheService
 from app.modules.script_writer.script_writer import ProductVideoScript
@@ -52,17 +54,19 @@ class OverlayRenderer:
         preset = VisualStyleService().resolve_preset(config.visual_style)
         overlay_mode = config.visual_style.overlay_mode
         generated_overlay_asset_path = str(Path(output_path).with_name(f"{Path(output_path).stem}_overlay.png"))
-        overlay_asset_path = (
+        custom_overlay_source_path = (
             self._select_custom_overlay_asset(config.visual_style.custom_overlay_path)
             if overlay_mode == "custom"
-            else generated_overlay_asset_path
+            else None
         )
+        overlay_asset_path = generated_overlay_asset_path
         self.last_visual_style = {
             "preset_id": preset.id,
             "overlay_mode": overlay_mode,
             "overlay_asset": overlay_asset_path if overlay_mode != "none" else None,
-            "custom_overlay_path": overlay_asset_path if overlay_mode == "custom" else None,
+            "custom_overlay_path": custom_overlay_source_path,
             "custom_overlay_height_percent": self._custom_overlay_height_percent(config) if overlay_mode == "custom" else None,
+            "custom_overlay_fit_mode": config.visual_style.custom_overlay_fit_mode if overlay_mode == "custom" else None,
             "subtitle_format": "ass" if Path(subtitle_path).suffix.lower() == ".ass" else "srt",
             "ass_subtitle_path": subtitle_path if Path(subtitle_path).suffix.lower() == ".ass" else None,
             "fallback_used": False,
@@ -97,6 +101,14 @@ class OverlayRenderer:
                         overlay_asset_path,
                     ),
                     custom_overrides=config.visual_style.custom_overrides,
+                )
+            elif overlay_mode == "custom":
+                self._build_custom_overlay_asset(
+                    source_path=custom_overlay_source_path,
+                    output_path=overlay_asset_path,
+                    width=visual_info.width,
+                    height=visual_info.height,
+                    config=config,
                 )
             self._render_with_overlay_asset(
                 visual_video_path=visual_video_path,
@@ -605,19 +617,70 @@ class OverlayRenderer:
         except OSError as exc:
             logger.warning("Không thể xóa file audio tạm %s: %s", mixed_audio_path, exc)
 
-    @classmethod
-    def _overlay_asset_video_chain(cls, width: int, height: int, config: ProjectConfig) -> str:
-        if config.visual_style.overlay_mode == "custom":
-            target_height = max(1, round(height * cls._custom_overlay_height_percent(config) / 100))
-            return (
-                f"[1:v]format=rgba,"
-                f"scale=w={width}:h={target_height}:force_original_aspect_ratio=decrease[overlay];"
-                "[0:v][overlay]overlay=x=(W-w)/2:y=H-h:eof_action=repeat:repeatlast=1[vbase]"
-            )
+    @staticmethod
+    def _overlay_asset_video_chain(width: int, height: int, config: ProjectConfig) -> str:
         return (
             f"[1:v]format=rgba,scale={width}:{height}[overlay];"
             "[0:v][overlay]overlay=0:0:eof_action=repeat:repeatlast=1[vbase]"
         )
+
+    @classmethod
+    def _build_custom_overlay_asset(
+        cls,
+        source_path: str | None,
+        output_path: str,
+        width: int,
+        height: int,
+        config: ProjectConfig,
+    ) -> str:
+        if not source_path:
+            raise FileNotFoundError("Bạn đã chọn custom overlay nhưng chưa nhập đường dẫn ảnh/thư mục overlay.")
+
+        target = Path(output_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source = Image.open(source_path).convert("RGBA")
+        alpha_bbox = source.getchannel("A").getbbox()
+        if alpha_bbox:
+            source = source.crop(alpha_bbox)
+
+        target_height = max(1, round(height * cls._custom_overlay_height_percent(config) / 100))
+        target_width = width
+        fit_mode = config.visual_style.custom_overlay_fit_mode
+        overlay_region = cls._fit_overlay_region(source, target_width, target_height, fit_mode)
+
+        canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        canvas.alpha_composite(overlay_region, (0, height - target_height))
+        canvas.save(target)
+        return str(target)
+
+    @staticmethod
+    def _fit_overlay_region(source: Image.Image, target_width: int, target_height: int, fit_mode: str) -> Image.Image:
+        if fit_mode == "stretch":
+            return source.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+        ratio = (
+            max(target_width / source.width, target_height / source.height)
+            if fit_mode == "cover"
+            else min(target_width / source.width, target_height / source.height)
+        )
+        resized_width = max(1, round(source.width * ratio))
+        resized_height = max(1, round(source.height * ratio))
+        resized = source.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
+
+        if fit_mode == "cover":
+            left = max(0, (resized_width - target_width) // 2)
+            top = max(0, (resized_height - target_height) // 2)
+            return resized.crop((left, top, left + target_width, top + target_height))
+
+        region = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 0))
+        region.alpha_composite(
+            resized,
+            (
+                max(0, (target_width - resized_width) // 2),
+                max(0, (target_height - resized_height) // 2),
+            ),
+        )
+        return region
 
     @staticmethod
     def _custom_overlay_height_percent(config: ProjectConfig) -> int:

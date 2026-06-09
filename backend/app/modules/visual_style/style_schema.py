@@ -72,6 +72,7 @@ class VisualStyleSettings(BaseModel):
     overlay_mode: str = "preset"
     custom_overlay_path: str | None = None
     custom_overlay_height_percent: int | None = Field(default=None, ge=5, le=100)
+    custom_overlay_fit_mode: str = "cover"
 
     @field_validator("preset_id")
     @classmethod
@@ -88,6 +89,15 @@ class VisualStyleSettings(BaseModel):
         allowed = {"preset", "none", "custom"}
         if cleaned not in allowed:
             raise ValueError("visual_style.overlay_mode phải là preset, none hoặc custom.")
+        return cleaned
+
+    @field_validator("custom_overlay_fit_mode")
+    @classmethod
+    def clean_custom_overlay_fit_mode(cls, value: str) -> str:
+        cleaned = value.strip().lower().replace("-", "_")
+        allowed = {"cover", "contain", "stretch"}
+        if cleaned not in allowed:
+            raise ValueError("visual_style.custom_overlay_fit_mode phải là cover, contain hoặc stretch.")
         return cleaned
 
     @field_validator("custom_overlay_path")

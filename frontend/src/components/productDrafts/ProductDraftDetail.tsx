@@ -12,6 +12,7 @@ import TextArea from '../TextArea';
 import TextInput from '../TextInput';
 import NumberInput from '../NumberInput';
 import ProductAssetSelector from '../productAssets/ProductAssetSelector';
+import PathInput from '../PathInput';
 
 interface ProductDraftDetailProps {
   draft: ProductDraft;
@@ -272,8 +273,8 @@ export default function ProductDraftDetail({
           <h3 className="text-base font-semibold text-ink">Create Project from Draft</h3>
           <div className="mt-3 grid gap-3">
             <TextInput label="Project name" value={projectName} onChange={setProjectName} />
-            <TextInput label="Source folder" value={sourceFolder} onChange={setSourceFolder} />
-            <TextInput label="Output folder" value={outputFolder} onChange={setOutputFolder} />
+            <PathInput label="Thư mục video nguồn" value={sourceFolder} onChange={setSourceFolder} />
+            <PathInput label="Thư mục đầu ra" value={outputFolder} onChange={setOutputFolder} />
             <div className="grid gap-3 sm:grid-cols-2">
               <NumberInput label="Output count" value={outputCount} min={1} onChange={setOutputCount} />
               <NumberInput label="Duration" value={duration} min={3} onChange={setDuration} />

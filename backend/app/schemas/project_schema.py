@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
 from app.modules.industry_presets.industry_schema import IndustrySettings
 from app.modules.visual_style.style_schema import VisualStyleSettings
 
@@ -240,3 +241,4 @@ class ProjectConfig(BaseModel):
     cache: CacheSettings = Field(default_factory=CacheSettings)
     source_media: SourceMediaSettings = Field(default_factory=SourceMediaSettings)
     assets: ProjectAssetSettings = Field(default_factory=ProjectAssetSettings)
+    douyin_reup: DouyinReupSettings | None = None

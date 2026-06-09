@@ -1,9 +1,12 @@
 pydantic>=2.7,<3
 edge-tts>=6.1,<8
 gTTS>=2.5,<3
+click>=8.1,<8.2
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 numpy>=1.26,<3
 opencv-python>=4.9,<5
 google-auth>=2.40,<3
 Pillow>=10,<12
+huggingface-hub>=0.21,<1.0
+faster-whisper>=1.2,<2

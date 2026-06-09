@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+import app.api as api_module
 from app.api import create_app
 
 
@@ -12,3 +13,29 @@ def test_health_reports_v02_rc_version() -> None:
 
     assert response.status_code == 200
     assert response.json()["version"] == "0.2.0-rc1"
+
+
+def test_browse_path_endpoint_returns_selected_path(monkeypatch) -> None:
+    client = TestClient(create_app())
+
+    def fake_browse_local_path(mode, title=None, initial_path=None, extensions=None):
+        assert mode == "folder"
+        assert title == "Chọn thư mục video nguồn"
+        assert initial_path == "examples/sample_videos"
+        assert extensions == []
+        return "D:\\Videos\\Input"
+
+    monkeypatch.setattr(api_module, "browse_local_path", fake_browse_local_path)
+
+    response = client.post(
+        "/api/system/browse-path",
+        json={
+            "mode": "folder",
+            "title": "Chọn thư mục video nguồn",
+            "initial_path": "examples/sample_videos",
+            "extensions": [],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"path": "D:\\Videos\\Input", "cancelled": False}

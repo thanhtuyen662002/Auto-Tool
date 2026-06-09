@@ -117,6 +117,108 @@ Product drafts are stored locally on the user's machine. A draft can contain pro
 
 Shopee Extension imports also store `extractor_debug`, including field-level extraction method, confidence, missing fields, and warnings. Import responses that save a draft include `import_inbox_url` so the extension can open the Import Inbox or a specific draft directly.
 
+## Douyin Reup
+
+Douyin Reup là workflow local cho các video Douyin đã được người dùng tải sẵn vào máy. Tool không tải video từ Douyin, không OCR, không bypass watermark và không xoá watermark. Người dùng cần tự đảm bảo có quyền sử dụng video, subtitle và nhạc nền.
+
+Luồng xử lý:
+
+```txt
+Chọn thư mục video Douyin local
+-> Scan video và phát hiện subtitle
+-> Ưu tiên file .srt đi kèm
+-> Nếu không có .srt thì thử subtitle nhúng
+-> Nếu vẫn không có subtitle thì dùng ASR optional
+-> Dịch subtitle Trung -> Việt bằng Gemini
+-> Guard timing và wrap subtitle
+-> Render video dọc với overlay/subtitle/nhạc nền
+-> Ghi log riêng từng video và summary
+```
+
+Frontend page:
+
+```txt
+/douyin-reup
+```
+
+API:
+
+```txt
+POST /api/douyin-reup/scan
+POST /api/douyin-reup/process
+GET  /api/jobs/{job_id}
+GET  /api/douyin-reup/jobs/{job_id}/results
+```
+
+Ví dụ request scan:
+
+```json
+{
+  "source_folder": "D:\\Videos\\douyin"
+}
+```
+
+Ví dụ request process:
+
+```json
+{
+  "project_name": "douyin-reup-test",
+  "source_folder": "D:\\Videos\\douyin",
+  "output_folder": "D:\\Videos\\outputs",
+  "settings": {
+    "enabled": true,
+    "source_language": "zh",
+    "target_language": "vi",
+    "translation_provider": "gemini",
+    "subtitle_source_priority": ["sidecar_srt", "embedded_subtitle", "asr"],
+    "use_sidecar_srt": true,
+    "use_embedded_subtitle": true,
+    "use_asr_if_no_subtitle": true,
+    "asr_provider": "faster_whisper",
+    "asr_model_size": "medium",
+    "asr_device": "auto",
+    "visual_style_preset_id": "clean_review_light",
+    "burn_subtitle": true,
+    "add_overlay": true,
+    "music_folder": "D:\\Music\\bgm",
+    "bgm_volume": 0.16,
+    "original_audio_volume": 0.85,
+    "duck_bgm_when_voice": false,
+    "resolution": "1080x1920",
+    "fps": 30,
+    "process_mode": "all",
+    "max_videos": null,
+    "selected_video_paths": [],
+    "keep_temp": false
+  }
+}
+```
+
+Output mẫu:
+
+```txt
+outputs/douyin-reup-test-douyin-reup-2026-06-09-120000/
+  video_001/
+    source.mp4
+    video_001_source_zh.srt
+    video_001_vi.srt
+    video_001_vi_fixed.srt
+    douyin_001_vi.ass
+    douyin_001_overlay.png
+    douyin_001.mp4
+    video_001_log.json
+  douyin_reup_summary.json
+```
+
+Ghi chú:
+
+- Gemini API key lấy từ trang `Cài đặt chung` hoặc `.env`.
+- Nếu Gemini lỗi, subtitle nguồn được giữ lại và job ghi warning, không crash toàn batch.
+- ASR dùng `faster-whisper`. Khi chạy backend bằng source code, cài bằng `py -m pip install -r backend/requirements.txt`. Khi chạy exe, package ASR được bundle trong exe nhưng model Whisper vẫn cần tải từ HuggingFace ở lần nhận diện đầu tiên.
+- Nếu runtime thiếu asset VAD `silero_vad_v6.onnx`, ASR sẽ tự retry không dùng VAD thay vì làm fail output. Bản exe build mới cũng bundle thư mục `faster_whisper/assets`.
+- Dùng file `.srt` đi kèm video là cách ổn định và nhanh nhất; ASR chỉ nên dùng khi video không có subtitle nguồn.
+- Nếu nhạc nền lỗi, renderer sẽ thử xuất video chỉ với audio gốc.
+
 ## v0.2 QA Checklist
 
 Use:
@@ -156,6 +258,8 @@ Dự án đang ở giai đoạn MVP có CLI, FastAPI local, React UI và bản W
 - Cắt video thành segment logic theo `cut_intensity`.
 - Smart Segment Scoring bằng OpenCV/NumPy để ưu tiên đoạn sáng, rõ, có chuyển động vừa phải.
 - Product-aware Timeline Templates để dựng cấu trúc `Hook -> Product -> Demo -> Benefit -> CTA`.
+- Product Assets từ Import Inbox để chọn `main_product`, `reference`, `poster`, `thumbnail`.
+- Product Reference Prompt Pack tạo accuracy lock, storyboard 5 cảnh, full prompt, negative prompt và JSON prompt để copy sang công cụ AI video/image bên ngoài.
 - Build timeline weighted random theo điểm chất lượng segment, tag và template slot cho nhiều output.
 - Render visual recut bằng FFmpeg theo tỷ lệ dọc `1080x1920`.
 - Crop Safety Guard phân tích frame mẫu để giảm rủi ro crop mất sản phẩm, tự fallback sang nền mờ khi video ngang có nội dung sát mép.
@@ -1656,6 +1760,55 @@ data/imported_assets/drafts/{draft_id}/
 ```
 
 Auto Tool chỉ chấp nhận tải `image/jpeg`, `image/png`, `image/webp`, giới hạn 15MB mỗi ảnh. Người dùng cần tự đảm bảo có quyền sử dụng hình ảnh cho mục đích của mình.
+
+---
+
+## Product Reference Prompt Pack
+
+Prompt Pack dùng product info, specs/features, industry preset, visual style, timeline template và Product Assets đã chọn để tạo bộ prompt tham chiếu sản phẩm. Chức năng này chỉ tạo nội dung prompt/storyboard/export text, không gọi AI video model, không gọi image generation model, không chỉnh sửa ảnh bằng AI và không tự đăng video.
+
+Luồng sử dụng:
+
+```txt
+1. Extension gửi Product Draft từ Shopee vào Import Inbox
+2. User import ảnh sản phẩm vào project
+3. User đặt một ảnh là Main Product trong Product Assets
+4. Vào /projects/{project_id}/prompt-pack
+5. Chọn duration 8s hoặc 10s, scene count 5, model hint
+6. Bấm Generate Prompt Pack
+7. Tool tạo Product Reference Summary, Accuracy Lock, Storyboard, Full Prompt, Negative Prompt và JSON Prompt
+8. User copy prompt để dùng ở AI video/image model bên ngoài
+```
+
+Files được export vào:
+
+```txt
+{output_folder}/{project_name}/prompt_pack/
+```
+
+Gồm:
+
+```txt
+product_reference_summary.json
+storyboard_5_scenes.json
+video_prompt_full.txt
+video_prompt_short.txt
+video_prompt_pack.json
+negative_prompt.txt
+prompt_pack_generation_log.json
+```
+
+API:
+
+```txt
+POST /api/projects/{project_id}/reference-summary
+POST /api/projects/{project_id}/storyboard
+POST /api/projects/{project_id}/video-prompt-pack
+```
+
+Prompt Accuracy Lock nhắc model giữ đúng tên sản phẩm, thương hiệu, màu sắc, form dáng, logo, chi tiết vật lý và chỉ dùng claim đã có trong product info/specs. Nếu Safety Guard phát hiện warning, warning đó được đưa vào forbidden claims để giảm rủi ro prompt bịa hoặc nói quá sự thật.
+
+Nếu project chưa có ảnh tham chiếu, Prompt Pack vẫn tạo được nhưng sẽ có warning: prompt chỉ dựa trên text nên độ chính xác hình ảnh có thể thấp hơn.
 
 ---
 

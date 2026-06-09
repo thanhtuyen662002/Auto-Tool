@@ -58,7 +58,7 @@ def generate_ass_subtitle(
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
 
-    for line in lines:
+    for line in _expand_lines_for_display(lines, subtitle.max_chars_per_line, subtitle.max_lines):
         wrapped = r"\N".join(
             _escape_ass_text(part)
             for part in wrap_subtitle_text(line.text, subtitle.max_chars_per_line, subtitle.max_lines)
@@ -90,19 +90,76 @@ def wrap_subtitle_text(text: str, max_chars_per_line: int, max_lines: int) -> li
     cleaned = " ".join(str(text).replace("\r", " ").replace("\n", " ").split())
     if not cleaned:
         return [""]
-    wrapped = textwrap.wrap(
+    return textwrap.wrap(
         cleaned,
         width=max_chars_per_line,
         break_long_words=False,
         break_on_hyphens=False,
     )
-    if len(wrapped) <= max_lines:
-        return wrapped
-    kept = wrapped[: max(1, max_lines - 1)]
-    last = " ".join(wrapped[max(1, max_lines - 1) :])
-    if len(last) > max_chars_per_line:
-        last = textwrap.shorten(last, width=max_chars_per_line, placeholder="")
-    return [*kept, last.strip()][:max_lines]
+
+
+def _expand_lines_for_display(
+    lines: list[SubtitleLine],
+    max_chars_per_line: int,
+    max_lines: int,
+) -> list[SubtitleLine]:
+    expanded: list[SubtitleLine] = []
+    for line in lines:
+        chunks = _split_text_for_display(line.text, max_chars_per_line, max_lines)
+        if not chunks:
+            continue
+        start = float(line.start_hint or 0.0)
+        end = float(line.end_hint or 0.0)
+        if len(chunks) == 1:
+            expanded.append(line.model_copy(update={"text": chunks[0]}))
+            continue
+
+        duration = max(0.1, end - start)
+        chunk_duration = duration / len(chunks)
+        for index, chunk in enumerate(chunks):
+            chunk_start = start + chunk_duration * index
+            chunk_end = end if index == len(chunks) - 1 else start + chunk_duration * (index + 1)
+            if chunk_end <= chunk_start:
+                continue
+            expanded.append(
+                line.model_copy(
+                    update={
+                        "start_hint": chunk_start,
+                        "end_hint": chunk_end,
+                        "text": chunk,
+                    }
+                )
+            )
+    return expanded
+
+
+def _split_text_for_display(text: str, max_chars_per_line: int, max_lines: int) -> list[str]:
+    cleaned = " ".join(str(text).replace("\r", " ").replace("\n", " ").split())
+    if not cleaned:
+        return []
+
+    line_limit = max(10, int(max_chars_per_line))
+    lines_per_chunk = max(1, int(max_lines))
+    chunks: list[str] = []
+    current_lines: list[str] = []
+    current_line = ""
+
+    for word in cleaned.split():
+        candidate = word if not current_line else f"{current_line} {word}"
+        if len(candidate) <= line_limit or not current_line:
+            current_line = candidate
+            continue
+        current_lines.append(current_line)
+        current_line = word
+        if len(current_lines) >= lines_per_chunk:
+            chunks.append("\n".join(current_lines))
+            current_lines = []
+
+    if current_line:
+        current_lines.append(current_line)
+    if current_lines:
+        chunks.append("\n".join(current_lines))
+    return chunks
 
 
 def _normalize_subtitle_lines(items: list[Any]) -> list[SubtitleLine]:

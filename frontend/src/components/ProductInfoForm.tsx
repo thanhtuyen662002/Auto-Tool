@@ -1,5 +1,6 @@
 import type { ProductSpec, ProjectConfig } from '../types/project';
 import NumberInput from './NumberInput';
+import PathInput from './PathInput';
 import TextArea from './TextArea';
 import TextInput from './TextInput';
 
@@ -46,12 +47,12 @@ export default function ProductInfoForm({ config, onChange }: ProductInfoFormPro
         />
       </div>
 
-      <TextInput
+      <PathInput
         label="Đường dẫn thư mục video nguồn"
         value={config.source_folder}
         onChange={(source_folder) => update({ source_folder })}
       />
-      <TextInput
+      <PathInput
         label="Đường dẫn thư mục đầu ra"
         value={config.output_folder}
         onChange={(output_folder) => update({ output_folder })}

@@ -79,7 +79,8 @@
     "custom_overrides": null,
     "overlay_mode": "preset",
     "custom_overlay_path": "./overlay",
-    "custom_overlay_height_percent": 33
+    "custom_overlay_height_percent": 33,
+    "custom_overlay_fit_mode": "cover"
   },
   "industry": {
     "preset_id": "general_product"

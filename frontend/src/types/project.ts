@@ -105,6 +105,36 @@ export interface VisualStyleSettings {
   overlay_mode?: 'preset' | 'none' | 'custom' | string;
   custom_overlay_path?: string | null;
   custom_overlay_height_percent?: number | null;
+  custom_overlay_fit_mode?: 'cover' | 'contain' | 'stretch' | string;
+}
+
+export interface DouyinReupSettings {
+  enabled: boolean;
+  source_language: string;
+  target_language: string;
+  translation_provider: string;
+  subtitle_source_priority: string[];
+  use_sidecar_srt: boolean;
+  use_embedded_subtitle: boolean;
+  use_asr_if_no_subtitle: boolean;
+  asr_provider: string;
+  asr_model_size: string;
+  asr_device: string;
+  asr_vad_filter: boolean;
+  asr_subtitle_offset_seconds: number;
+  visual_style_preset_id: string;
+  burn_subtitle: boolean;
+  add_overlay: boolean;
+  music_folder?: string | null;
+  bgm_volume: number;
+  original_audio_volume: number;
+  duck_bgm_when_voice: boolean;
+  resolution: string;
+  fps: number;
+  process_mode: 'all' | 'selected' | 'first_n' | string;
+  max_videos?: number | null;
+  selected_video_paths: string[];
+  keep_temp: boolean;
 }
 
 export interface IndustrySettings {
@@ -159,6 +189,7 @@ export interface ProjectConfig {
   cache?: CacheSettings;
   source_media?: SourceMediaSettings;
   assets?: ProjectAssetSettings;
+  douyin_reup?: DouyinReupSettings | null;
 }
 
 export interface ProjectResponse {
@@ -181,6 +212,20 @@ export interface AppSettings {
   google_tts_access_token?: string | null;
 }
 
+export type BrowsePathMode = 'file' | 'folder';
+
+export interface BrowsePathRequest {
+  mode: BrowsePathMode;
+  title?: string | null;
+  initial_path?: string | null;
+  extensions?: string[];
+}
+
+export interface BrowsePathResponse {
+  path?: string | null;
+  cancelled: boolean;
+}
+
 export interface MediaFile {
   path: string;
   duration: number;
@@ -196,6 +241,78 @@ export interface ScanResponse {
   valid_videos: number;
   invalid_files: number;
   media: MediaFile[];
+}
+
+export interface DouyinVideoItem {
+  path: string;
+  filename: string;
+  duration: number;
+  width: number;
+  height: number;
+  fps: number;
+  has_audio: boolean;
+  sidecar_srt_path?: string | null;
+  embedded_subtitle_found: boolean;
+  status: string;
+  warnings: string[];
+  errors: string[];
+}
+
+export interface DouyinReupScanResponse {
+  total_files: number;
+  valid_videos: number;
+  invalid_files: number;
+  media: DouyinVideoItem[];
+  errors: string[];
+}
+
+export interface DouyinReupProcessRequest {
+  project_name: string;
+  source_folder: string;
+  output_folder: string;
+  settings: DouyinReupSettings;
+}
+
+export interface DouyinReupProcessResponse {
+  project_id: string;
+  job_id: string;
+  status: string;
+}
+
+export interface DouyinOutputResult {
+  index: number;
+  path: string;
+  status: string;
+  source_video: string;
+  subtitle_source?: string | null;
+  source_srt_file?: string | null;
+  translated_srt_file?: string | null;
+  subtitle_ass_file?: string | null;
+  overlay_file?: string | null;
+  bgm_file?: string | null;
+  log_file?: string | null;
+  duration?: number | null;
+  warnings: string[];
+  errors: string[];
+}
+
+export interface DouyinReupSummary {
+  project_name: string;
+  output_folder: string;
+  total_videos: number;
+  processed_outputs: number;
+  successful_outputs: number;
+  failed_outputs: number;
+  warnings_count: number;
+  subtitle_sources: Record<string, number>;
+  failed_items: Array<{ index: number | string; reason: string }>;
+  outputs: DouyinOutputResult[];
+  summary_file?: string | null;
+}
+
+export interface DouyinReupJobResultsResponse {
+  summary?: DouyinReupSummary | null;
+  outputs: DouyinOutputResult[];
 }
 
 export interface SegmentScoringSummary {
@@ -869,4 +986,94 @@ export interface AttachDraftAssetsResponse {
   project_id: string;
   attached_count: number;
   items: ProductAsset[];
+}
+
+export interface ProductReferenceAsset {
+  asset_id: string;
+  role: string;
+  local_path?: string | null;
+  original_url?: string | null;
+  width?: number | null;
+  height?: number | null;
+  quality_score?: number | null;
+  user_note?: string | null;
+}
+
+export interface ProductReferenceSummary {
+  project_id: string;
+  product_name: string;
+  brand?: string | null;
+  industry_preset_id?: string | null;
+  visual_identity: string;
+  product_accuracy_lock: string[];
+  allowed_claims: string[];
+  forbidden_claims: string[];
+  reference_assets: ProductReferenceAsset[];
+  main_product_asset_id?: string | null;
+  warnings: string[];
+}
+
+export interface StoryboardScene {
+  scene_index: number;
+  duration_seconds: number;
+  scene_type: string;
+  purpose: string;
+  visual_description: string;
+  camera_direction: string;
+  product_accuracy_notes: string[];
+  subtitle_suggestion?: string | null;
+  voiceover_suggestion?: string | null;
+}
+
+export interface ProductStoryboard {
+  project_id: string;
+  title: string;
+  total_duration_seconds: number;
+  aspect_ratio: string;
+  scenes: StoryboardScene[];
+  negative_prompt: string[];
+  reference_assets: ProductReferenceAsset[];
+}
+
+export interface VideoPromptPack {
+  project_id: string;
+  product_name: string;
+  prompt_type: string;
+  model_hint?: string | null;
+  product_reference_summary: ProductReferenceSummary;
+  storyboard: ProductStoryboard;
+  video_prompt: string;
+  negative_prompt: string;
+  short_prompt?: string | null;
+  json_prompt?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ReferenceSummaryResponse {
+  success: boolean;
+  summary: ProductReferenceSummary;
+}
+
+export interface StoryboardRequest {
+  duration_seconds: number;
+  scene_count: number;
+  style?: string | null;
+}
+
+export interface StoryboardResponse {
+  success: boolean;
+  storyboard: ProductStoryboard;
+}
+
+export interface VideoPromptPackRequest {
+  duration_seconds: number;
+  scene_count: number;
+  model_hint?: string | null;
+  style?: string | null;
+}
+
+export interface VideoPromptPackResponse {
+  success: boolean;
+  prompt_pack: VideoPromptPack;
+  files: Record<string, string>;
 }

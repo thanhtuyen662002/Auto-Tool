@@ -23,6 +23,9 @@ from app.modules.content_manager.content_service import ContentService
 from app.modules.cache.cache_service import CacheService
 from app.modules.content_safety.safety_guard_service import SafetyGuardService
 from app.modules.content_safety.safety_schema import SafetyCheckResult, SafetyIssue, build_safety_result
+from app.modules.douyin_reup.douyin_folder_scanner import DouyinFolderScanner
+from app.modules.douyin_reup.douyin_reup_service import DouyinReupService
+from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
 from app.modules.industry_presets.industry_registry import get_industry_preset
 from app.modules.industry_presets.industry_preset_service import IndustryPresetService
 from app.modules.industry_presets.industry_schema import IndustryPreset, IndustrySettings
@@ -38,6 +41,7 @@ from app.modules.product_assets import (
     UpdateProductAssetRequest,
 )
 from app.modules.product_import import ProductImportService, suggest_industry_preset, to_project_product_info
+from app.modules.product_reference_prompt import ProductReferencePromptService
 from app.modules.product_import.product_import_schema import (
     ProductImportDraftSummary,
     ProductImportSource,
@@ -65,11 +69,18 @@ from app.schemas.api_schema import (
     AppSettings,
     ApplyIndustryPresetRequest,
     ApplyIndustryPresetResponse,
+    BrowsePathRequest,
+    BrowsePathResponse,
     BulkSegmentReviewRequest,
     BulkSegmentReviewResponse,
     ContentExportFile,
     ContentExportResponse,
     ContentItemsResponse,
+    DouyinReupJobResultsResponse,
+    DouyinReupProcessRequest,
+    DouyinReupProcessResponse,
+    DouyinReupScanRequest,
+    DouyinReupScanResponse,
     ExportContentRequest,
     HealthResponse,
     IndustryPresetsResponse,
@@ -86,6 +97,7 @@ from app.schemas.api_schema import (
     ProductDraftApplyResponse,
     ProductDraftListResponse,
     ProjectListResponse,
+    ReferenceSummaryResponse,
     UpdateProductDraftRequest,
     CreateProjectFromDraftRequest,
     CreateProjectFromDraftResponse,
@@ -104,6 +116,8 @@ from app.schemas.api_schema import (
     ScriptVariantStylesResponse,
     ScriptVariantSummaryItem,
     SourceMediaResponse,
+    StoryboardRequest,
+    StoryboardResponse,
     TTSProviderItem,
     TTSProvidersResponse,
     TTSVoiceItem,
@@ -128,10 +142,13 @@ from app.schemas.api_schema import (
     VisualStylePresetsResponse,
     VisualStylePreviewRequest,
     VisualStylePreviewResponse,
+    VideoPromptPackRequest,
+    VideoPromptPackResponse,
 )
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir, write_json
 from app.utils.app_paths import app_data_dir, frontend_dist_dir
+from app.utils.local_dialog import LocalDialogError, browse_local_path
 from app.utils.path_utils import resolve_path
 
 
@@ -191,6 +208,56 @@ def create_app() -> FastAPI:
     @app.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         return HealthResponse(status="ok", version=_APP_VERSION)
+
+    @app.post("/api/douyin-reup/scan", response_model=DouyinReupScanResponse)
+    def scan_douyin_reup_folder(request: DouyinReupScanRequest) -> DouyinReupScanResponse:
+        scanner = DouyinFolderScanner()
+        try:
+            media = scanner.scan_folder(request.source_folder)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể scan thư mục Douyin: {exc}") from exc
+        return DouyinReupScanResponse(
+            total_files=scanner.total_files,
+            valid_videos=len(media),
+            invalid_files=scanner.invalid_files,
+            media=media,
+            errors=scanner.errors,
+        )
+
+    @app.post("/api/douyin-reup/process", response_model=DouyinReupProcessResponse)
+    def process_douyin_reup_folder(request: DouyinReupProcessRequest) -> DouyinReupProcessResponse:
+        database.init_db()
+        try:
+            config = _build_douyin_project_config(request)
+            scanner = DouyinFolderScanner()
+            media = scanner.scan_folder(config.source_folder)
+            total_outputs = _count_douyin_selected(media, config.douyin_reup or DouyinReupSettings(enabled=True))
+            if total_outputs <= 0:
+                raise ValueError(f"Không tìm thấy video hợp lệ trong thư mục Douyin: {config.source_folder}")
+        except (FileNotFoundError, ValueError, ValidationError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        project_id = str(uuid.uuid4())
+        job_id = str(uuid.uuid4())
+        database.create_project(project_id, config.model_dump(mode="json"))
+        database.create_job(job_id, project_id, preview_only=False, total_outputs=total_outputs)
+        threading.Thread(target=run_douyin_reup_job, args=(job_id,), daemon=True).start()
+        return DouyinReupProcessResponse(project_id=project_id, job_id=job_id, status="queued")
+
+    @app.post("/api/system/browse-path", response_model=BrowsePathResponse)
+    def browse_path(request: BrowsePathRequest) -> BrowsePathResponse:
+        try:
+            path = browse_local_path(
+                mode=request.mode,
+                title=request.title,
+                initial_path=request.initial_path,
+                extensions=request.extensions,
+            )
+        except LocalDialogError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return BrowsePathResponse(path=path, cancelled=path is None)
 
     @app.get("/api/settings", response_model=AppSettings)
     def get_app_settings() -> AppSettings:
@@ -424,6 +491,51 @@ def create_app() -> FastAPI:
         if not path.exists() or not path.is_file():
             raise HTTPException(status_code=404, detail=f"Product asset file not found: {asset_id}")
         return FileResponse(path, media_type=asset.mime_type or "application/octet-stream", filename=asset.filename)
+
+    @app.post("/api/projects/{project_id}/reference-summary", response_model=ReferenceSummaryResponse)
+    def generate_reference_summary(project_id: str) -> ReferenceSummaryResponse:
+        try:
+            summary = ProductReferencePromptService().generate_reference_summary(project_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return ReferenceSummaryResponse(success=True, summary=summary)
+
+    @app.post("/api/projects/{project_id}/storyboard", response_model=StoryboardResponse)
+    def generate_storyboard(project_id: str, request: StoryboardRequest) -> StoryboardResponse:
+        try:
+            storyboard = ProductReferencePromptService().generate_storyboard(
+                project_id=project_id,
+                duration_seconds=request.duration_seconds,
+                scene_count=request.scene_count,
+                style=request.style,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return StoryboardResponse(success=True, storyboard=storyboard)
+
+    @app.post("/api/projects/{project_id}/video-prompt-pack", response_model=VideoPromptPackResponse)
+    def generate_video_prompt_pack(
+        project_id: str,
+        request: VideoPromptPackRequest,
+    ) -> VideoPromptPackResponse:
+        try:
+            prompt_pack, files = ProductReferencePromptService().generate_video_prompt_pack(
+                project_id=project_id,
+                duration_seconds=request.duration_seconds,
+                scene_count=request.scene_count,
+                model_hint=request.model_hint,
+                style=request.style,
+                export_files=True,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return VideoPromptPackResponse(success=True, prompt_pack=prompt_pack, files=files)
 
     @app.get("/api/projects/{project_id}/latest-script", response_model=LatestScriptResponse)
     def get_latest_script(project_id: str) -> LatestScriptResponse:
@@ -1035,6 +1147,15 @@ def create_app() -> FastAPI:
         job = _get_job_or_404(job_id)
         return JobResultsResponse(outputs=job["results"].get("outputs", []))
 
+    @app.get("/api/douyin-reup/jobs/{job_id}/results", response_model=DouyinReupJobResultsResponse)
+    def get_douyin_reup_job_results(job_id: str) -> DouyinReupJobResultsResponse:
+        job = _get_job_or_404(job_id)
+        payload = job.get("results") or {}
+        return DouyinReupJobResultsResponse(
+            summary=payload.get("summary"),
+            outputs=payload.get("outputs", []),
+        )
+
     @app.get("/api/files/video", response_model=None)
     def get_video_file(path: str = Query(...)) -> FileResponse:
         video_path = Path(path).expanduser().resolve()
@@ -1168,6 +1289,75 @@ def run_render_job(job_id: str) -> None:
         )
 
 
+def run_douyin_reup_job(job_id: str) -> None:
+    database.init_db()
+    job = database.get_job(job_id)
+    if not job:
+        return
+
+    project = database.get_project(job["project_id"])
+    if not project:
+        database.update_job(
+            job_id,
+            status="failed",
+            current_step="failed",
+            progress=100,
+            error=f"Project not found: {job['project_id']}",
+        )
+        return
+
+    def progress_callback(payload: dict[str, Any]) -> None:
+        database.update_job(
+            job_id,
+            status="running",
+            current_step=payload.get("current_step", "running"),
+            progress=int(payload.get("progress", 0)),
+            total_outputs=int(payload.get("total_outputs", job["total_outputs"])),
+            completed_outputs=int(payload.get("completed_outputs", 0)),
+            failed_outputs=int(payload.get("failed_outputs", 0)),
+        )
+
+    def log_callback(level: str, message: str) -> None:
+        database.add_job_log(job_id, level, message)
+
+    try:
+        database.update_job(job_id, status="running", current_step="starting", progress=1)
+        config = _apply_app_settings(ProjectConfig.model_validate(project["config"]))
+        summary = DouyinReupService().process_folder(
+            config,
+            progress_callback=progress_callback,
+            log_callback=log_callback,
+        )
+        status = "completed" if summary.get("failed_outputs", 0) == 0 else "completed_with_errors"
+        database.update_job(
+            job_id,
+            status=status,
+            current_step="completed",
+            progress=100,
+            total_outputs=int(summary.get("processed_outputs") or job["total_outputs"]),
+            completed_outputs=int(summary.get("successful_outputs") or 0),
+            failed_outputs=int(summary.get("failed_outputs") or 0),
+            output_folder=summary.get("output_folder"),
+            results_json=json.dumps(
+                {
+                    "summary": summary,
+                    "outputs": summary.get("outputs", []),
+                },
+                ensure_ascii=False,
+            ),
+        )
+    except Exception as exc:
+        database.add_job_log(job_id, "error", str(exc))
+        database.update_job(
+            job_id,
+            status="failed",
+            current_step="failed",
+            progress=100,
+            failed_outputs=job["total_outputs"],
+            error=str(exc),
+        )
+
+
 def run_rerender_job(job_id: str, request_payload: dict[str, Any], rerender_outputs: list[int]) -> None:
     database.init_db()
     job = database.get_job(job_id)
@@ -1266,6 +1456,78 @@ def _save_latest_script_from_summary(
 
 def _get_app_settings() -> AppSettings:
     return AppSettings.model_validate(database.get_app_settings() or {})
+
+
+def _build_douyin_project_config(request: DouyinReupProcessRequest) -> ProjectConfig:
+    base_dir = Path.cwd()
+    settings = _normalize_douyin_settings(request.settings.model_copy(update={"enabled": True}), base_dir)
+    source_folder = str(resolve_path(request.source_folder, base_dir, must_exist=True))
+    output_folder = str(resolve_path(request.output_folder, base_dir))
+    return ProjectConfig.model_validate(
+        {
+            "project_name": request.project_name.strip(),
+            "source_folder": source_folder,
+            "output_folder": output_folder,
+            "product": {
+                "name": "Douyin Reup",
+                "brand": "",
+                "description": "Xử lý video Douyin local với subtitle dịch sang tiếng Việt.",
+                "features": ["Dịch subtitle", "Thêm overlay", "Trộn nhạc nền"],
+                "cta": "Xem video",
+            },
+            "render": {
+                "output_count": settings.max_videos or 1,
+                "duration": 8,
+                "aspect_ratio": "9:16",
+                "resolution": settings.resolution,
+                "fps": settings.fps,
+            },
+            "effects": {
+                "cut_intensity": 0,
+                "speed_variation": 0,
+                "grain": 0,
+                "zoom_motion": 0,
+                "overlay_height": 22,
+                "subtitle_size": 54,
+            },
+            "ai": {
+                "text_model": "gemini-3.1-flash-lite",
+                "tone": "subtitle_translator",
+                "language": settings.target_language,
+                "gemini_api_keys": [],
+            },
+            "music": {
+                "enabled": False,
+                "volume": 0.12,
+                "fade_in": 0.5,
+                "fade_out": 0.8,
+                "duck_under_voice": False,
+            },
+            "visual_style": {"preset_id": settings.visual_style_preset_id},
+            "douyin_reup": settings.model_dump(mode="json"),
+        }
+    )
+
+
+def _normalize_douyin_settings(settings: DouyinReupSettings, base_dir: Path) -> DouyinReupSettings:
+    updates: dict[str, Any] = {}
+    if settings.music_folder:
+        updates["music_folder"] = str(resolve_path(settings.music_folder, base_dir, must_exist=True))
+    if settings.selected_video_paths:
+        updates["selected_video_paths"] = [
+            str(resolve_path(path, base_dir, must_exist=True)) for path in settings.selected_video_paths
+        ]
+    return settings.model_copy(update=updates) if updates else settings
+
+
+def _count_douyin_selected(videos: list[Any], settings: DouyinReupSettings) -> int:
+    selected = videos
+    if settings.process_mode == "selected":
+        selected_paths = {str(Path(path).expanduser().resolve()).lower() for path in settings.selected_video_paths}
+        selected = [video for video in videos if str(Path(video.path).expanduser().resolve()).lower() in selected_paths]
+    if settings.max_videos:
+        selected = selected[: settings.max_videos]
+    return len(selected)
 
 
 def _apply_app_settings(config: ProjectConfig) -> ProjectConfig:
@@ -1387,6 +1649,9 @@ def _normalize_config(config: ProjectConfig) -> ProjectConfig:
         if visual_style_updates
         else config.visual_style
     )
+    douyin_reup = config.douyin_reup
+    if douyin_reup:
+        douyin_reup = _normalize_douyin_settings(douyin_reup, base_dir)
 
     return config.model_copy(
         update={
@@ -1394,6 +1659,7 @@ def _normalize_config(config: ProjectConfig) -> ProjectConfig:
             "output_folder": str(resolve_path(config.output_folder, base_dir)),
             "music": music,
             "visual_style": visual_style,
+            "douyin_reup": douyin_reup,
         }
     )
 

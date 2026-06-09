@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.content_manager.content_schema import ContentBatchSummary, OutputContentItem, PublishStatus
+from app.modules.douyin_reup.douyin_schema import DouyinOutputResult, DouyinReupSettings, DouyinReupSummary, DouyinVideoItem
 from app.modules.industry_presets.industry_schema import IndustryPreset
 from app.modules.product_drafts.product_draft_schema import (
     ClearArchivedDraftsResponse,
@@ -18,6 +19,11 @@ from app.modules.product_drafts.product_draft_schema import (
     UpdateProductDraftRequest,
 )
 from app.modules.product_import.product_import_schema import ProductImportResult, ProductInfoNormalized, RawProductInput
+from app.modules.product_reference_prompt.reference_schema import (
+    ProductReferenceSummary,
+    ProductStoryboard,
+    VideoPromptPack,
+)
 from app.modules.script_writer.script_writer import ProductVideoScript
 from app.modules.source_media_manager.media_manager_schema import (
     BulkSegmentReviewResponse,
@@ -79,11 +85,53 @@ class AppSettings(BaseModel):
         return cleaned or None
 
 
+class BrowsePathRequest(BaseModel):
+    mode: str = Field(default="folder", pattern="^(file|folder)$")
+    title: str | None = None
+    initial_path: str | None = None
+    extensions: list[str] = Field(default_factory=list)
+
+
+class BrowsePathResponse(BaseModel):
+    path: str | None = None
+    cancelled: bool = False
+
+
 class ScanResponse(BaseModel):
     total_files: int
     valid_videos: int
     invalid_files: int
     media: list[MediaFile]
+
+
+class DouyinReupScanRequest(BaseModel):
+    source_folder: str = Field(min_length=1)
+
+
+class DouyinReupScanResponse(BaseModel):
+    total_files: int
+    valid_videos: int
+    invalid_files: int
+    media: list[DouyinVideoItem]
+    errors: list[str] = Field(default_factory=list)
+
+
+class DouyinReupProcessRequest(BaseModel):
+    project_name: str = Field(min_length=1)
+    source_folder: str = Field(min_length=1)
+    output_folder: str = Field(min_length=1)
+    settings: DouyinReupSettings = Field(default_factory=lambda: DouyinReupSettings(enabled=True))
+
+
+class DouyinReupProcessResponse(BaseModel):
+    project_id: str
+    job_id: str
+    status: str
+
+
+class DouyinReupJobResultsResponse(BaseModel):
+    summary: DouyinReupSummary | None = None
+    outputs: list[DouyinOutputResult] = Field(default_factory=list)
 
 
 class SegmentScoringResponse(BaseModel):
@@ -350,6 +398,35 @@ class UpdateProjectVisualStyleRequest(BaseModel):
 class UpdateProjectVisualStyleResponse(BaseModel):
     success: bool
     visual_style: dict[str, Any]
+
+
+class ReferenceSummaryResponse(BaseModel):
+    success: bool
+    summary: ProductReferenceSummary
+
+
+class StoryboardRequest(BaseModel):
+    duration_seconds: float = Field(default=8, gt=0, le=120)
+    scene_count: int = Field(default=5, gt=0, le=12)
+    style: str | None = None
+
+
+class StoryboardResponse(BaseModel):
+    success: bool
+    storyboard: ProductStoryboard
+
+
+class VideoPromptPackRequest(BaseModel):
+    duration_seconds: float = Field(default=8, gt=0, le=120)
+    scene_count: int = Field(default=5, gt=0, le=12)
+    model_hint: str | None = None
+    style: str | None = None
+
+
+class VideoPromptPackResponse(BaseModel):
+    success: bool
+    prompt_pack: VideoPromptPack
+    files: dict[str, str] = Field(default_factory=dict)
 
 
 class IndustryPresetsResponse(BaseModel):

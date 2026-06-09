@@ -29,6 +29,7 @@ import {
 import ApiErrorBox from '../components/ApiErrorBox';
 import EffectSliders from '../components/EffectSliders';
 import NumberInput from '../components/NumberInput';
+import PathInput from '../components/PathInput';
 import PresetSelector from '../components/PresetSelector';
 import RenderProgress from '../components/RenderProgress';
 import WarningBox from '../components/WarningBox';
@@ -617,6 +618,7 @@ export default function RenderSettingsPage() {
           <ProductAssetsSummaryBox
             assets={productAssets}
             onManage={() => projectId && navigate(`/projects/${projectId}/assets`)}
+            onPromptPack={() => projectId && navigate(`/projects/${projectId}/prompt-pack`)}
           />
 
           <CachePanel
@@ -733,6 +735,7 @@ function OverlayModeControls({
   const customPath = settings.custom_overlay_path ?? DEFAULT_VISUAL_STYLE_SETTINGS.custom_overlay_path ?? 'examples/overlay';
   const customHeight =
     settings.custom_overlay_height_percent ?? DEFAULT_VISUAL_STYLE_SETTINGS.custom_overlay_height_percent ?? 33;
+  const customFit = settings.custom_overlay_fit_mode ?? DEFAULT_VISUAL_STYLE_SETTINGS.custom_overlay_fit_mode ?? 'cover';
   const options = [
     { value: 'preset', label: 'Dùng overlay preset' },
     { value: 'none', label: 'Không dùng overlay' },
@@ -759,15 +762,14 @@ function OverlayModeControls({
       </div>
 
       {mode === 'custom' ? (
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium text-ink">Đường dẫn ảnh/thư mục overlay</span>
-          <input
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-blue-100"
-            value={customPath}
-            onChange={(event) => onChange({ custom_overlay_path: event.target.value })}
-            placeholder="examples/overlay hoặc D:\\Overlay\\my_overlay.png"
-          />
-        </label>
+        <PathInput
+          label="Đường dẫn ảnh/thư mục overlay"
+          value={customPath}
+          onChange={(custom_overlay_path) => onChange({ custom_overlay_path })}
+          placeholder="examples/overlay hoặc D:\\Overlay\\my_overlay.png"
+          modes={['file', 'folder']}
+          fileExtensions={['.png', '.jpg', '.jpeg', '.webp']}
+        />
       ) : null}
       {mode === 'custom' ? (
         <NumberInput
@@ -777,6 +779,20 @@ function OverlayModeControls({
           max={100}
           onChange={(value) => onChange({ custom_overlay_height_percent: value })}
         />
+      ) : null}
+      {mode === 'custom' ? (
+        <label className="grid gap-1 text-sm">
+          <span className="font-medium text-ink">Cách fit overlay custom</span>
+          <select
+            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-blue-100"
+            value={customFit}
+            onChange={(event) => onChange({ custom_overlay_fit_mode: event.target.value })}
+          >
+            <option value="cover">Phủ đủ ngang, crop phần dư</option>
+            <option value="contain">Giữ toàn bộ ảnh</option>
+            <option value="stretch">Kéo vừa vùng</option>
+          </select>
+        </label>
       ) : null}
     </div>
   );
@@ -947,6 +963,25 @@ function SimpleSettingsPanel({
             </span>
           </span>
         </label>
+        {music.enabled ? (
+          <div className="grid gap-3 sm:col-span-2 lg:grid-cols-2">
+            <PathInput
+              label="Thư mục nhạc nền"
+              value={music.source_folder ?? ''}
+              onChange={(source_folder) => updateMusic({ source_folder, source_file: null })}
+              placeholder="examples/music hoặc D:\\Music"
+              modes={['folder']}
+            />
+            <PathInput
+              label="File nhạc nền"
+              value={music.source_file ?? ''}
+              onChange={(source_file) => updateMusic({ source_file, source_folder: null })}
+              placeholder="D:\\Music\\track.mp3"
+              modes={['file']}
+              fileExtensions={['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.opus']}
+            />
+          </div>
+        ) : null}
         <label className="flex items-start gap-3 rounded-md border border-line bg-white p-3 text-sm sm:col-span-2">
           <input
             className="mt-1 h-4 w-4 accent-brand disabled:opacity-50"
@@ -1343,6 +1378,26 @@ function MusicPanel({
             </span>
           </span>
         </label>
+
+        {music.enabled ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            <PathInput
+              label="Thư mục nhạc nền"
+              value={music.source_folder ?? ''}
+              onChange={(source_folder) => onChange({ source_folder, source_file: null })}
+              placeholder="examples/music hoặc D:\\Music"
+              modes={['folder']}
+            />
+            <PathInput
+              label="File nhạc nền"
+              value={music.source_file ?? ''}
+              onChange={(source_file) => onChange({ source_file, source_folder: null })}
+              placeholder="D:\\Music\\track.mp3"
+              modes={['file']}
+              fileExtensions={['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.opus']}
+            />
+          </div>
+        ) : null}
 
         <label className="flex items-start gap-3 rounded-md border border-line bg-white p-3 text-sm">
           <input
@@ -1813,9 +1868,11 @@ function SourceMediaSummaryBox({
 function ProductAssetsSummaryBox({
   assets,
   onManage,
+  onPromptPack,
 }: {
   assets: ProductAsset[];
   onManage: () => void;
+  onPromptPack: () => void;
 }) {
   const downloaded = assets.filter((asset) => asset.status === 'downloaded' && asset.is_selected);
   const main = downloaded.find((asset) => asset.role === 'main_product');
@@ -1831,13 +1888,22 @@ function ProductAssetsSummaryBox({
             Main product image: {main?.filename || 'N/A'} · Reference images: {references} · Poster images: {posters}
           </p>
         </div>
-        <button
-          className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
-          type="button"
-          onClick={onManage}
-        >
-          Manage Assets
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            type="button"
+            onClick={onPromptPack}
+          >
+            Prompt Pack
+          </button>
+          <button
+            className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
+            type="button"
+            onClick={onManage}
+          >
+            Manage Assets
+          </button>
+        </div>
       </div>
       {!downloaded.length ? (
         <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">

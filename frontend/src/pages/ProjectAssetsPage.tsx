@@ -121,6 +121,14 @@ export default function ProjectAssetsPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button
+            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+            type="button"
+            disabled={!projectId}
+            onClick={() => navigate(projectId ? `/projects/${projectId}/prompt-pack` : '/')}
+          >
+            Use for Prompt Pack
+          </button>
+          <button
             className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
             type="button"
             onClick={() => navigate(projectId ? `/settings/${projectId}` : '/')}

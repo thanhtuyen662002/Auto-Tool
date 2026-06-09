@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getAppSettings, getGoogleCloudTTSVoices, saveAppSettings } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
+import PathInput from '../components/PathInput';
 import TextArea from '../components/TextArea';
 import TextInput from '../components/TextInput';
 import type { AppSettings } from '../types/project';
@@ -118,11 +119,13 @@ export default function AppSettingsPage() {
         <section className="rounded-lg border border-line bg-white p-5 shadow-panel">
           <h2 className="mb-3 text-base font-semibold text-ink">Google Cloud TTS</h2>
           <div className="grid gap-4">
-            <TextInput
+            <PathInput
               label="Đường dẫn file Service Account JSON"
               value={settings.google_tts_credentials_json_path ?? ''}
               onChange={(google_tts_credentials_json_path) => update({ google_tts_credentials_json_path })}
               placeholder="D:\\Keys\\google-service-account.json"
+              modes={['file']}
+              fileExtensions={['.json']}
             />
             <TextInput
               label="API key Google Cloud"

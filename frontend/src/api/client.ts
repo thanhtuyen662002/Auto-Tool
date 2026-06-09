@@ -57,6 +57,17 @@ import type {
   SourceMediaResponse,
   UpdateSegmentReviewResponse,
   UpdateSourceMediaReviewResponse,
+  BrowsePathRequest,
+  BrowsePathResponse,
+  DouyinReupJobResultsResponse,
+  DouyinReupProcessRequest,
+  DouyinReupProcessResponse,
+  DouyinReupScanResponse,
+  ReferenceSummaryResponse,
+  StoryboardRequest,
+  StoryboardResponse,
+  VideoPromptPackRequest,
+  VideoPromptPackResponse,
 } from '../types/project';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
@@ -134,10 +145,37 @@ export function saveAppSettings(settings: AppSettings): Promise<AppSettings> {
   });
 }
 
+export function browsePath(payload: BrowsePathRequest): Promise<BrowsePathResponse> {
+  return request<BrowsePathResponse>('/api/system/browse-path', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function scanProject(projectId: string): Promise<ScanResponse> {
   return request<ScanResponse>(`/api/projects/${projectId}/scan`, {
     method: 'POST',
   });
+}
+
+export function scanDouyinReupFolder(sourceFolder: string): Promise<DouyinReupScanResponse> {
+  return request<DouyinReupScanResponse>('/api/douyin-reup/scan', {
+    method: 'POST',
+    body: JSON.stringify({ source_folder: sourceFolder }),
+  });
+}
+
+export function startDouyinReupProcess(
+  payload: DouyinReupProcessRequest,
+): Promise<DouyinReupProcessResponse> {
+  return request<DouyinReupProcessResponse>('/api/douyin-reup/process', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getDouyinReupJobResults(jobId: string): Promise<DouyinReupJobResultsResponse> {
+  return request<DouyinReupJobResultsResponse>(`/api/douyin-reup/jobs/${jobId}/results`);
 }
 
 export function analyzeProjectSegments(projectId: string): Promise<SegmentScoringSummary> {
@@ -443,6 +481,32 @@ export function attachProductDraftAssetsToProject(
 
 export function listProjectAssets(projectId: string): Promise<ProductAssetListResponse> {
   return request<ProductAssetListResponse>(`/api/projects/${projectId}/assets`);
+}
+
+export function generateReferenceSummary(projectId: string): Promise<ReferenceSummaryResponse> {
+  return request<ReferenceSummaryResponse>(`/api/projects/${projectId}/reference-summary`, {
+    method: 'POST',
+  });
+}
+
+export function generateStoryboard(
+  projectId: string,
+  payload: StoryboardRequest,
+): Promise<StoryboardResponse> {
+  return request<StoryboardResponse>(`/api/projects/${projectId}/storyboard`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function generateVideoPromptPack(
+  projectId: string,
+  payload: VideoPromptPackRequest,
+): Promise<VideoPromptPackResponse> {
+  return request<VideoPromptPackResponse>(`/api/projects/${projectId}/video-prompt-pack`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function updateProductAsset(

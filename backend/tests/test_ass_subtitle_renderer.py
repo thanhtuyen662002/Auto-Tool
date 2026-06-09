@@ -13,15 +13,15 @@ def test_hex_to_ass_color_converts_rgb_to_ass_bgr() -> None:
     assert hex_to_ass_color("#FFFFFF", alpha=0.5) == "&H80FFFFFF"
 
 
-def test_wrap_subtitle_text_respects_max_lines() -> None:
+def test_wrap_subtitle_text_preserves_all_lines() -> None:
     lines = wrap_subtitle_text(
         "Đây là một câu subtitle dài cần được xuống dòng hợp lý",
         max_chars_per_line=18,
         max_lines=2,
     )
 
-    assert len(lines) <= 2
-    assert all(len(line) <= 18 for line in lines)
+    assert len(lines) > 2
+    assert " ".join(lines) == "Đây là một câu subtitle dài cần được xuống dòng hợp lý"
 
 
 def test_generate_ass_subtitle_writes_positioned_ass_file(tmp_path) -> None:
@@ -44,3 +44,23 @@ def test_generate_ass_subtitle_writes_positioned_ass_file(tmp_path) -> None:
     assert "Style: Default," in content
     assert r"\pos(540," in content
     assert "Dialogue: 0,0:00:00.00,0:00:02.80" in content
+
+
+def test_generate_ass_subtitle_splits_long_lines_without_dropping_text(tmp_path) -> None:
+    preset = get_visual_style_preset("sale_bold_red")
+    output_path = tmp_path / "video_001_sub.ass"
+    text = "Một câu rất dài có nhiều thông tin quan trọng không được phép bị cắt mất khi render subtitle"
+
+    generate_ass_subtitle(
+        [{"start_hint": 0, "end_hint": 4, "text": text}],
+        preset,
+        1080,
+        1920,
+        str(output_path),
+    )
+
+    content = output_path.read_text(encoding="utf-8").replace(r"\N", " ")
+
+    assert content.count("Dialogue: 0,") > 1
+    for phrase in ["Một câu rất dài", "thông", "tin", "quan", "trọng", "render subtitle"]:
+        assert phrase in content

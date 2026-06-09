@@ -30,6 +30,17 @@ try {
     --add-data "$Dist;frontend/dist" `
     --paths "$Backend" `
     --collect-submodules edge_tts `
+    --collect-submodules faster_whisper `
+    --collect-data faster_whisper `
+    --collect-all ctranslate2 `
+    --collect-all tokenizers `
+    --collect-binaries onnxruntime `
+    --collect-data onnxruntime `
+    --collect-all av `
+    --hidden-import huggingface_hub `
+    --hidden-import huggingface_hub.utils `
+    --hidden-import onnxruntime `
+    --hidden-import onnxruntime.capi.onnxruntime_pybind11_state `
     --hidden-import gtts `
     --hidden-import gtts.tts `
     app/launcher.py
