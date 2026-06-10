@@ -46,6 +46,13 @@ type ExportOptions = {
   include_posting_checklist: boolean;
 };
 
+type SilentProductContext = {
+  product_name: string;
+  category: string;
+  features: string;
+  cta: string;
+};
+
 const DEFAULT_SETTINGS: DouyinReupSettings = {
   enabled: true,
   preset_id: 'safe_review',
@@ -100,6 +107,25 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   auto_generate_rewrite_for_flagged_lines: false,
   auto_apply_safe_rewrites: false,
   default_rewrite_style: 'short_natural',
+  enable_silent_immersive_mode: true,
+  silent_mode_detection: true,
+  silent_mode_strategy: 'chill_immersive',
+  detect_speech_presence: true,
+  speech_detection_threshold: 0.35,
+  use_visual_segments_for_silent_video: true,
+  silent_segment_duration_min: 1.2,
+  silent_segment_duration_max: 4.0,
+  generate_visual_captions: true,
+  visual_caption_language: 'vi',
+  visual_caption_style: 'natural_short',
+  generate_voiceover_for_silent_video: false,
+  silent_voiceover_provider: 'edge_tts',
+  silent_voiceover_voice: 'vi-VN-HoaiMyNeural',
+  keep_immersive_original_audio: true,
+  immersive_original_audio_volume: 0.75,
+  add_bgm_for_silent_video: true,
+  immersive_bgm_volume: 0.18,
+  silent_review_before_render: true,
 };
 
 export default function DouyinReupPage() {
@@ -109,6 +135,12 @@ export default function DouyinReupPage() {
   const [sourceFolder, setSourceFolder] = useState('');
   const [outputFolder, setOutputFolder] = useState('./examples/outputs');
   const [settings, setSettings] = useState<DouyinReupSettings>(DEFAULT_SETTINGS);
+  const [silentProductContext, setSilentProductContext] = useState<SilentProductContext>({
+    product_name: '',
+    category: '',
+    features: '',
+    cta: '',
+  });
   const [presets, setPresets] = useState<DouyinReupPreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState('safe_review');
   const [recommendation, setRecommendation] = useState<DouyinPresetRecommendationResponse | null>(null);
@@ -156,6 +188,10 @@ export default function DouyinReupPage() {
     [results],
   );
   const usesManualSubtitleReview = settings.review_subtitles_before_render && !settings.auto_render_after_translation;
+  const isSilentPreset =
+    selectedPresetId.startsWith('silent_') || Boolean(settings.enable_silent_immersive_mode && settings.preset_id?.startsWith('silent_'));
+  const normalPresets = useMemo(() => presets.filter((preset) => !preset.id.startsWith('silent_')), [presets]);
+  const silentPresets = useMemo(() => presets.filter((preset) => preset.id.startsWith('silent_')), [presets]);
 
   useEffect(() => {
     listDouyinReupPresets()
@@ -228,7 +264,7 @@ export default function DouyinReupPage() {
       });
       setSettings(response.settings);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Khong the ap dung preset.');
+      setError(err instanceof Error ? err.message : 'Không thể áp dụng preset.');
     }
   }
 
@@ -251,6 +287,7 @@ export default function DouyinReupPage() {
         selected_video_paths: selectedPaths,
         review_subtitles_before_render: settings.review_subtitles_before_render,
         auto_render_after_translation: settings.auto_render_after_translation,
+        product_context: buildSilentProductContext(silentProductContext),
         advanced_overrides: mode === 'advanced' ? { ...settings } : {},
       });
       setJobId(response.job_id);
@@ -265,7 +302,7 @@ export default function DouyinReupPage() {
         logs: [],
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Khong the bat dau one-click batch.');
+      setError(err instanceof Error ? err.message : 'Không thể bắt đầu one-click batch.');
     } finally {
       setBusy(false);
     }
@@ -328,6 +365,10 @@ export default function DouyinReupPage() {
 
   function updateSettings(updates: Partial<DouyinReupSettings>) {
     setSettings((current) => ({ ...current, ...updates }));
+  }
+
+  function updateSilentProductContext(updates: Partial<SilentProductContext>) {
+    setSilentProductContext((current) => ({ ...current, ...updates }));
   }
 
   async function handleRunFinalQA() {
@@ -415,6 +456,11 @@ export default function DouyinReupPage() {
   async function handleRetryWithPreset(output?: DouyinOutputResult) {
     if (!jobId) return;
     const presetId = output ? retryPresetByOutput[output.index] || selectedPresetId : selectedPresetId;
+    await handleRetryOutputWithPreset(output, presetId);
+  }
+
+  async function handleRetryOutputWithPreset(output: DouyinOutputResult | undefined, presetId: string) {
+    if (!jobId) return;
     setBusy(true);
     setError(null);
     try {
@@ -426,7 +472,7 @@ export default function DouyinReupPage() {
       });
       navigate(`/queue/douyin-reup/${response.job_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Khong the retry bang preset moi.');
+      setError(err instanceof Error ? err.message : 'Không thể retry bằng preset mới.');
     } finally {
       setBusy(false);
     }
@@ -448,6 +494,31 @@ export default function DouyinReupPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function renderPresetCard(preset: DouyinReupPreset) {
+    return (
+      <button
+        key={preset.id}
+        className={`rounded-md border p-3 text-left transition ${
+          selectedPresetId === preset.id ? 'border-brand bg-blue-50' : 'border-line bg-surface hover:border-brand'
+        }`}
+        type="button"
+        onClick={() => void handlePresetSelect(preset.id)}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-semibold text-ink">{preset.name}</div>
+          <span className="rounded bg-white px-2 py-0.5 text-xs font-semibold text-muted">{preset.ui_badge}</span>
+        </div>
+        <div className="mt-1 text-xs text-muted">{preset.description}</div>
+        <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-semibold text-muted">
+          {preset.settings.review_subtitles_before_render ? <span className="rounded bg-white px-2 py-0.5">Review</span> : null}
+          {preset.settings.prefer_ocr_over_asr_when_text_visible || preset.id === 'ocr_priority' ? <span className="rounded bg-white px-2 py-0.5">OCR</span> : null}
+          {preset.settings.add_bgm || preset.settings.add_bgm_for_silent_video ? <span className="rounded bg-white px-2 py-0.5">BGM</span> : null}
+          {preset.id.startsWith('silent_') ? <span className="rounded bg-white px-2 py-0.5">Silent</span> : null}
+        </div>
+      </button>
+    );
   }
 
   return (
@@ -515,32 +586,70 @@ export default function DouyinReupPage() {
                 </button>
               ) : null}
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {presets.map((preset) => (
-                <button
-                  key={preset.id}
-                  className={`rounded-md border p-3 text-left transition ${
-                    selectedPresetId === preset.id ? 'border-brand bg-blue-50' : 'border-line bg-surface hover:border-brand'
-                  }`}
-                  type="button"
-                  onClick={() => void handlePresetSelect(preset.id)}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-semibold text-ink">{preset.name}</div>
-                    <span className="rounded bg-white px-2 py-0.5 text-xs font-semibold text-muted">{preset.ui_badge}</span>
-                  </div>
-                  <div className="mt-1 text-xs text-muted">{preset.description}</div>
-                  <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-semibold text-muted">
-                    {preset.settings.review_subtitles_before_render ? <span className="rounded bg-white px-2 py-0.5">Review</span> : null}
-                    {preset.settings.prefer_ocr_over_asr_when_text_visible || preset.id === 'ocr_priority' ? <span className="rounded bg-white px-2 py-0.5">OCR</span> : null}
-                    {preset.settings.add_bgm ? <span className="rounded bg-white px-2 py-0.5">BGM</span> : null}
-                  </div>
-                </button>
-              ))}
+            <div className="grid gap-4">
+              <div>
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Douyin Reup thường</div>
+                <div className="grid gap-3 md:grid-cols-2">{normalPresets.map(renderPresetCard)}</div>
+              </div>
+              {silentPresets.length ? (
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Video không thoại / immersive</div>
+                  <div className="grid gap-3 md:grid-cols-2">{silentPresets.map(renderPresetCard)}</div>
+                </div>
+              ) : null}
             </div>
             {recommendation ? (
               <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
                 Recommended preset: <span className="font-semibold">{recommendation.preset_name}</span>. {recommendation.reason}
+              </div>
+            ) : null}
+            {isSilentPreset ? (
+              <div className="grid gap-3 rounded-md border border-emerald-100 bg-emerald-50 p-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-ink">Video không thoại / immersive</h3>
+                  <p className="mt-1 text-xs text-emerald-900">
+                    Phù hợp với video chỉ có nhạc hoặc tiếng thao tác. Tool sẽ tạo caption tiếng Việt theo cảnh/OCR thay vì phụ thuộc ASR.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-ink">Tên sản phẩm</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
+                      lang="vi"
+                      value={silentProductContext.product_name}
+                      onChange={(event) => updateSilentProductContext({ product_name: event.target.value })}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-ink">Ngành hàng</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
+                      lang="vi"
+                      value={silentProductContext.category}
+                      onChange={(event) => updateSilentProductContext({ category: event.target.value })}
+                    />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-ink">Điểm nổi bật</span>
+                  <textarea
+                    className="min-h-20 w-full rounded-md border border-line bg-white px-3 py-2 text-sm"
+                    lang="vi"
+                    value={silentProductContext.features}
+                    onChange={(event) => updateSilentProductContext({ features: event.target.value })}
+                    placeholder="Mỗi dòng là một điểm nổi bật"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-ink">CTA</span>
+                  <input
+                    className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
+                    lang="vi"
+                    value={silentProductContext.cta}
+                    onChange={(event) => updateSilentProductContext({ cta: event.target.value })}
+                  />
+                </label>
               </div>
             ) : null}
           </div>
@@ -884,10 +993,11 @@ export default function DouyinReupPage() {
             </div>
           </div>
           {resultsTab === 'results' && summary ? (
-            <div className="mt-4 grid gap-2 text-sm sm:grid-cols-4">
+            <div className="mt-4 grid gap-2 text-sm sm:grid-cols-5">
               <Stat label="Needs review" value={summary.needs_review ?? reviewDocuments.length} />
               <Stat label="Rendered" value={summary.rendered ?? results.filter((output) => output.status === 'success').length} />
               <Stat label="Failed" value={summary.failed ?? failedResults.length} />
+              <Stat label="Silent" value={summary.silent_immersive?.videos_processed_silent ?? results.filter((output) => output.reup_mode === 'silent_immersive').length} />
               <Stat label="Slowest" value={summary.performance?.slowest_step ?? '-'} />
             </div>
           ) : null}
@@ -918,6 +1028,35 @@ export default function DouyinReupPage() {
                   <div>Log: {output.log_file || '-'}</div>
                   <div>Failed step: {output.failed_step || '-'}</div>
                 </div>
+                {output.reup_mode === 'silent_immersive' ? (
+                  <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                    <div className="font-semibold">Mode: Silent Immersive</div>
+                    <div>Strategy: {formatSilentStrategy(output.silent_strategy)}</div>
+                    <div>Speech score: {Math.round((output.speech_score ?? 0) * 100)}%</div>
+                    <div>Caption source: {formatCaptionSource(output.caption_source)}</div>
+                    <div>Voiceover: {output.voiceover_file ? 'Có' : 'Không'}</div>
+                    <div>BGM: {output.bgm_file ? 'Đã thêm' : 'Không'}</div>
+                    <div className="break-all">Plan: {output.silent_plan_file || '-'}</div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        className="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 disabled:text-muted"
+                        type="button"
+                        disabled={busy || !jobId}
+                        onClick={() => void handleRetryOutputWithPreset(output, 'silent_product_voiceover')}
+                      >
+                        Retry with voiceover
+                      </button>
+                      <button
+                        className="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 disabled:text-muted"
+                        type="button"
+                        disabled={busy || !jobId}
+                        onClick={() => void handleRetryOutputWithPreset(output, 'voice_priority')}
+                      >
+                        Retry as ASR video
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {output.subtitle_source === 'ocr_hardsub' || output.ocr_debug_json_path ? (
                   <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                     <div className="font-semibold">OCR Debug</div>
@@ -1178,9 +1317,43 @@ function formatSourceType(source?: string | null): string {
     embedded_subtitle: 'Embedded subtitle',
     asr: 'ASR',
     ocr_hardsub: 'OCR hard-sub',
+    ocr_translation: 'OCR translated caption',
+    visual_generated: 'Visual generated caption',
+    template: 'Template caption',
     none: 'None',
   };
   return source ? labels[source] ?? source : '-';
+}
+
+function formatSilentStrategy(strategy?: string | null): string {
+  const labels: Record<string, string> = {
+    chill_immersive: 'Chill immersive',
+    product_review_voiceover: 'Tạo voice review Việt',
+    sales_recut: 'Recut bán hàng nhanh',
+  };
+  return strategy ? labels[strategy] ?? strategy : '-';
+}
+
+function formatCaptionSource(source?: string | null): string {
+  const labels: Record<string, string> = {
+    ocr_translation: 'OCR translated',
+    visual_generated: 'Visual generated',
+    template: 'Template',
+    manual: 'Manual',
+  };
+  return source ? labels[source] ?? source : '-';
+}
+
+function buildSilentProductContext(context: SilentProductContext): Record<string, unknown> {
+  return {
+    product_name: context.product_name.trim(),
+    category: context.category.trim(),
+    features: context.features
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+    cta: context.cta.trim(),
+  };
 }
 
 function formatOcrDependencyStatus(status: SystemDependencyStatusResponse | null): string {

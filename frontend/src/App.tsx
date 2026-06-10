@@ -14,7 +14,7 @@ import PromptPackPage from './pages/PromptPackPage';
 import DouyinReupPage from './pages/DouyinReupPage';
 import SubtitleReviewPage from './pages/SubtitleReviewPage';
 
-const FALLBACK_VERSION = '0.2.0-rc1';
+const FALLBACK_VERSION = '1.0.0-rc1';
 
 async function fetchVersion(): Promise<string> {
   try {
@@ -120,7 +120,7 @@ export default function App() {
 
       <footer className="border-t border-line bg-white py-3">
         <div className="mx-auto max-w-7xl px-6 text-center text-xs text-muted">
-          Auto Tool{' '}
+          Auto Tool Douyin Reup{' '}
           <span id="app-version" className="font-mono">
             v{version}
           </span>

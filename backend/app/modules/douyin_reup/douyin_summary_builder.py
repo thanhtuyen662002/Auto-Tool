@@ -56,6 +56,7 @@ def build_douyin_reup_summary(
             "approved": 0,
             "pending": len(needs_review),
         },
+        silent_immersive=_silent_immersive_summary(outputs, settings),
         success=successful_outputs,
         failed=len(failures),
         needs_review=len(needs_review),
@@ -201,4 +202,17 @@ def _final_output_qa_summary(outputs: list[DouyinOutputResult]) -> dict[str, Any
         "failed": sum(1 for report in reports if report.get("status") == "failed"),
         "average_score": round(sum(float(report.get("score") or 0) for report in reports) / len(reports), 4) if reports else 0.0,
         "issue_breakdown": dict(Counter(str(issue.get("issue_type") or "unknown") for issue in issues)),
+    }
+
+
+def _silent_immersive_summary(outputs: list[DouyinOutputResult], settings: Any) -> dict[str, Any]:
+    silent_outputs = [output for output in outputs if getattr(output, "reup_mode", None) == "silent_immersive"]
+    strategies = Counter(getattr(output, "silent_strategy", None) or "unknown" for output in silent_outputs)
+    caption_sources = Counter(getattr(output, "caption_source", None) or "unknown" for output in silent_outputs)
+    return {
+        "enabled": bool(getattr(settings, "enable_silent_immersive_mode", False)) if settings else False,
+        "videos_detected_silent": len(silent_outputs),
+        "videos_processed_silent": len([output for output in silent_outputs if output.status in {"success", "needs_review"}]),
+        "strategies": dict(strategies),
+        "caption_sources": dict(caption_sources),
     }

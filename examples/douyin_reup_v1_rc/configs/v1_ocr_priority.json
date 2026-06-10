@@ -1,0 +1,57 @@
+{
+  "project_name": "douyin-v1-ocr-priority",
+  "source_folder": "../../../sample_videos/douyin_reup_v1_rc",
+  "output_folder": "../../outputs/douyin_reup_v1_rc",
+  "product": {
+    "name": "Douyin Reup RC",
+    "brand": "",
+    "description": "Release candidate QA config for OCR Priority workflow.",
+    "features": ["Hard-sub OCR", "Translation", "Subtitle Review"],
+    "cta": "Check OCR subtitles"
+  },
+  "render": {
+    "output_count": 1,
+    "duration": 30,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "fps": 30
+  },
+  "effects": {
+    "cut_intensity": 0,
+    "speed_variation": 0,
+    "grain": 0,
+    "zoom_motion": 0,
+    "overlay_height": 22,
+    "subtitle_size": 54
+  },
+  "ai": {
+    "text_model": "gemini-3.1-flash-lite",
+    "tone": "subtitle_translator",
+    "language": "vi",
+    "gemini_api_keys": []
+  },
+  "douyin_reup": {
+    "enabled": true,
+    "preset_id": "ocr_priority",
+    "preset_name": "OCR Priority",
+    "source_language": "zh",
+    "target_language": "vi",
+    "translation_provider": "gemini",
+    "subtitle_source_priority": ["sidecar_srt", "embedded_subtitle", "ocr_hardsub", "asr"],
+    "use_sidecar_srt": true,
+    "use_embedded_subtitle": true,
+    "use_asr_if_no_subtitle": true,
+    "use_ocr_if_asr_failed": true,
+    "use_ocr_if_no_subtitle": true,
+    "prefer_ocr_over_asr_when_text_visible": true,
+    "ocr_provider": "easyocr",
+    "ocr_sample_fps": 2.5,
+    "ocr_min_confidence": 0.5,
+    "review_subtitles_before_render": true,
+    "auto_render_after_translation": false,
+    "keep_original_audio": true,
+    "add_bgm": true,
+    "add_overlay": true,
+    "burn_subtitle": true
+  }
+}

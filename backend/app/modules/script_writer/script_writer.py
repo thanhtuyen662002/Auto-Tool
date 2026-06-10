@@ -149,7 +149,7 @@ class ScriptWriter:
         caption = (
             f"{config.product.name}: {industry.caption_tone}"
             if industry
-            else f"Má»™t gÃ³c nhÃ¬n nhanh vá» {config.product.name}."
+            else f"Một góc nhìn nhanh về {config.product.name}."
         )
         fallback = {
             "industry_preset_id": industry.id if industry else None,

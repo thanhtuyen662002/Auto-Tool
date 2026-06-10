@@ -15,6 +15,9 @@ def test_douyin_reup_presets_include_required_modes():
         "voice_priority",
         "clean_subtitle_only",
         "music_recut",
+        "silent_chill_immersive",
+        "silent_product_voiceover",
+        "silent_sales_recut",
     }
     assert [preset.id.value for preset in presets if preset.is_default] == ["safe_review"]
 
@@ -50,3 +53,13 @@ def test_apply_clean_subtitle_only_disables_bgm_and_overlay():
     assert settings.add_bgm is False
     assert settings.add_overlay is False
     assert settings.burn_subtitle is True
+
+
+def test_apply_silent_product_voiceover_enables_silent_voiceover():
+    settings = DouyinReupPresetService().apply_preset("silent_product_voiceover")
+
+    assert settings.preset_id == "silent_product_voiceover"
+    assert settings.enable_silent_immersive_mode is True
+    assert settings.silent_mode_strategy == "product_review_voiceover"
+    assert settings.generate_voiceover_for_silent_video is True
+    assert settings.keep_immersive_original_audio is True

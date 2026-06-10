@@ -35,6 +35,28 @@ class DouyinRenderPipeline:
             settings=settings,
             output_dir=output_dir,
             output_name=output_name,
+            voiceover_path=None,
+        )
+
+    def render_video_with_srt(
+        self,
+        video: DouyinVideoItem,
+        subtitle_srt_path: str,
+        settings: DouyinReupSettings,
+        output_dir: str,
+        output_name: str,
+        warnings: list[str] | None = None,
+        voiceover_path: str | None = None,
+    ) -> dict:
+        return self._render_video_with_subtitle(
+            video=video,
+            subtitle_srt_path=subtitle_srt_path,
+            subtitle_ass_path_override=None,
+            warnings=list(warnings or []),
+            settings=settings,
+            output_dir=output_dir,
+            output_name=output_name,
+            voiceover_path=voiceover_path,
         )
 
     def render_from_review_document(
@@ -73,6 +95,7 @@ class DouyinRenderPipeline:
             settings=settings,
             output_dir=output_dir,
             output_name=f"{Path(document.video_path).stem}_reviewed.mp4",
+            voiceover_path=None,
         )
         result.update(
             {
@@ -93,6 +116,7 @@ class DouyinRenderPipeline:
         settings: DouyinReupSettings,
         output_dir: str,
         output_name: str,
+        voiceover_path: str | None,
     ) -> dict:
         target_dir = ensure_dir(output_dir)
         width, height = parse_resolution(settings.resolution)
@@ -148,6 +172,7 @@ class DouyinRenderPipeline:
                 overlay_path=str(overlay_path) if overlay_path else None,
                 subtitle_ass_path=str(subtitle_ass_path) if subtitle_ass_path else None,
                 bgm_path=bgm_path,
+                voiceover_path=voiceover_path,
             )
         except FFmpegError as exc:
             if subtitle_ass_path:
@@ -162,6 +187,7 @@ class DouyinRenderPipeline:
                         overlay_path=str(overlay_path) if overlay_path else None,
                         subtitle_ass_path=None,
                         bgm_path=bgm_path,
+                        voiceover_path=voiceover_path,
                     )
                 except FFmpegError as retry_exc:
                     if not bgm_path:
@@ -177,6 +203,7 @@ class DouyinRenderPipeline:
                         overlay_path=str(overlay_path) if overlay_path else None,
                         subtitle_ass_path=None,
                         bgm_path=None,
+                        voiceover_path=voiceover_path,
                     )
                 subtitle_ass_path = None  # type: ignore[assignment]
             elif bgm_path:
@@ -191,6 +218,7 @@ class DouyinRenderPipeline:
                     overlay_path=str(overlay_path) if overlay_path else None,
                     subtitle_ass_path=None,
                     bgm_path=None,
+                    voiceover_path=voiceover_path,
                 )
             else:
                 raise
@@ -207,6 +235,7 @@ class DouyinRenderPipeline:
             "subtitle_ass_file": str(subtitle_ass_path) if subtitle_ass_path else None,
             "overlay_file": str(overlay_path) if overlay_path else None,
             "bgm_file": bgm_path,
+            "voiceover_file": voiceover_path,
             "warnings": warnings,
             "errors": errors,
         }
@@ -221,17 +250,25 @@ class DouyinRenderPipeline:
         overlay_path: str | None,
         subtitle_ass_path: str | None,
         bgm_path: str | None,
+        voiceover_path: str | None = None,
     ) -> None:
         args = ["-y", "-i", video.path]
+        next_input_index = 1
         overlay_input_index: int | None = None
         bgm_input_index: int | None = None
+        voice_input_index: int | None = None
 
         if overlay_path:
-            overlay_input_index = 1
+            overlay_input_index = next_input_index
+            next_input_index += 1
             args.extend(["-loop", "1", "-i", overlay_path])
         if bgm_path:
-            bgm_input_index = 2 if overlay_input_index is not None else 1
+            bgm_input_index = next_input_index
+            next_input_index += 1
             args.extend(["-stream_loop", "-1", "-i", bgm_path])
+        if voiceover_path:
+            voice_input_index = next_input_index
+            args.extend(["-i", voiceover_path])
 
         video_filters = [
             f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
@@ -249,17 +286,16 @@ class DouyinRenderPipeline:
         else:
             video_filters.append(f"{current_label}null[vout]")
 
-        audio_filter = ""
-        audio_label: str | None = None
-        if video.has_audio or bgm_input_index is not None:
-            audio_filter, audio_label = self.bgm_mixer.build_audio_filter(
-                has_original_audio=video.has_audio and settings.keep_original_audio,
-                has_bgm=bgm_input_index is not None,
-                original_audio_volume=settings.original_audio_volume,
-                bgm_volume=settings.bgm_volume,
-                duration=video.duration,
-                bgm_input_index=bgm_input_index or 1,
-            )
+        audio_filter, audio_label = self._build_audio_filter(
+            has_original_audio=video.has_audio and settings.keep_original_audio,
+            has_bgm=bgm_input_index is not None,
+            has_voiceover=voice_input_index is not None,
+            original_audio_volume=settings.original_audio_volume,
+            bgm_volume=settings.bgm_volume,
+            duration=video.duration,
+            bgm_input_index=bgm_input_index,
+            voice_input_index=voice_input_index,
+        )
 
         filter_complex = ";".join(part for part in [*video_filters, audio_filter] if part)
         args.extend(["-filter_complex", filter_complex, "-map", "[vout]"])
@@ -286,6 +322,39 @@ class DouyinRenderPipeline:
         )
         run_ffmpeg(args)
 
+    @staticmethod
+    def _build_audio_filter(
+        *,
+        has_original_audio: bool,
+        has_bgm: bool,
+        has_voiceover: bool,
+        original_audio_volume: float,
+        bgm_volume: float,
+        duration: float,
+        bgm_input_index: int | None,
+        voice_input_index: int | None,
+    ) -> tuple[str, str | None]:
+        filters: list[str] = []
+        labels: list[str] = []
+        if has_original_audio:
+            filters.append(f"[0:a]volume={_clamp_volume(original_audio_volume):.3f}[a0]")
+            labels.append("[a0]")
+        if has_bgm and bgm_input_index is not None:
+            fade_out_start = max(0.0, float(duration) - 0.8)
+            filters.append(
+                f"[{bgm_input_index}:a]volume={_clamp_volume(bgm_volume):.3f},"
+                f"afade=t=in:st=0:d=0.4,afade=t=out:st={fade_out_start:.3f}:d=0.8[a1]"
+            )
+            labels.append("[a1]")
+        if has_voiceover and voice_input_index is not None:
+            filters.append(f"[{voice_input_index}:a]volume=1.000,atrim=0:{duration:.3f},asetpts=PTS-STARTPTS[av]")
+            labels.append("[av]")
+        if not labels:
+            return "", None
+        if len(labels) == 1:
+            return ";".join(filters) + f";{labels[0]}anull[aout]", "[aout]"
+        return ";".join(filters) + f";{''.join(labels)}amix=inputs={len(labels)}:duration=first:dropout_transition=0[aout]", "[aout]"
+
 
 def _escape_filter_path(path: str) -> str:
     cleaned = str(Path(path).expanduser().resolve()).replace("\\", "/")
@@ -296,3 +365,7 @@ def _escape_filter_path(path: str) -> str:
         .replace("[", r"\[")
         .replace("]", r"\]")
     )
+
+
+def _clamp_volume(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))

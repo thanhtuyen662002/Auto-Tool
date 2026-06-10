@@ -76,6 +76,9 @@ import type {
   DouyinRetryFailedRequest,
   DouyinRetryFailedResponse,
   DouyinRetryWithPresetRequest,
+  SilentReupDetectResponse,
+  SilentReupPlanResponse,
+  SilentReupRenderResponse,
   CreateExportPackRequest,
   FinalOutputQAJobResponse,
   PlatformExportPackResponse,
@@ -256,6 +259,31 @@ export function startDouyinOneClickBatch(
 
 export function getDouyinReupJobResults(jobId: string): Promise<DouyinReupJobResultsResponse> {
   return request<DouyinReupJobResultsResponse>(`/api/douyin-reup/jobs/${jobId}/results`);
+}
+
+export function detectSilentReupVideos(sourceFolder: string): Promise<SilentReupDetectResponse> {
+  return request<SilentReupDetectResponse>('/api/silent-reup/detect', {
+    method: 'POST',
+    body: JSON.stringify({ source_folder: sourceFolder }),
+  });
+}
+
+export function buildSilentReupPlan(payload: {
+  video_path: string;
+  settings?: Record<string, unknown>;
+  product_context?: Record<string, unknown>;
+}): Promise<SilentReupPlanResponse> {
+  return request<SilentReupPlanResponse>('/api/silent-reup/plan', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function renderSilentReupPlan(planId: string, settings: Record<string, unknown> = {}): Promise<SilentReupRenderResponse> {
+  return request<SilentReupRenderResponse>('/api/silent-reup/render', {
+    method: 'POST',
+    body: JSON.stringify({ plan_id: planId, settings }),
+  });
 }
 
 export function retryFailedDouyinReupJob(

@@ -1,0 +1,54 @@
+{
+  "project_name": "douyin-v1-fast-auto",
+  "source_folder": "../../../sample_videos/douyin_reup_v1_rc",
+  "output_folder": "../../outputs/douyin_reup_v1_rc",
+  "product": {
+    "name": "Douyin Reup RC",
+    "brand": "",
+    "description": "Release candidate QA config for Fast Auto workflow.",
+    "features": ["Auto translate", "Auto render", "Final QA", "Export Pack"],
+    "cta": "Render automatically"
+  },
+  "render": {
+    "output_count": 1,
+    "duration": 30,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "fps": 30
+  },
+  "effects": {
+    "cut_intensity": 0,
+    "speed_variation": 0,
+    "grain": 0,
+    "zoom_motion": 0,
+    "overlay_height": 22,
+    "subtitle_size": 54
+  },
+  "ai": {
+    "text_model": "gemini-3.1-flash-lite",
+    "tone": "subtitle_translator",
+    "language": "vi",
+    "gemini_api_keys": []
+  },
+  "douyin_reup": {
+    "enabled": true,
+    "preset_id": "fast_auto",
+    "preset_name": "Fast Auto",
+    "source_language": "zh",
+    "target_language": "vi",
+    "translation_provider": "gemini",
+    "subtitle_source_priority": ["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"],
+    "use_sidecar_srt": true,
+    "use_embedded_subtitle": true,
+    "use_asr_if_no_subtitle": true,
+    "use_ocr_if_asr_failed": true,
+    "use_ocr_if_no_subtitle": true,
+    "review_subtitles_before_render": false,
+    "auto_render_after_translation": true,
+    "enable_subtitle_rewrite_suggestions": false,
+    "keep_original_audio": true,
+    "add_bgm": true,
+    "add_overlay": true,
+    "burn_subtitle": true
+  }
+}

@@ -162,6 +162,25 @@ export interface DouyinReupSettings {
   auto_generate_rewrite_for_flagged_lines: boolean;
   auto_apply_safe_rewrites: boolean;
   default_rewrite_style: SubtitleRewriteStyle;
+  enable_silent_immersive_mode: boolean;
+  silent_mode_detection: boolean;
+  silent_mode_strategy: 'chill_immersive' | 'product_review_voiceover' | 'sales_recut' | string;
+  detect_speech_presence: boolean;
+  speech_detection_threshold: number;
+  use_visual_segments_for_silent_video: boolean;
+  silent_segment_duration_min: number;
+  silent_segment_duration_max: number;
+  generate_visual_captions: boolean;
+  visual_caption_language: string;
+  visual_caption_style: string;
+  generate_voiceover_for_silent_video: boolean;
+  silent_voiceover_provider: string;
+  silent_voiceover_voice: string;
+  keep_immersive_original_audio: boolean;
+  immersive_original_audio_volume: number;
+  add_bgm_for_silent_video: boolean;
+  immersive_bgm_volume: number;
+  silent_review_before_render: boolean;
 }
 
 export interface IndustrySettings {
@@ -356,6 +375,7 @@ export interface DouyinOneClickBatchRequest {
   selected_video_paths?: string[];
   review_subtitles_before_render?: boolean | null;
   auto_render_after_translation?: boolean | null;
+  product_context?: Record<string, unknown>;
   advanced_overrides?: Record<string, unknown>;
 }
 
@@ -393,6 +413,13 @@ export interface DouyinOutputResult {
   bgm_file?: string | null;
   log_file?: string | null;
   subtitle_review_document_id?: string | null;
+  reup_mode?: string | null;
+  silent_strategy?: string | null;
+  speech_score?: number | null;
+  caption_source?: string | null;
+  silent_plan_file?: string | null;
+  voiceover_file?: string | null;
+  voiceover_script_file?: string | null;
   ocr_debug_json_path?: string | null;
   ocr_frame_count?: number;
   ocr_detected_line_count?: number;
@@ -426,6 +453,13 @@ export interface DouyinReupSummary {
     documents_created: number;
     approved: number;
     pending: number;
+  };
+  silent_immersive?: {
+    enabled: boolean;
+    videos_detected_silent: number;
+    videos_processed_silent: number;
+    strategies: Record<string, number>;
+    caption_sources?: Record<string, number>;
   };
   success?: number;
   failed?: number;
@@ -773,6 +807,31 @@ export interface SubtitleReviewRenderResponse {
 export interface DouyinReupJobResultsResponse {
   summary?: DouyinReupSummary | null;
   outputs: DouyinOutputResult[];
+}
+
+export interface SilentReupDetectItem {
+  video_path: string;
+  has_speech: boolean;
+  speech_score: number;
+  recommended_mode: string;
+  method?: string | null;
+  warnings: string[];
+}
+
+export interface SilentReupDetectResponse {
+  success: boolean;
+  items: SilentReupDetectItem[];
+}
+
+export interface SilentReupPlanResponse {
+  success: boolean;
+  plan_id: string;
+  plan: Record<string, unknown>;
+}
+
+export interface SilentReupRenderResponse {
+  success: boolean;
+  job_id: string;
 }
 
 export interface SegmentScoringSummary {

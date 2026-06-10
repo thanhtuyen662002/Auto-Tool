@@ -24,8 +24,8 @@ def test_prompt_builder_contains_safety_rules_and_requested_context():
         preserve_keywords=["Brand X", "30 ml"],
     )
 
-    assert "Khong them y moi" in prompt
-    assert "Giu nguyen ten rieng, thuong hieu, so lieu va don vi" in prompt
+    assert "Không thêm ý mới" in prompt
+    assert "Giữ nguyên tên riêng, thương hiệu, số liệu và đơn vị" in prompt
     assert "clear_review" in prompt
     assert "Brand X, 30 ml" in prompt
     assert '"suggestions"' in prompt

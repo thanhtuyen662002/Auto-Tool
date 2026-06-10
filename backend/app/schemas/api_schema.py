@@ -26,6 +26,7 @@ from app.modules.product_reference_prompt.reference_schema import (
     VideoPromptPack,
 )
 from app.modules.script_writer.script_writer import ProductVideoScript
+from app.modules.silent_immersive_reup.silent_schema import SilentReupPlan
 from app.modules.source_media_manager.media_manager_schema import (
     BulkSegmentReviewResponse,
     MediaReviewStatus,
@@ -180,6 +181,7 @@ class DouyinOneClickBatchRequest(BaseModel):
     selected_video_paths: list[str] = Field(default_factory=list)
     review_subtitles_before_render: bool | None = None
     auto_render_after_translation: bool | None = None
+    product_context: dict[str, Any] = Field(default_factory=dict)
     advanced_overrides: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -227,6 +229,57 @@ class DouyinRetryFailedResponse(BaseModel):
 class DouyinReupJobResultsResponse(BaseModel):
     summary: DouyinReupSummary | None = None
     outputs: list[DouyinOutputResult] = Field(default_factory=list)
+
+
+class SilentReupDetectRequest(BaseModel):
+    source_folder: str = Field(min_length=1)
+
+
+class SilentReupDetectItem(BaseModel):
+    video_path: str
+    has_speech: bool
+    speech_score: float
+    recommended_mode: str
+    method: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SilentReupDetectResponse(BaseModel):
+    success: bool
+    items: list[SilentReupDetectItem] = Field(default_factory=list)
+
+
+class SilentReupPlanRequest(BaseModel):
+    video_path: str = Field(min_length=1)
+    settings: dict[str, Any] = Field(default_factory=dict)
+    product_context: dict[str, Any] = Field(default_factory=dict)
+
+
+class SilentReupPlanResponse(BaseModel):
+    success: bool
+    plan_id: str
+    plan: SilentReupPlan
+
+
+class SilentReupRenderRequest(BaseModel):
+    plan_id: str = Field(min_length=1)
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class SilentReupRenderResponse(BaseModel):
+    success: bool
+    job_id: str
+
+
+class SilentReupOneClickRequest(BaseModel):
+    project_name: str = Field(min_length=1)
+    source_folder: str = Field(min_length=1)
+    output_folder: str = Field(min_length=1)
+    strategy: str = "chill_immersive"
+    visual_style_preset_id: str | None = None
+    bgm_folder: str | None = None
+    review_before_render: bool = True
+    product_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class SegmentScoringResponse(BaseModel):

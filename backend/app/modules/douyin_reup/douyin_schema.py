@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 SubtitleSourceType = Literal["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub", "none"]
@@ -66,6 +66,25 @@ class DouyinReupSettings(BaseModel):
     auto_generate_rewrite_for_flagged_lines: bool = False
     auto_apply_safe_rewrites: bool = False
     default_rewrite_style: str = "short_natural"
+    enable_silent_immersive_mode: bool = True
+    silent_mode_detection: bool = True
+    silent_mode_strategy: Literal["chill_immersive", "product_review_voiceover", "sales_recut"] = "chill_immersive"
+    detect_speech_presence: bool = True
+    speech_detection_threshold: float = Field(default=0.35, ge=0, le=1)
+    use_visual_segments_for_silent_video: bool = True
+    silent_segment_duration_min: float = Field(default=1.2, gt=0, le=30)
+    silent_segment_duration_max: float = Field(default=4.0, gt=0, le=60)
+    generate_visual_captions: bool = True
+    visual_caption_language: str = "vi"
+    visual_caption_style: str = "natural_short"
+    generate_voiceover_for_silent_video: bool = False
+    silent_voiceover_provider: str = "edge_tts"
+    silent_voiceover_voice: str = "vi-VN-HoaiMyNeural"
+    keep_immersive_original_audio: bool = True
+    immersive_original_audio_volume: float = Field(default=0.75, ge=0, le=1)
+    add_bgm_for_silent_video: bool = True
+    immersive_bgm_volume: float = Field(default=0.18, ge=0, le=1)
+    silent_review_before_render: bool = True
 
     @field_validator(
         "source_language",
@@ -82,6 +101,11 @@ class DouyinReupSettings(BaseModel):
         "translation_style",
         "subtitle_position",
         "default_rewrite_style",
+        "silent_mode_strategy",
+        "visual_caption_language",
+        "visual_caption_style",
+        "silent_voiceover_provider",
+        "silent_voiceover_voice",
     )
     @classmethod
     def clean_text(cls, value: str) -> str:
@@ -157,6 +181,12 @@ class DouyinReupSettings(BaseModel):
             seen.add(path)
         return cleaned
 
+    @model_validator(mode="after")
+    def validate_silent_segment_duration(self) -> "DouyinReupSettings":
+        if self.silent_segment_duration_min > self.silent_segment_duration_max:
+            raise ValueError("silent_segment_duration_min must be less than or equal to silent_segment_duration_max.")
+        return self
+
 
 class DouyinVideoItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -221,6 +251,13 @@ class DouyinOutputResult(BaseModel):
     bgm_file: str | None = None
     log_file: str | None = None
     subtitle_review_document_id: str | None = None
+    reup_mode: str | None = None
+    silent_strategy: str | None = None
+    speech_score: float | None = None
+    caption_source: str | None = None
+    silent_plan_file: str | None = None
+    voiceover_file: str | None = None
+    voiceover_script_file: str | None = None
     ocr_debug_json_path: str | None = None
     ocr_frame_count: int = 0
     ocr_detected_line_count: int = 0
@@ -252,4 +289,5 @@ class DouyinReupSummary(BaseModel):
     failed_items: list[dict[str, str | int]] = Field(default_factory=list)
     outputs: list[DouyinOutputResult] = Field(default_factory=list)
     subtitle_review: dict[str, int | bool] = Field(default_factory=dict)
+    silent_immersive: dict[str, Any] = Field(default_factory=dict)
     summary_file: str | None = None

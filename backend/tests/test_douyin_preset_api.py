@@ -12,7 +12,9 @@ def test_douyin_preset_list_detail_and_apply_api(monkeypatch):
     with TestClient(create_app()) as client:
         presets = client.get("/api/douyin-reup/presets")
         assert presets.status_code == 200
-        assert len(presets.json()["presets"]) == 6
+        preset_ids = {preset["id"] for preset in presets.json()["presets"]}
+        assert len(preset_ids) == 9
+        assert "silent_chill_immersive" in preset_ids
 
         detail = client.get("/api/douyin-reup/presets/ocr_priority")
         assert detail.status_code == 200
@@ -49,5 +51,5 @@ def test_douyin_recommend_preset_api_uses_scan_signals(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["preset_id"] == "ocr_priority"
+    assert payload["preset_id"] == "silent_chill_immersive"
     assert payload["signals"]["total"] == 3

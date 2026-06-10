@@ -5,11 +5,11 @@ from app.modules.subtitle_rewrite.subtitle_rewrite_schema import SubtitleRewrite
 
 
 STYLE_INSTRUCTIONS = {
-    SubtitleRewriteStyle.short_natural: "Rut gon vua phai, tieng Viet tu nhien va de doc.",
-    SubtitleRewriteStyle.very_short: "Rut gon manh, uu tien cau cuc ngan cho video nhanh.",
-    SubtitleRewriteStyle.casual_tiktok: "Cau ngan, gan van noi, hop TikTok/Reels, khong lam dung slang.",
-    SubtitleRewriteStyle.clear_review: "Ro nghia, de hieu, phu hop video review san pham.",
-    SubtitleRewriteStyle.sales_natural: "Tu nhien, co huong ban hang nhe, tuyet doi khong them claim moi.",
+    SubtitleRewriteStyle.short_natural: "Rút gọn vừa phải, tiếng Việt tự nhiên và dễ đọc.",
+    SubtitleRewriteStyle.very_short: "Rút gọn mạnh, ưu tiên câu cực ngắn cho video nhanh.",
+    SubtitleRewriteStyle.casual_tiktok: "Câu ngắn, gần văn nói, hợp TikTok/Reels, không lạm dụng slang.",
+    SubtitleRewriteStyle.clear_review: "Rõ nghĩa, dễ hiểu, phù hợp video review sản phẩm.",
+    SubtitleRewriteStyle.sales_natural: "Tự nhiên, có hướng bán hàng nhẹ, tuyệt đối không thêm claim mới.",
 }
 
 
@@ -22,38 +22,38 @@ def build_subtitle_rewrite_prompt(
     max_chars: int | None,
     preserve_keywords: list[str],
 ) -> str:
-    issue_text = "; ".join(issue.message for issue in issues) or "Cau can ngan gon va tu nhien hon."
-    keywords = ", ".join(preserve_keywords) or "Khong co tu khoa bo sung."
-    limit = str(max_chars) if max_chars is not None else "Khong dat gioi han cung."
-    return f"""Ban la bien tap phu de tieng Viet cho video ngan.
+    issue_text = "; ".join(issue.message for issue in issues) or "Câu cần ngắn gọn và tự nhiên hơn."
+    keywords = ", ".join(preserve_keywords) or "Không có từ khóa bổ sung."
+    limit = str(max_chars) if max_chars is not None else "Không đặt giới hạn cứng."
+    return f"""Bạn là biên tập phụ đề tiếng Việt cho video ngắn.
 
-Nhiem vu:
-Viet lai cau phu de tieng Viet ngan hon, tu nhien hon va de doc hon, nhung giu nguyen y goc.
+Nhiệm vụ:
+Viết lại câu phụ đề tiếng Việt ngắn hơn, tự nhiên hơn và dễ đọc hơn, nhưng giữ nguyên ý gốc.
 
-Du lieu:
-- Cau tieng Trung goc: {source_text or 'Khong co'}
-- Ban dich hien tai: {original_translation}
-- Van de can sua: {issue_text}
-- Phong cach: {style.value} - {STYLE_INSTRUCTIONS[style]}
-- So goi y can tra: {suggestion_count}
-- Do dai toi da: {limit}
-- Tu khoa bat buoc giu nguyen: {keywords}
+Dữ liệu:
+- Câu tiếng Trung gốc: {source_text or 'Không có'}
+- Bản dịch hiện tại: {original_translation}
+- Vấn đề cần sửa: {issue_text}
+- Phong cách: {style.value} - {STYLE_INSTRUCTIONS[style]}
+- Số gợi ý cần trả: {suggestion_count}
+- Độ dài tối đa: {limit}
+- Từ khóa bắt buộc giữ nguyên: {keywords}
 
-Quy tac bat buoc:
-- Khong them y moi hoac bia thong tin san pham.
-- Khong them claim nhu "tot nhat", "so 1", "100% hieu qua".
-- Giu nguyen ten rieng, thuong hieu, so lieu va don vi.
-- Khong doi nghia cau.
-- Khong dung markdown.
-- Khong giai thich dai.
-- Tra JSON hop le.
+Quy tắc bắt buộc:
+- Không thêm ý mới hoặc bịa thông tin sản phẩm.
+- Không thêm claim như "tốt nhất", "số 1", "100% hiệu quả".
+- Giữ nguyên tên riêng, thương hiệu, số liệu và đơn vị.
+- Không đổi nghĩa câu.
+- Không dùng markdown.
+- Không giải thích dài.
+- Trả JSON hợp lệ.
 
-Format tra ve:
+Format trả về:
 {{
   "suggestions": [
     {{
-      "text": "cau phu de da rut gon",
-      "reason": "ly do ngan gon"
+      "text": "câu phụ đề đã rút gọn",
+      "reason": "lý do ngắn gọn"
     }}
   ]
 }}

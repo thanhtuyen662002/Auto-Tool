@@ -237,14 +237,14 @@ Platform target: {platform_target.value}
 
 ## Before posting
 
-- [ ] Xem lai video final tu dau den cuoi
-- [ ] Kiem tra phu de tieng Viet co dung nghia khong
-- [ ] Kiem tra phu de khong che noi dung quan trong
-- [ ] Kiem tra am luong khong qua nho/qua to
-- [ ] Kiem tra nhac nen co quyen su dung
-- [ ] Kiem tra quyen su dung video nguon
-- [ ] Kiem tra caption khong chua claim sai
-- [ ] Kiem tra nen tang dang phu hop
+- [ ] Xem lại video final từ đầu đến cuối
+- [ ] Kiểm tra phụ đề tiếng Việt có đúng nghĩa không
+- [ ] Kiểm tra phụ đề không che nội dung quan trọng
+- [ ] Kiểm tra âm lượng không quá nhỏ/quá to
+- [ ] Kiểm tra nhạc nền có quyền sử dụng
+- [ ] Kiểm tra quyền sử dụng video nguồn
+- [ ] Kiểm tra caption không chứa claim sai
+- [ ] Kiểm tra nền tảng đăng phù hợp
 
 ## Files
 

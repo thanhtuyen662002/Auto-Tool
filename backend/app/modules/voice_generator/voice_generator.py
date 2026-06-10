@@ -522,7 +522,7 @@ class VoiceGenerator:
             self.last_cache_hit = True
             return True
         except Exception as exc:
-            logger.warning("KhÃ´ng thá»ƒ dÃ¹ng TTS cache, sáº½ táº¡o láº¡i: %s", exc)
+            logger.warning("Không thể dùng TTS cache, sẽ tạo lại: %s", exc)
             return False
 
     def _store_cache(self, cache_key: str | None, generated_path: str, settings: TTSSettings) -> None:

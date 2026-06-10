@@ -32,7 +32,7 @@ Mô tả:
 Điểm nổi bật:
 {features}
 
-ThÃ´ng sá»‘ Ä‘Æ°á»£c cung cáº¥p:
+Thông số được cung cấp:
 {specs}
 
 {product_warnings}
@@ -54,7 +54,7 @@ Yêu cầu:
 - Giọng văn tự nhiên như reviewer Việt Nam
 - Ngôn ngữ: {ai_settings.language}
 - Tone: {ai_settings.tone}
-- Chá»‰ Ä‘Æ°á»£c dÃ¹ng specs cÃ³ trong danh sÃ¡ch "ThÃ´ng sá»‘ Ä‘Æ°á»£c cung cáº¥p"
+- Chỉ được dùng specs có trong danh sách "Thông số được cung cấp"
 - Không nói quá sự thật
 - Không dùng claim tuyệt đối như "tốt nhất", "số 1", "100% hiệu quả" nếu thông tin không được cung cấp
 - Không bịa thêm thông số kỹ thuật
@@ -95,7 +95,7 @@ def _format_specs(specs) -> str:
         value = getattr(spec, "value", "")
         if name and value:
             items.append(f"- {name}: {value}")
-    return "\n".join(items) if items else "- KhÃ´ng cÃ³ thÃ´ng sá»‘ cá»¥ thá»ƒ Ä‘Æ°á»£c cung cáº¥p."
+    return "\n".join(items) if items else "- Không có thông số cụ thể được cung cấp."
 
 
 def _format_product_warnings(warnings: list[str]) -> str:
@@ -103,7 +103,7 @@ def _format_product_warnings(warnings: list[str]) -> str:
     if not cleaned:
         return ""
     lines = "\n".join(f"- {item}" for item in cleaned[:6])
-    return f"""Cáº£nh bÃ¡o ná»™i dung:
+    return f"""Cảnh báo nội dung:
 {lines}
 """
 

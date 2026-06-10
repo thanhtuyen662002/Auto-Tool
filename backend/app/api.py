@@ -98,6 +98,9 @@ from app.modules.segmenter.segmenter import Segmenter
 from app.modules.script_variants.script_variant_generator import ScriptVariantGenerator
 from app.modules.script_variants.variant_registry import list_variant_styles
 from app.modules.script_writer.script_writer import ProductVideoScript
+from app.modules.silent_immersive_reup.silent_reup_pipeline import SilentReupPipeline
+from app.modules.silent_immersive_reup.silent_reup_service import SilentReupService
+from app.modules.silent_immersive_reup.silent_schema import SilentReupPlan
 from app.modules.source_media_manager.media_manager_service import MediaManagerService, build_source_media_summary
 from app.modules.source_media_manager.segment_review_service import SegmentReviewService
 from app.modules.timeline_templates.template_registry import list_timeline_templates
@@ -166,6 +169,13 @@ from app.schemas.api_schema import (
     ScanResponse,
     SegmentReviewResponse,
     SegmentScoringResponse,
+    SilentReupDetectRequest,
+    SilentReupDetectResponse,
+    SilentReupOneClickRequest,
+    SilentReupPlanRequest,
+    SilentReupPlanResponse,
+    SilentReupRenderRequest,
+    SilentReupRenderResponse,
     ScriptVariantStyleItem,
     ScriptVariantStylesResponse,
     ScriptVariantSummaryItem,
@@ -213,6 +223,7 @@ from app.utils.path_utils import resolve_path
 
 
 logger = logging.getLogger(__name__)
+_SILENT_PLAN_STORE: dict[str, dict[str, Any]] = {}
 
 
 def _read_version() -> str:
@@ -369,12 +380,13 @@ def create_app() -> FastAPI:
                 source_folder=request.source_folder,
                 output_folder=request.output_folder,
                 settings=settings,
+                product_context=request.product_context,
             )
             scanner = DouyinFolderScanner()
             media = scanner.scan_folder(config.source_folder)
             total_outputs = _count_douyin_selected(media, config.douyin_reup or DouyinReupSettings(enabled=True))
             if total_outputs <= 0:
-                raise ValueError(f"KhÃ´ng tÃ¬m tháº¥y video há»£p lá»‡ trong thÆ° má»¥c Douyin: {config.source_folder}")
+                raise ValueError(f"Không tìm thấy video hợp lệ trong thư mục Douyin: {config.source_folder}")
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (FileNotFoundError, ValueError, ValidationError) as exc:
@@ -420,6 +432,117 @@ def create_app() -> FastAPI:
             elif "EasyOCR" in message:
                 message = "EasyOCR is not available yet. Auto Tool is installing/downloading OCR dependencies in the background; wait a few minutes and try again."
             return DouyinOcrTestResponse(success=False, error=message)
+
+    @app.post("/api/silent-reup/detect", response_model=SilentReupDetectResponse)
+    def detect_silent_reup_videos(request: SilentReupDetectRequest) -> SilentReupDetectResponse:
+        try:
+            items = SilentReupService().detect_folder(request.source_folder)
+            return SilentReupDetectResponse(success=True, items=items)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể detect video silent: {exc}") from exc
+
+    @app.post("/api/silent-reup/plan", response_model=SilentReupPlanResponse)
+    def build_silent_reup_plan(request: SilentReupPlanRequest) -> SilentReupPlanResponse:
+        video_path = Path(request.video_path).expanduser().resolve()
+        if not video_path.exists() or not video_path.is_file():
+            raise HTTPException(status_code=404, detail=f"Video file not found: {video_path}")
+        try:
+            settings = _silent_settings_from_payload(request.settings)
+            plan_id = str(uuid.uuid4())
+            output_dir = ensure_dir(video_path.parent / "_silent_reup_plans" / f"{video_path.stem}-{plan_id[:8]}")
+            service = SilentReupService()
+            plan = service.build_plan(str(video_path), settings=settings, output_dir=str(output_dir), product_context=request.product_context)
+            _SILENT_PLAN_STORE[plan_id] = {
+                "plan": plan.model_dump(mode="json"),
+                "settings": settings.model_dump(mode="json"),
+                "output_dir": str(output_dir),
+                "product_context": request.product_context,
+            }
+            return SilentReupPlanResponse(success=True, plan_id=plan_id, plan=plan)
+        except ValidationError as exc:
+            raise HTTPException(status_code=400, detail=exc.errors()) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể tạo silent reup plan: {exc}") from exc
+
+    @app.post("/api/silent-reup/render", response_model=SilentReupRenderResponse)
+    def render_silent_reup_plan(request: SilentReupRenderRequest) -> SilentReupRenderResponse:
+        stored = _SILENT_PLAN_STORE.get(request.plan_id)
+        if not stored:
+            raise HTTPException(status_code=404, detail=f"Silent plan not found: {request.plan_id}")
+        try:
+            settings = DouyinReupSettings.model_validate({**stored["settings"], **(request.settings or {})})
+            plan = SilentReupPlan.model_validate(stored["plan"])
+            project_id = str(uuid.uuid4())
+            job_id = str(uuid.uuid4())
+            config = _build_douyin_project_config_from_settings(
+                project_name=f"silent-reup-{request.plan_id[:8]}",
+                source_folder=str(Path(plan.video_path).parent),
+                output_folder=str(Path(stored["output_dir"]).parent),
+                settings=settings,
+                product_context=stored.get("product_context") or {},
+            )
+            database.create_project(project_id, config.model_dump(mode="json"))
+            database.create_job(job_id, project_id, preview_only=False, total_outputs=1)
+            threading.Thread(
+                target=run_silent_reup_plan_job,
+                args=(job_id, plan.model_dump(mode="json"), settings.model_dump(mode="json"), stored["output_dir"]),
+                daemon=True,
+            ).start()
+            return SilentReupRenderResponse(success=True, job_id=job_id)
+        except ValidationError as exc:
+            raise HTTPException(status_code=400, detail=exc.errors()) from exc
+
+    @app.post("/api/silent-reup/one-click", response_model=DouyinOneClickBatchResponse)
+    def start_silent_reup_one_click(request: SilentReupOneClickRequest) -> DouyinOneClickBatchResponse:
+        preset_by_strategy = {
+            "chill_immersive": "silent_chill_immersive",
+            "product_review_voiceover": "silent_product_voiceover",
+            "sales_recut": "silent_sales_recut",
+        }
+        preset_id = preset_by_strategy.get(request.strategy, "silent_chill_immersive")
+        try:
+            preset_service = DouyinReupPresetService()
+            overrides: dict[str, Any] = {
+                "music_folder": request.bgm_folder,
+                "visual_style_preset_id": request.visual_style_preset_id,
+                "review_subtitles_before_render": request.review_before_render,
+                "silent_review_before_render": request.review_before_render,
+                "auto_render_after_translation": not request.review_before_render,
+                "process_mode": "all",
+            }
+            settings = preset_service.apply_preset(preset_id, overrides=overrides)
+            config = _build_douyin_project_config_from_settings(
+                project_name=request.project_name,
+                source_folder=request.source_folder,
+                output_folder=request.output_folder,
+                settings=settings,
+                product_context=request.product_context,
+            )
+            scanner = DouyinFolderScanner()
+            media = scanner.scan_folder(config.source_folder)
+            total_outputs = _count_douyin_selected(media, config.douyin_reup or DouyinReupSettings(enabled=True))
+            if total_outputs <= 0:
+                raise ValueError(f"Không tìm thấy video hợp lệ trong thư mục Douyin: {config.source_folder}")
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (FileNotFoundError, ValueError, ValidationError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        project_id = str(uuid.uuid4())
+        job_id = str(uuid.uuid4())
+        database.create_project(project_id, config.model_dump(mode="json"))
+        database.create_job(job_id, project_id, preview_only=False, total_outputs=total_outputs)
+        threading.Thread(target=run_douyin_reup_job, args=(job_id,), daemon=True).start()
+        return DouyinOneClickBatchResponse(
+            project_id=project_id,
+            job_id=job_id,
+            status="queued",
+            preset_id=settings.preset_id or preset_id,
+            preset_name=settings.preset_name or preset_id,
+            total_outputs=total_outputs,
+        )
 
     @app.post("/api/douyin-reup/process", response_model=DouyinReupProcessResponse)
     def process_douyin_reup_folder(request: DouyinReupProcessRequest) -> DouyinReupProcessResponse:
@@ -1639,7 +1762,7 @@ def create_app() -> FastAPI:
         ]
         failed_outputs = _filter_douyin_outputs_by_ids(failed_outputs, request.video_ids)
         if not failed_outputs:
-            raise HTTPException(status_code=400, detail="KhÃ´ng cÃ³ video failed há»£p lá»‡ Ä‘á»ƒ retry.")
+            raise HTTPException(status_code=400, detail="Không có video failed hợp lệ để retry.")
 
         project = database.get_project(original_job["project_id"])
         if not project:
@@ -1866,6 +1989,62 @@ def run_douyin_reup_job(job_id: str) -> None:
             current_step="failed",
             progress=100,
             failed_outputs=job["total_outputs"],
+            error=str(exc),
+        )
+
+
+def run_silent_reup_plan_job(
+    job_id: str,
+    plan_payload: dict[str, Any],
+    settings_payload: dict[str, Any],
+    output_dir: str,
+) -> None:
+    database.init_db()
+    job = database.get_job(job_id)
+    if not job:
+        return
+    try:
+        database.update_job(job_id, status="running", current_step="silent_render", progress=10)
+        plan = SilentReupPlan.model_validate(plan_payload)
+        settings = DouyinReupSettings.model_validate(settings_payload)
+        result = SilentReupPipeline().render_from_plan(plan, settings, output_dir)
+        success = result.status == "success" and bool(result.output_video_path)
+        output = {
+            "index": 1,
+            "path": result.output_video_path or "",
+            "status": "success" if success else "failed",
+            "source_video": result.input_video_path,
+            "reup_mode": "silent_immersive",
+            "silent_strategy": plan.strategy,
+            "speech_score": plan.speech_score,
+            "caption_source": _silent_plan_caption_source(plan),
+            "translated_srt_file": result.caption_srt_path,
+            "subtitle_ass_file": result.caption_ass_path,
+            "voiceover_file": result.voiceover_path,
+            "bgm_file": result.bgm_path,
+            "silent_plan_file": result.plan_path,
+            "warnings": result.warnings,
+            "errors": result.errors,
+        }
+        database.update_job(
+            job_id,
+            status="completed" if success else "completed_with_errors",
+            current_step="completed",
+            progress=100,
+            total_outputs=1,
+            completed_outputs=1 if success else 0,
+            failed_outputs=0 if success else 1,
+            output_folder=output_dir,
+            results_json=json.dumps({"outputs": [output]}, ensure_ascii=False),
+        )
+    except Exception as exc:
+        database.add_job_log(job_id, "error", str(exc))
+        database.update_job(
+            job_id,
+            status="failed",
+            current_step="failed",
+            progress=100,
+            failed_outputs=1,
             error=str(exc),
         )
 
@@ -2222,6 +2401,26 @@ def _get_app_settings() -> AppSettings:
     return AppSettings.model_validate(database.get_app_settings() or {})
 
 
+def _silent_settings_from_payload(payload: dict[str, Any] | None = None) -> DouyinReupSettings:
+    base = DouyinReupSettings(enabled=True).model_dump(mode="json")
+    updates = dict(payload or {})
+    updates.setdefault("enabled", True)
+    updates.setdefault("preset_id", "silent_chill_immersive")
+    updates.setdefault("preset_name", "Không thoại - Chill immersive")
+    updates.setdefault("enable_silent_immersive_mode", True)
+    updates.setdefault("silent_mode_strategy", "chill_immersive")
+    return DouyinReupSettings.model_validate({**base, **updates})
+
+
+def _silent_plan_caption_source(plan: SilentReupPlan) -> str:
+    sources = [caption.source for caption in plan.captions]
+    if "ocr_translation" in sources:
+        return "ocr_translation"
+    if "visual_generated" in sources:
+        return "visual_generated"
+    return sources[0] if sources else "template"
+
+
 def _build_douyin_project_config(request: DouyinReupProcessRequest) -> ProjectConfig:
     return _build_douyin_project_config_from_settings(
         project_name=request.project_name,
@@ -2237,6 +2436,7 @@ def _build_douyin_project_config_from_settings(
     source_folder: str,
     output_folder: str,
     settings: DouyinReupSettings,
+    product_context: dict[str, Any] | None = None,
 ) -> ProjectConfig:
     base_dir = Path.cwd()
     settings = _normalize_douyin_settings(settings.model_copy(update={"enabled": True}), base_dir)
@@ -2247,13 +2447,7 @@ def _build_douyin_project_config_from_settings(
             "project_name": project_name.strip(),
             "source_folder": source_folder,
             "output_folder": output_folder,
-            "product": {
-                "name": "Douyin Reup",
-                "brand": "",
-                "description": "Xử lý video Douyin local với subtitle dịch sang tiếng Việt.",
-                "features": ["Dịch subtitle", "Thêm overlay", "Trộn nhạc nền"],
-                "cta": "Xem video",
-            },
+            "product": _douyin_product_payload(product_context),
             "render": {
                 "output_count": settings.max_videos or 1,
                 "duration": 8,
@@ -2286,6 +2480,24 @@ def _build_douyin_project_config_from_settings(
             "douyin_reup": settings.model_dump(mode="json"),
         }
     )
+
+
+def _douyin_product_payload(product_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    context = product_context or {}
+    features = context.get("features") or ["Dịch subtitle", "Thêm overlay", "Trộn nhạc nền"]
+    if isinstance(features, str):
+        features = [line.strip() for line in features.splitlines() if line.strip()]
+    if not isinstance(features, list) or not features:
+        features = ["Dịch subtitle", "Thêm overlay", "Trộn nhạc nền"]
+    return {
+        "name": str(context.get("product_name") or context.get("name") or "Douyin Reup").strip() or "Douyin Reup",
+        "brand": str(context.get("brand") or "").strip(),
+        "description": str(
+            context.get("description") or "Xử lý video Douyin local với subtitle/caption tiếng Việt."
+        ).strip(),
+        "features": [str(item).strip() for item in features if str(item).strip()],
+        "cta": str(context.get("cta") or "Xem video").strip() or "Xem video",
+    }
 
 
 def _one_click_overrides(request: DouyinOneClickBatchRequest) -> dict[str, Any]:
@@ -2355,8 +2567,8 @@ def _recommend_douyin_preset(videos: list[Any]) -> dict[str, Any]:
     }
     if no_audio_ratio >= 0.5:
         return {
-            "preset_id": "ocr_priority",
-            "reason": "Many videos have no audio, so visible subtitle OCR is the safer first fallback.",
+            "preset_id": "silent_chill_immersive",
+            "reason": "Many videos have no audio, so Silent Immersive can generate Vietnamese visual captions without ASR.",
             "confidence": 0.82,
             "signals": signals,
         }

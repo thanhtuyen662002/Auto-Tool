@@ -23,6 +23,8 @@ from app.modules.douyin_reup.subtitle_timing_guard import SubtitleTimingGuard
 from app.modules.douyin_reup.subtitle_translator import SubtitleTranslator
 from app.modules.final_output_qa.final_output_qa_schema import PlatformTarget
 from app.modules.final_output_qa.final_output_qa_service import FinalOutputQAService
+from app.modules.silent_immersive_reup.silent_reup_pipeline import SilentReupPipeline
+from app.modules.silent_immersive_reup.silent_reup_service import is_silent_reup_settings
 from app.modules.subtitle_review import SubtitleReviewService
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir, write_json
@@ -40,6 +42,7 @@ class DouyinReupService:
         timing_guard: SubtitleTimingGuard | None = None,
         render_pipeline: DouyinRenderPipeline | None = None,
         subtitle_review_service: SubtitleReviewService | None = None,
+        silent_pipeline: SilentReupPipeline | None = None,
     ) -> None:
         self.scanner = scanner or DouyinFolderScanner()
         self.source_detector = source_detector or SubtitleSourceDetector()
@@ -47,6 +50,7 @@ class DouyinReupService:
         self.timing_guard = timing_guard or SubtitleTimingGuard()
         self.render_pipeline = render_pipeline or DouyinRenderPipeline()
         self.subtitle_review_service = subtitle_review_service or SubtitleReviewService()
+        self.silent_pipeline = silent_pipeline or SilentReupPipeline(render_pipeline=self.render_pipeline)
 
     def process_folder(
         self,
@@ -145,6 +149,17 @@ class DouyinReupService:
         cached_output: dict[str, Any] | None = None,
         retry_steps: set[str] | None = None,
     ) -> DouyinOutputResult:
+        if is_silent_reup_settings(settings):
+            return self._process_one_silent_video(
+                index=index,
+                video=video,
+                config=config,
+                settings=settings,
+                output_root=output_root,
+                project_id=project_id,
+                job_id=job_id,
+            )
+
         video_dir = ensure_dir(output_root / f"video_{index:03d}")
         log_path = video_dir / f"video_{index:03d}_log.json"
         warnings = list(video.warnings)
@@ -419,6 +434,246 @@ class DouyinReupService:
                 payload["final_output_qa"] = _final_qa_summary(final_qa_report)
             write_json(log_path, payload)
 
+    def _process_one_silent_video(
+        self,
+        index: int,
+        video: DouyinVideoItem,
+        config: ProjectConfig,
+        settings: DouyinReupSettings,
+        output_root: Path,
+        project_id: str | None = None,
+        job_id: str | None = None,
+    ) -> DouyinOutputResult:
+        video_dir = ensure_dir(output_root / f"video_{index:03d}")
+        log_path = video_dir / f"video_{index:03d}_log.json"
+        warnings = list(video.warnings)
+        errors: list[str] = []
+        started_at = datetime.now().replace(microsecond=0)
+        steps: dict[str, str] = {"scan": "ok", "mode": "silent_immersive"}
+        durations: dict[str, float] = {}
+        failed_step: str | None = None
+        result_status = "success"
+        final_qa_report = None
+        plan = None
+        render_result = None
+        caption_srt_path: str | None = None
+        caption_source: str | None = None
+        document_id: str | None = None
+
+        try:
+            failed_step = "silent_plan"
+            plan_started = time.perf_counter()
+            plan = self.silent_pipeline.build_plan(
+                video_path=video.path,
+                settings=settings,
+                output_dir=str(video_dir),
+                product_context=_product_context(config),
+            )
+            durations["silent_plan_seconds"] = time.perf_counter() - plan_started
+            warnings.extend(plan.warnings)
+            caption_source = _silent_caption_source(plan)
+            steps["silent_plan"] = "ok"
+
+            failed_step = "silent_caption_srt"
+            caption_srt_path = self.silent_pipeline.write_caption_srt(
+                plan,
+                str(video_dir),
+                f"video_{index:03d}_silent_vi.srt",
+            )
+            steps["silent_caption_srt"] = "ok"
+
+            if settings.silent_review_before_render and settings.review_subtitles_before_render and not settings.auto_render_after_translation:
+                failed_step = "review_document"
+                document = self.subtitle_review_service.create_document_from_srt(
+                    video_id=f"douyin_silent_{index:03d}",
+                    video_path=video.path,
+                    translated_srt_path=caption_srt_path,
+                    source_srt_path=self.silent_pipeline.last_ocr_source_srt_path,
+                    project_id=project_id,
+                    job_id=job_id,
+                    source_language=settings.source_language,
+                    target_language=settings.target_language,
+                    source_type=caption_source or "visual_generated",
+                    auto_mark_low_quality_lines=settings.auto_mark_low_quality_lines,
+                    enable_subtitle_rewrite_suggestions=settings.enable_subtitle_rewrite_suggestions,
+                    auto_generate_rewrite_for_flagged_lines=settings.auto_generate_rewrite_for_flagged_lines,
+                    auto_apply_safe_rewrites=settings.auto_apply_safe_rewrites,
+                    default_rewrite_style=settings.default_rewrite_style,
+                )
+                document_id = document.id
+                warnings.append(f"Subtitle review required: {document.id}")
+                steps["review_document"] = "ok"
+                steps["render"] = "skipped_review_required"
+                result_status = "needs_review"
+                return DouyinOutputResult(
+                    index=index,
+                    path="",
+                    status="needs_review",
+                    source_video=video.path,
+                    preset_id=settings.preset_id,
+                    preset_name=settings.preset_name,
+                    subtitle_source=caption_source or "visual_generated",
+                    source_srt_file=self.silent_pipeline.last_ocr_source_srt_path,
+                    translated_srt_file=caption_srt_path,
+                    subtitle_review_document_id=document.id,
+                    reup_mode="silent_immersive",
+                    silent_strategy=plan.strategy,
+                    speech_score=plan.speech_score,
+                    caption_source=caption_source,
+                    silent_plan_file=self.silent_pipeline.last_plan_path,
+                    voiceover_script_file=self.silent_pipeline.last_voiceover_script_path,
+                    ocr_debug_json_path=self.silent_pipeline.last_ocr_debug_json_path,
+                    ocr_frame_count=self.silent_pipeline.last_ocr_frame_count,
+                    ocr_detected_line_count=self.silent_pipeline.last_ocr_detected_line_count,
+                    ocr_average_confidence=self.silent_pipeline.last_ocr_average_confidence,
+                    ocr_provider=settings.ocr_provider if self.silent_pipeline.last_ocr_source_srt_path else None,
+                    ocr_region_mode=settings.ocr_region_mode if self.silent_pipeline.last_ocr_source_srt_path else None,
+                    log_file=str(log_path),
+                    duration=video.duration,
+                    durations=_round_durations(durations),
+                    retry_history=[],
+                    warnings=_dedupe(warnings),
+                    errors=[],
+                )
+
+            failed_step = "silent_render"
+            render_started = time.perf_counter()
+            render_result = self.silent_pipeline.render_from_plan(plan, settings, str(video_dir))
+            durations["render_seconds"] = time.perf_counter() - render_started
+            warnings.extend(render_result.warnings)
+            errors.extend(render_result.errors)
+            if render_result.status != "success" or not render_result.output_video_path:
+                raise RuntimeError("; ".join(render_result.errors) or "Silent render không tạo được video final.")
+            steps["render"] = "ok"
+
+            final_qa_report = FinalOutputQAService().run_qa_for_output(
+                render_result.output_video_path,
+                PlatformTarget.tiktok,
+                job_id=job_id,
+                project_id=project_id,
+                video_id=f"douyin_silent_{index:03d}",
+                ass_path=render_result.caption_ass_path,
+                overlay_path=None,
+                subtitle_expected=settings.burn_subtitle,
+                audio_expected=(
+                    settings.keep_immersive_original_audio
+                    or settings.add_bgm_for_silent_video
+                    or settings.generate_voiceover_for_silent_video
+                ),
+                overlay_expected=settings.add_overlay,
+                report_path=str(video_dir / f"video_{index:03d}_final_qa.json"),
+            )
+            steps["final_output_qa"] = final_qa_report.status
+
+            return DouyinOutputResult(
+                index=index,
+                path=render_result.output_video_path,
+                status="success",
+                source_video=video.path,
+                preset_id=settings.preset_id,
+                preset_name=settings.preset_name,
+                subtitle_source=caption_source or "visual_generated",
+                source_srt_file=self.silent_pipeline.last_ocr_source_srt_path,
+                translated_srt_file=render_result.caption_srt_path,
+                subtitle_ass_file=render_result.caption_ass_path,
+                bgm_file=render_result.bgm_path,
+                log_file=str(log_path),
+                reup_mode="silent_immersive",
+                silent_strategy=plan.strategy,
+                speech_score=plan.speech_score,
+                caption_source=caption_source,
+                silent_plan_file=render_result.plan_path,
+                voiceover_file=render_result.voiceover_path,
+                voiceover_script_file=self.silent_pipeline.last_voiceover_script_path,
+                ocr_debug_json_path=self.silent_pipeline.last_ocr_debug_json_path,
+                ocr_frame_count=self.silent_pipeline.last_ocr_frame_count,
+                ocr_detected_line_count=self.silent_pipeline.last_ocr_detected_line_count,
+                ocr_average_confidence=self.silent_pipeline.last_ocr_average_confidence,
+                ocr_provider=settings.ocr_provider if self.silent_pipeline.last_ocr_source_srt_path else None,
+                ocr_region_mode=settings.ocr_region_mode if self.silent_pipeline.last_ocr_source_srt_path else None,
+                duration=video.duration,
+                durations=_round_durations(durations),
+                retry_history=[],
+                final_output_qa=_final_qa_summary(final_qa_report),
+                warnings=_dedupe(warnings),
+                errors=_dedupe(errors),
+            )
+        except Exception as exc:
+            result_status = "failed"
+            error_message = _friendly_error(str(exc))
+            errors.append(error_message)
+            if failed_step:
+                steps[failed_step] = "failed"
+            return DouyinOutputResult(
+                index=index,
+                path="",
+                status="failed",
+                source_video=video.path,
+                preset_id=settings.preset_id,
+                preset_name=settings.preset_name,
+                subtitle_source=caption_source,
+                source_srt_file=self.silent_pipeline.last_ocr_source_srt_path,
+                translated_srt_file=caption_srt_path,
+                log_file=str(log_path),
+                reup_mode="silent_immersive",
+                silent_strategy=plan.strategy if plan else settings.silent_mode_strategy,
+                speech_score=plan.speech_score if plan else None,
+                caption_source=caption_source,
+                silent_plan_file=self.silent_pipeline.last_plan_path,
+                voiceover_file=render_result.voiceover_path if render_result else None,
+                voiceover_script_file=self.silent_pipeline.last_voiceover_script_path,
+                ocr_debug_json_path=self.silent_pipeline.last_ocr_debug_json_path,
+                ocr_frame_count=self.silent_pipeline.last_ocr_frame_count,
+                ocr_detected_line_count=self.silent_pipeline.last_ocr_detected_line_count,
+                ocr_average_confidence=self.silent_pipeline.last_ocr_average_confidence,
+                failed_step=failed_step or "silent_process",
+                error_message=error_message,
+                can_retry=True,
+                duration=video.duration,
+                durations=_round_durations(durations),
+                retry_history=[],
+                warnings=_dedupe(warnings),
+                errors=_dedupe(errors),
+            )
+        finally:
+            finished_at = datetime.now().replace(microsecond=0)
+            payload: dict[str, Any] = {
+                "index": index,
+                "input_video": video.path,
+                "status": result_status,
+                "preset_id": settings.preset_id,
+                "preset_name": settings.preset_name,
+                "reup_mode": "silent_immersive",
+                "silent_strategy": plan.strategy if plan else settings.silent_mode_strategy,
+                "speech_score": plan.speech_score if plan else None,
+                "caption_source": caption_source,
+                "subtitle_review_document_id": document_id,
+                "started_at": started_at.isoformat(),
+                "finished_at": finished_at.isoformat(),
+                "duration_seconds": max(0.0, (finished_at - started_at).total_seconds()),
+                "source_video": video.path,
+                "steps": steps,
+                "durations": _round_durations(durations),
+                "warnings": _dedupe(warnings),
+                "errors": _dedupe(errors),
+                "silent_plan_file": self.silent_pipeline.last_plan_path,
+                "caption_srt_path": caption_srt_path or (render_result.caption_srt_path if render_result else None),
+                "voiceover_file": render_result.voiceover_path if render_result else None,
+                "voiceover_script_file": self.silent_pipeline.last_voiceover_script_path,
+                "ocr_debug_json_path": self.silent_pipeline.last_ocr_debug_json_path,
+            }
+            if errors:
+                payload.update(
+                    {
+                        "failed_step": failed_step or "silent_process",
+                        "error_message": _dedupe(errors)[-1],
+                        "can_retry": True,
+                    }
+                )
+            if final_qa_report is not None:
+                payload["final_output_qa"] = _final_qa_summary(final_qa_report)
+            write_json(log_path, payload)
+
     def _select_videos(self, videos: list[DouyinVideoItem], settings: DouyinReupSettings) -> list[DouyinVideoItem]:
         if settings.process_mode == "selected":
             selected = {str(Path(path).expanduser().resolve()).lower() for path in settings.selected_video_paths}
@@ -476,6 +731,30 @@ class DouyinReupService:
             warnings=video.warnings,
             errors=[error_message],
         )
+
+
+def _product_context(config: ProjectConfig) -> dict[str, Any]:
+    product = config.product
+    return {
+        "product_name": product.name,
+        "name": product.name,
+        "brand": product.brand,
+        "description": product.description,
+        "features": list(product.features),
+        "cta": product.cta,
+        "category": config.industry.preset_id if config.industry else None,
+    }
+
+
+def _silent_caption_source(plan) -> str:
+    if not plan or not plan.captions:
+        return "template"
+    sources = [caption.source for caption in plan.captions]
+    if "ocr_translation" in sources:
+        return "ocr_translation"
+    if "visual_generated" in sources:
+        return "visual_generated"
+    return sources[0] if sources else "template"
 
 
 def _progress(
@@ -606,9 +885,9 @@ def _friendly_error(message: str) -> str:
     if "faster-whisper" in lowered or "faster_whisper" in lowered:
         return "Không tìm thấy faster-whisper. Hãy cài dependency bằng `py -m pip install -r backend/requirements.txt` hoặc tắt ASR."
     if "easyocr" in lowered:
-        return "EasyOCR chua san sang. Auto Tool se tu cai/tai OCR dependency khi mo app; doi vai phut roi retry video loi."
+        return "EasyOCR chưa sẵn sàng. Auto Tool sẽ tự cài/tải OCR dependency khi mở app; đợi vài phút rồi retry video lỗi."
     if "paddleocr" in lowered or "paddlepaddle" in lowered:
-        return "PaddleOCR chua san sang hoac paddlepaddle khong ho tro Python hien tai. Auto Tool mac dinh dung EasyOCR cho OCR hard-sub."
+        return "PaddleOCR chưa sẵn sàng hoặc paddlepaddle không hỗ trợ Python hiện tại. Auto Tool mặc định dùng EasyOCR cho OCR hard-sub."
     if "permission" in lowered or "access is denied" in lowered:
         return "Không có quyền đọc/ghi file hoặc thư mục output. Hãy chọn thư mục khác hoặc cấp quyền ghi."
     if "no such file" in lowered or "not found" in lowered or "không tìm thấy" in lowered:

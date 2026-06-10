@@ -167,7 +167,7 @@ def step_build_timeline(segments: list[Any], config: dict[str, Any]) -> tuple[An
             speed_variation=speed_variation,
         )
         if not timelines:
-            return None, _fail("Khong tao duoc timeline")
+            return None, _fail("Không tạo được timeline")
         return timelines[0], _ok(f"template={template_id}, duration={duration}s")
     except Exception as exc:
         return None, _fail(f"Timeline that bai: {_friendly(exc)}")
@@ -224,7 +224,7 @@ def step_generate_tts(script: Any, tmp_dir: Path, mock: bool) -> tuple[str | Non
 
 def step_generate_subtitle(script: Any, tmp_dir: Path) -> dict[str, Any]:
     if script is None:
-        return _skip("Khong co script")
+        return _skip("Không có script")
     try:
         from app.modules.subtitle_generator.subtitle_generator import SubtitleGenerator
         sub_path = str(tmp_dir / "smoke_sub.srt")
