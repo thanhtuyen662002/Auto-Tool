@@ -31,7 +31,11 @@ def _project_config(tmp_path: Path, source_folder: Path, output_folder: Path) ->
                 "subtitle_size": 54,
             },
             "ai": {"text_model": "gemini-test", "tone": "translator", "language": "vi", "gemini_api_keys": []},
-            "douyin_reup": DouyinReupSettings(enabled=True).model_dump(mode="json"),
+            "douyin_reup": DouyinReupSettings(
+                enabled=True,
+                review_subtitles_before_render=False,
+                auto_render_after_translation=True,
+            ).model_dump(mode="json"),
         }
     )
 

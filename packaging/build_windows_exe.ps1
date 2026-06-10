@@ -37,10 +37,16 @@ try {
     --collect-binaries onnxruntime `
     --collect-data onnxruntime `
     --collect-all av `
+    --collect-all easyocr `
+    --collect-all torch `
+    --collect-all torchvision `
+    --collect-all scipy `
+    --collect-all skimage `
     --hidden-import huggingface_hub `
     --hidden-import huggingface_hub.utils `
     --hidden-import onnxruntime `
     --hidden-import onnxruntime.capi.onnxruntime_pybind11_state `
+    --hidden-import cv2 `
     --hidden-import gtts `
     --hidden-import gtts.tts `
     app/launcher.py

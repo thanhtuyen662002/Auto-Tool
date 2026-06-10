@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -12,13 +13,17 @@ from app.modules.douyin_reup.douyin_render_pipeline import DouyinRenderPipeline
 from app.modules.douyin_reup.douyin_schema import (
     DouyinOutputResult,
     DouyinReupSettings,
-    DouyinReupSummary,
     DouyinVideoItem,
+    SubtitleSourceResult,
     TranslationResult,
 )
+from app.modules.douyin_reup.douyin_summary_builder import build_douyin_reup_summary
 from app.modules.douyin_reup.subtitle_source_detector import SubtitleSourceDetector
 from app.modules.douyin_reup.subtitle_timing_guard import SubtitleTimingGuard
 from app.modules.douyin_reup.subtitle_translator import SubtitleTranslator
+from app.modules.final_output_qa.final_output_qa_schema import PlatformTarget
+from app.modules.final_output_qa.final_output_qa_service import FinalOutputQAService
+from app.modules.subtitle_review import SubtitleReviewService
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir, write_json
 
@@ -34,19 +39,26 @@ class DouyinReupService:
         translator: SubtitleTranslator | None = None,
         timing_guard: SubtitleTimingGuard | None = None,
         render_pipeline: DouyinRenderPipeline | None = None,
+        subtitle_review_service: SubtitleReviewService | None = None,
     ) -> None:
         self.scanner = scanner or DouyinFolderScanner()
         self.source_detector = source_detector or SubtitleSourceDetector()
         self.translator = translator or SubtitleTranslator()
         self.timing_guard = timing_guard or SubtitleTimingGuard()
         self.render_pipeline = render_pipeline or DouyinRenderPipeline()
+        self.subtitle_review_service = subtitle_review_service or SubtitleReviewService()
 
     def process_folder(
         self,
         config: ProjectConfig,
+        project_id: str | None = None,
+        job_id: str | None = None,
+        retry_cache: dict[str, dict[str, Any]] | None = None,
+        retry_steps: set[str] | None = None,
         progress_callback: ProgressCallback | None = None,
         log_callback: LogCallback | None = None,
     ) -> dict[str, Any]:
+        total_started = time.perf_counter()
         settings = config.douyin_reup or DouyinReupSettings(enabled=True)
         if not settings.enabled:
             settings = settings.model_copy(update={"enabled": True})
@@ -57,7 +69,9 @@ class DouyinReupService:
         )
         _log(log_callback, "info", f"Bắt đầu xử lý Douyin Reup: {output_root}")
 
+        scan_started = time.perf_counter()
         videos = self._select_videos(self.scanner.scan_folder(config.source_folder), settings)
+        scan_seconds = time.perf_counter() - scan_started
         total = len(videos)
         if total == 0:
             raise RuntimeError(f"Không tìm thấy video hợp lệ trong thư mục Douyin: {config.source_folder}")
@@ -78,38 +92,40 @@ class DouyinReupService:
                     config=config,
                     settings=settings,
                     output_root=output_root,
+                    project_id=project_id,
+                    job_id=job_id,
+                    cached_output=_cached_retry_output(video, retry_cache),
+                    retry_steps=retry_steps or {"asr", "translation", "render"},
                 )
                 outputs.append(output)
                 subtitle_sources.update([output.subtitle_source or "none"])
-                if output.status == "success":
+                if output.status in {"success", "needs_review"}:
                     completed += 1
                 else:
                     failed += 1
-                    _log(log_callback, "warning", f"Video {index} lỗi: {'; '.join(output.errors)}")
+                    _log(log_callback, "warning", f"Video {index} lỗi tại {output.failed_step or 'unknown'}: {'; '.join(output.errors)}")
             except Exception as exc:
                 failed += 1
-                output = self._failed_output(index, video, output_root, str(exc))
+                output = self._failed_output(index, video, output_root, _friendly_error(str(exc)), settings=settings)
                 outputs.append(output)
-                _log(log_callback, "error", f"Video {index} thất bại: {exc}")
+                subtitle_sources.update([output.subtitle_source or "none"])
+                _log(log_callback, "error", f"Video {index} thất bại: {output.error_message or exc}")
 
             _progress(progress_callback, total, completed, failed, f"douyin_video_{index}_done", _progress_percent(index, total))
 
-        summary = DouyinReupSummary(
-            project_name=config.project_name,
-            output_folder=str(output_root),
-            total_videos=len(videos),
-            processed_outputs=len(outputs),
-            successful_outputs=completed,
-            failed_outputs=failed,
-            warnings_count=sum(len(output.warnings) for output in outputs),
-            subtitle_sources=dict(subtitle_sources),
-            failed_items=[
-                {"index": output.index, "reason": "; ".join(output.errors)[:300]}
-                for output in outputs
-                if output.status != "success"
-            ],
+        summary = build_douyin_reup_summary(
+            config=config,
+            output_root=output_root,
             outputs=outputs,
+            subtitle_sources=dict(subtitle_sources),
+            scan_seconds=scan_seconds,
+            total_runtime_seconds=time.perf_counter() - total_started,
         )
+        final_qa_summary_path = output_root / "final_qa_summary.json"
+        final_qa_summary = dict(summary.model_dump(mode="json").get("final_output_qa") or {})
+        final_qa_summary["summary_path"] = str(final_qa_summary_path)
+        write_json(final_qa_summary_path, final_qa_summary)
+        summary = summary.model_copy(update={"final_output_qa": final_qa_summary})
         summary_file = output_root / "douyin_reup_summary.json"
         summary = summary.model_copy(update={"summary_file": str(summary_file)})
         write_json(summary_file, summary.model_dump(mode="json"))
@@ -124,37 +140,90 @@ class DouyinReupService:
         config: ProjectConfig,
         settings: DouyinReupSettings,
         output_root: Path,
+        project_id: str | None = None,
+        job_id: str | None = None,
+        cached_output: dict[str, Any] | None = None,
+        retry_steps: set[str] | None = None,
     ) -> DouyinOutputResult:
         video_dir = ensure_dir(output_root / f"video_{index:03d}")
         log_path = video_dir / f"video_{index:03d}_log.json"
         warnings = list(video.warnings)
         errors: list[str] = []
         started_at = datetime.now().replace(microsecond=0)
-        steps: list[dict[str, str]] = []
+        steps: dict[str, str] = {"scan": "ok"}
+        durations: dict[str, float] = {}
+        source_result: SubtitleSourceResult | None = None
+        translation: TranslationResult | None = None
+        failed_step: str | None = None
+        result_status = "success"
+        final_qa_report = None
+        retry_steps = retry_steps or {"asr", "translation", "render"}
+        cached_output = cached_output or {}
+        retry_history = _retry_history(cached_output, settings, started_at.isoformat())
 
         try:
-            source_result = self.source_detector.detect_source(video, settings, str(video_dir))
-            warnings.extend(source_result.warnings)
+            cached_source_srt = _existing_cached_path(cached_output.get("source_srt_file"))
+            if cached_source_srt:
+                source_result = SubtitleSourceResult(
+                    video_path=video.path,
+                    source_type=cached_output.get("subtitle_source") or "sidecar_srt",
+                    source_srt_path=cached_source_srt,
+                    language=settings.source_language,
+                    warnings=["Dùng lại source SRT đã có từ lần chạy trước."],
+                )
+                warnings.extend(source_result.warnings)
+                steps["subtitle_source"] = "reused"
+            else:
+                failed_step = "subtitle_source"
+                source_started = time.perf_counter()
+                source_result = self.source_detector.detect_source(video, settings, str(video_dir))
+                if source_result.source_type == "asr":
+                    durations["asr_seconds"] = time.perf_counter() - source_started
+                    steps["asr"] = "ok"
+                if source_result.source_type == "ocr_hardsub":
+                    durations["ocr_seconds"] = time.perf_counter() - source_started
+                    steps["ocr"] = "ok"
+                warnings.extend(source_result.warnings)
+                steps["subtitle_source"] = "ok"
             if source_result.source_type == "none" or not source_result.source_srt_path:
                 errors.extend(source_result.errors)
-                raise RuntimeError("; ".join(errors) or "Không tìm thấy subtitle nguồn.")
-            steps.append({"name": "detect_subtitle_source", "status": "success", "message": source_result.source_type})
+                if any("ASR" in error.upper() for error in errors):
+                    failed_step = "asr"
+                raise RuntimeError(_friendly_error("; ".join(errors) or f"Không tìm thấy subtitle nguồn cho video {video.filename}."))
 
             translated_path = video_dir / f"video_{index:03d}_{settings.target_language}.srt"
-            translation = self.translator.translate_srt(
-                source_result.source_srt_path,
-                str(translated_path),
-                source_language=settings.source_language,
-                target_language=settings.target_language,
-                provider=settings.translation_provider,
-                model_name=config.ai.text_model,
-                api_keys=config.ai.gemini_api_keys,
-            )
-            warnings.extend(translation.warnings)
-            steps.append({"name": "translate_subtitle", "status": "success", "message": translation.provider})
+            cached_translated_srt = _existing_cached_path(cached_output.get("translated_srt_file"))
+            should_retranslate = cached_output.get("failed_step") in {"translation", "translate_subtitle"} and "translation" in retry_steps
+            if cached_translated_srt and not should_retranslate:
+                translation = TranslationResult(
+                    source_srt_path=source_result.source_srt_path,
+                    translated_srt_path=cached_translated_srt,
+                    provider="retry_cache",
+                    source_language=settings.source_language,
+                    target_language=settings.target_language,
+                    warnings=["Dùng lại translated SRT đã có từ lần chạy trước."],
+                )
+                warnings.extend(translation.warnings)
+                steps["translation"] = "reused"
+            else:
+                failed_step = "translation"
+                translation_started = time.perf_counter()
+                translation = self.translator.translate_srt(
+                    source_result.source_srt_path,
+                    str(translated_path),
+                    source_language=settings.source_language,
+                    target_language=settings.target_language,
+                    provider=settings.translation_provider,
+                    model_name=config.ai.text_model,
+                    api_keys=config.ai.gemini_api_keys,
+                )
+                durations["translation_seconds"] = time.perf_counter() - translation_started
+                warnings.extend(translation.warnings)
+                steps["translation"] = "ok"
 
             fixed_srt_path = video_dir / f"video_{index:03d}_{settings.target_language}_fixed.srt"
             subtitle_offset = settings.asr_subtitle_offset_seconds if source_result.source_type == "asr" else 0.0
+            failed_step = "timing_guard"
             fixed_srt = self.timing_guard.guard_timing(
                 translation.translated_srt_path,
                 target_duration=video.duration,
@@ -162,8 +231,66 @@ class DouyinReupService:
                 time_offset_seconds=subtitle_offset,
             )
             translation = translation.model_copy(update={"translated_srt_path": fixed_srt})
-            steps.append({"name": "guard_subtitle_timing", "status": "success", "message": ""})
+            steps["timing_guard"] = "ok"
 
+            if settings.review_subtitles_before_render and not settings.auto_render_after_translation:
+                failed_step = "review_document"
+                cached_document_id = cached_output.get("subtitle_review_document_id")
+                document = None
+                if cached_document_id:
+                    try:
+                        document = self.subtitle_review_service.get_document(str(cached_document_id))
+                        steps["review_document"] = "reused"
+                    except LookupError:
+                        document = None
+                if document is None:
+                    document = self.subtitle_review_service.create_document_from_srt(
+                        video_id=f"douyin_{index:03d}",
+                        video_path=video.path,
+                        translated_srt_path=fixed_srt,
+                        source_srt_path=source_result.source_srt_path,
+                        project_id=project_id,
+                        job_id=job_id,
+                        source_language=settings.source_language,
+                        target_language=settings.target_language,
+                        source_type=source_result.source_type,
+                        auto_mark_low_quality_lines=settings.auto_mark_low_quality_lines,
+                        enable_subtitle_rewrite_suggestions=settings.enable_subtitle_rewrite_suggestions,
+                        auto_generate_rewrite_for_flagged_lines=settings.auto_generate_rewrite_for_flagged_lines,
+                        auto_apply_safe_rewrites=settings.auto_apply_safe_rewrites,
+                        default_rewrite_style=settings.default_rewrite_style,
+                    )
+                    steps["review_document"] = "ok"
+                warnings.extend([f"Subtitle review required: {document.id}"])
+                steps["render"] = "skipped_review_required"
+                result_status = "needs_review"
+                return DouyinOutputResult(
+                    index=index,
+                    path="",
+                    status="needs_review",
+                    source_video=video.path,
+                    preset_id=settings.preset_id,
+                    preset_name=settings.preset_name,
+                    subtitle_source=source_result.source_type,
+                    source_srt_file=source_result.source_srt_path,
+                    translated_srt_file=fixed_srt,
+                    subtitle_review_document_id=document.id,
+                    ocr_debug_json_path=source_result.ocr_debug_json_path,
+                    ocr_frame_count=source_result.ocr_frame_count,
+                    ocr_detected_line_count=source_result.ocr_detected_line_count,
+                    ocr_average_confidence=source_result.ocr_average_confidence,
+                    ocr_provider=settings.ocr_provider if source_result.source_type == "ocr_hardsub" else None,
+                    ocr_region_mode=settings.ocr_region_mode if source_result.source_type == "ocr_hardsub" else None,
+                    log_file=str(log_path),
+                    duration=video.duration,
+                    durations=_round_durations(durations),
+                    retry_history=retry_history,
+                    warnings=_dedupe(warnings),
+                    errors=[],
+                )
+
+            failed_step = "render"
+            render_started = time.perf_counter()
             render_payload = self.render_pipeline.render_video_with_translated_subtitle(
                 video=video,
                 translation_result=translation,
@@ -171,15 +298,32 @@ class DouyinReupService:
                 output_dir=str(video_dir),
                 output_name=f"douyin_{index:03d}.mp4",
             )
+            durations["render_seconds"] = time.perf_counter() - render_started
             warnings.extend(render_payload.get("warnings") or [])
             errors.extend(render_payload.get("errors") or [])
-            steps.append({"name": "render_final_video", "status": "success", "message": ""})
+            steps["render"] = "ok"
+            final_qa_report = FinalOutputQAService().run_qa_for_output(
+                str(render_payload["path"]),
+                PlatformTarget.tiktok,
+                job_id=job_id,
+                project_id=project_id,
+                video_id=f"douyin_{index:03d}",
+                ass_path=render_payload.get("subtitle_ass_file"),
+                overlay_path=render_payload.get("overlay_file"),
+                subtitle_expected=settings.burn_subtitle,
+                audio_expected=settings.keep_original_audio or settings.add_bgm,
+                overlay_expected=settings.add_overlay,
+                report_path=str(video_dir / f"video_{index:03d}_final_qa.json"),
+            )
+            steps["final_output_qa"] = final_qa_report.status
 
-            output = DouyinOutputResult(
+            return DouyinOutputResult(
                 index=index,
                 path=str(render_payload["path"]),
                 status="success",
                 source_video=video.path,
+                preset_id=settings.preset_id,
+                preset_name=settings.preset_name,
                 subtitle_source=source_result.source_type,
                 source_srt_file=source_result.source_srt_path,
                 translated_srt_file=fixed_srt,
@@ -187,36 +331,92 @@ class DouyinReupService:
                 overlay_file=render_payload.get("overlay_file"),
                 bgm_file=render_payload.get("bgm_file"),
                 log_file=str(log_path),
+                ocr_debug_json_path=source_result.ocr_debug_json_path,
+                ocr_frame_count=source_result.ocr_frame_count,
+                ocr_detected_line_count=source_result.ocr_detected_line_count,
+                ocr_average_confidence=source_result.ocr_average_confidence,
+                ocr_provider=settings.ocr_provider if source_result.source_type == "ocr_hardsub" else None,
+                ocr_region_mode=settings.ocr_region_mode if source_result.source_type == "ocr_hardsub" else None,
                 duration=render_payload.get("duration"),
+                durations=_round_durations(durations),
+                retry_history=retry_history,
+                final_output_qa=_final_qa_summary(final_qa_report),
                 warnings=_dedupe(warnings),
                 errors=_dedupe(errors),
             )
-            return output
         except Exception as exc:
-            errors.append(str(exc))
-            steps.append({"name": "process_video", "status": "failed", "message": str(exc)})
+            result_status = "failed"
+            error_message = _friendly_error(str(exc))
+            errors.append(error_message)
+            if failed_step:
+                steps[failed_step] = "failed"
             return DouyinOutputResult(
                 index=index,
                 path="",
                 status="failed",
                 source_video=video.path,
+                preset_id=settings.preset_id,
+                preset_name=settings.preset_name,
+                subtitle_source=source_result.source_type if source_result else None,
+                source_srt_file=source_result.source_srt_path if source_result else None,
+                translated_srt_file=translation.translated_srt_path if translation else None,
                 log_file=str(log_path),
+                ocr_debug_json_path=source_result.ocr_debug_json_path if source_result else None,
+                ocr_frame_count=source_result.ocr_frame_count if source_result else 0,
+                ocr_detected_line_count=source_result.ocr_detected_line_count if source_result else 0,
+                ocr_average_confidence=source_result.ocr_average_confidence if source_result else 0.0,
+                ocr_provider=settings.ocr_provider if source_result and source_result.source_type == "ocr_hardsub" else None,
+                ocr_region_mode=settings.ocr_region_mode if source_result and source_result.source_type == "ocr_hardsub" else None,
+                failed_step=failed_step or "process_video",
+                error_message=error_message,
+                can_retry=True,
+                duration=video.duration,
+                durations=_round_durations(durations),
+                retry_history=retry_history,
                 warnings=_dedupe(warnings),
                 errors=_dedupe(errors),
             )
         finally:
             finished_at = datetime.now().replace(microsecond=0)
-            payload = {
+            payload: dict[str, Any] = {
                 "index": index,
-                "status": "success" if not errors else "failed",
+                "input_video": video.path,
+                "status": result_status,
+                "preset_id": settings.preset_id,
+                "preset_name": settings.preset_name,
                 "started_at": started_at.isoformat(),
                 "finished_at": finished_at.isoformat(),
                 "duration_seconds": max(0.0, (finished_at - started_at).total_seconds()),
                 "source_video": video.path,
                 "steps": steps,
+                "durations": _round_durations(durations),
+                "retry_history": retry_history,
                 "warnings": _dedupe(warnings),
                 "errors": _dedupe(errors),
             }
+            if errors:
+                payload.update(
+                    {
+                        "failed_step": failed_step or "process_video",
+                        "error_message": _dedupe(errors)[-1],
+                        "can_retry": True,
+                    }
+                )
+            if source_result and source_result.source_type == "ocr_hardsub":
+                payload["ocr"] = {
+                    "enabled": True,
+                    "provider": settings.ocr_provider,
+                    "region_mode": settings.ocr_region_mode,
+                    "sample_fps": settings.ocr_sample_fps,
+                    "frame_count": source_result.ocr_frame_count,
+                    "detected_line_count": source_result.ocr_detected_line_count,
+                    "average_confidence": source_result.ocr_average_confidence,
+                    "source_srt_path": source_result.source_srt_path,
+                    "debug_json_path": source_result.ocr_debug_json_path,
+                    "warnings": [warning for warning in warnings if "OCR" in warning or "ocr" in warning],
+                }
+            if final_qa_report is not None:
+                payload["final_output_qa"] = _final_qa_summary(final_qa_report)
             write_json(log_path, payload)
 
     def _select_videos(self, videos: list[DouyinVideoItem], settings: DouyinReupSettings) -> list[DouyinVideoItem]:
@@ -229,22 +429,37 @@ class DouyinReupService:
             videos = videos[: settings.max_videos]
         return videos
 
-    def _failed_output(self, index: int, video: DouyinVideoItem, output_root: Path, reason: str) -> DouyinOutputResult:
+    def _failed_output(
+        self,
+        index: int,
+        video: DouyinVideoItem,
+        output_root: Path,
+        reason: str,
+        settings: DouyinReupSettings | None = None,
+    ) -> DouyinOutputResult:
         video_dir = ensure_dir(output_root / f"video_{index:03d}")
         log_path = video_dir / f"video_{index:03d}_log.json"
         try:
             shutil.copy2(video.path, video_dir / "source.mp4")
         except OSError:
             pass
+        error_message = _friendly_error(reason)
         write_json(
             log_path,
             {
                 "index": index,
+                "input_video": video.path,
                 "status": "failed",
+                "preset_id": settings.preset_id if settings else None,
+                "preset_name": settings.preset_name if settings else None,
                 "source_video": video.path,
-                "steps": [{"name": "process_video", "status": "failed", "message": reason}],
+                "steps": {"process_video": "failed"},
+                "durations": {},
+                "failed_step": "process_video",
+                "error_message": error_message,
+                "can_retry": True,
                 "warnings": video.warnings,
-                "errors": [reason],
+                "errors": [error_message],
             },
         )
         return DouyinOutputResult(
@@ -252,9 +467,14 @@ class DouyinReupService:
             path="",
             status="failed",
             source_video=video.path,
+            preset_id=settings.preset_id if settings else None,
+            preset_name=settings.preset_name if settings else None,
             log_file=str(log_path),
+            failed_step="process_video",
+            error_message=error_message,
+            can_retry=True,
             warnings=video.warnings,
-            errors=[reason],
+            errors=[error_message],
         )
 
 
@@ -290,6 +510,84 @@ def _progress_percent(done: int, total: int) -> int:
     return max(5, min(99, int((done / total) * 95) + 5))
 
 
+def _cached_retry_output(video: DouyinVideoItem, retry_cache: dict[str, dict[str, Any]] | None) -> dict[str, Any] | None:
+    if not retry_cache:
+        return None
+    keys = {
+        str(Path(video.path).expanduser().resolve()).lower(),
+        video.path,
+        video.filename,
+    }
+    for key in keys:
+        if key in retry_cache:
+            return retry_cache[key]
+    return None
+
+
+def _final_qa_summary(report) -> dict | None:
+    if report is None:
+        return None
+    return {
+        "status": report.status,
+        "score": report.score,
+        "report_path": report.report_path,
+        "issues": [issue.model_dump(mode="json") for issue in report.issues],
+    }
+
+
+def build_retry_cache(outputs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    cache: dict[str, dict[str, Any]] = {}
+    for output in outputs:
+        source_video = output.get("source_video")
+        if not source_video:
+            continue
+        try:
+            cache[str(Path(source_video).expanduser().resolve()).lower()] = output
+        except OSError:
+            cache[str(source_video)] = output
+    return cache
+
+
+def _retry_history(
+    cached_output: dict[str, Any],
+    settings: DouyinReupSettings,
+    retried_at: str,
+) -> list[dict[str, str | None]]:
+    history = [
+        dict(item)
+        for item in (cached_output.get("retry_history") or [])
+        if isinstance(item, dict)
+    ]
+    previous_preset_id = cached_output.get("preset_id")
+    if previous_preset_id and previous_preset_id != settings.preset_id:
+        history.append(
+            {
+                "from_preset_id": str(previous_preset_id),
+                "from_preset_name": cached_output.get("preset_name"),
+                "to_preset_id": settings.preset_id,
+                "to_preset_name": settings.preset_name,
+                "retried_at": retried_at,
+            }
+        )
+    return history
+
+
+def _existing_cached_path(value: Any) -> str | None:
+    if not value:
+        return None
+    try:
+        path = Path(str(value)).expanduser().resolve()
+    except OSError:
+        return None
+    if path.exists() and path.is_file() and path.stat().st_size > 0:
+        return str(path)
+    return None
+
+
+def _round_durations(durations: dict[str, float]) -> dict[str, float]:
+    return {key: round(max(0.0, float(value)), 3) for key, value in durations.items()}
+
+
 def _dedupe(values: list[str]) -> list[str]:
     seen: set[str] = set()
     cleaned: list[str] = []
@@ -300,3 +598,23 @@ def _dedupe(values: list[str]) -> list[str]:
         cleaned.append(text)
         seen.add(text)
     return cleaned
+
+
+def _friendly_error(message: str) -> str:
+    text = " ".join(str(message).split())
+    lowered = text.lower()
+    if "faster-whisper" in lowered or "faster_whisper" in lowered:
+        return "Không tìm thấy faster-whisper. Hãy cài dependency bằng `py -m pip install -r backend/requirements.txt` hoặc tắt ASR."
+    if "easyocr" in lowered:
+        return "EasyOCR chua san sang. Auto Tool se tu cai/tai OCR dependency khi mo app; doi vai phut roi retry video loi."
+    if "paddleocr" in lowered or "paddlepaddle" in lowered:
+        return "PaddleOCR chua san sang hoac paddlepaddle khong ho tro Python hien tai. Auto Tool mac dinh dung EasyOCR cho OCR hard-sub."
+    if "permission" in lowered or "access is denied" in lowered:
+        return "Không có quyền đọc/ghi file hoặc thư mục output. Hãy chọn thư mục khác hoặc cấp quyền ghi."
+    if "no such file" in lowered or "not found" in lowered or "không tìm thấy" in lowered:
+        return text
+    if "ffmpeg" in lowered:
+        return f"Render FFmpeg lỗi: {text}"
+    if "gemini" in lowered or "translation" in lowered or "dịch" in lowered:
+        return f"Dịch subtitle lỗi: {text}"
+    return text or "Video thất bại nhưng không có thông báo lỗi chi tiết."

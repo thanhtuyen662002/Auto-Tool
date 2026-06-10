@@ -1,0 +1,14 @@
+{
+  "project_name": "douyin-one-click-safe-review",
+  "source_folder": "../../../sample_videos/douyin_reup_test_pack",
+  "output_folder": "../../outputs/douyin_reup_test_pack/one_click_safe_review",
+  "preset_id": "safe_review",
+  "bgm_folder": null,
+  "visual_style_preset_id": "clean_review_light",
+  "process_mode": "all_videos",
+  "max_videos": null,
+  "selected_video_paths": [],
+  "review_subtitles_before_render": true,
+  "auto_render_after_translation": false,
+  "advanced_overrides": {}
+}

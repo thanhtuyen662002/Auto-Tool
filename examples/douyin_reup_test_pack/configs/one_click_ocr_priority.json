@@ -1,0 +1,17 @@
+{
+  "project_name": "douyin-one-click-ocr-priority",
+  "source_folder": "../../../sample_videos/douyin_reup_test_pack",
+  "output_folder": "../../outputs/douyin_reup_test_pack/one_click_ocr_priority",
+  "preset_id": "ocr_priority",
+  "bgm_folder": null,
+  "visual_style_preset_id": "clean_review_light",
+  "process_mode": "first_n",
+  "max_videos": 3,
+  "selected_video_paths": [],
+  "review_subtitles_before_render": true,
+  "auto_render_after_translation": false,
+  "advanced_overrides": {
+    "ocr_sample_fps": 2.5,
+    "prefer_ocr_over_asr_when_text_visible": true
+  }
+}

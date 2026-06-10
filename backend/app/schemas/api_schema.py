@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.content_manager.content_schema import ContentBatchSummary, OutputContentItem, PublishStatus
 from app.modules.douyin_reup.douyin_schema import DouyinOutputResult, DouyinReupSettings, DouyinReupSummary, DouyinVideoItem
+from app.modules.douyin_reup_presets.preset_schema import DouyinReupPreset
 from app.modules.industry_presets.industry_schema import IndustryPreset
 from app.modules.product_drafts.product_draft_schema import (
     ClearArchivedDraftsResponse,
@@ -97,6 +98,18 @@ class BrowsePathResponse(BaseModel):
     cancelled: bool = False
 
 
+class SystemDependencyStatusResponse(BaseModel):
+    ffmpeg_path: str | None = None
+    ffprobe_path: str | None = None
+    piper_path: str | None = None
+    piper_model_path: str | None = None
+    piper_config_path: str | None = None
+    ocr_provider: str | None = None
+    ocr_available: bool = False
+    ocr_message: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ScanResponse(BaseModel):
     total_files: int
     valid_videos: int
@@ -116,6 +129,17 @@ class DouyinReupScanResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class DouyinOcrTestRequest(BaseModel):
+    video_path: str = Field(min_length=1)
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class DouyinOcrTestResponse(BaseModel):
+    success: bool
+    result: dict[str, Any] | None = None
+    error: str | None = None
+
+
 class DouyinReupProcessRequest(BaseModel):
     project_name: str = Field(min_length=1)
     source_folder: str = Field(min_length=1)
@@ -127,6 +151,77 @@ class DouyinReupProcessResponse(BaseModel):
     project_id: str
     job_id: str
     status: str
+
+
+class DouyinReupPresetListResponse(BaseModel):
+    presets: list[DouyinReupPreset]
+
+
+class DouyinApplyPresetRequest(BaseModel):
+    preset_id: str = "safe_review"
+    current_settings: DouyinReupSettings | None = None
+    overrides: dict[str, Any] = Field(default_factory=dict)
+
+
+class DouyinApplyPresetResponse(BaseModel):
+    preset: DouyinReupPreset
+    settings: DouyinReupSettings
+
+
+class DouyinOneClickBatchRequest(BaseModel):
+    project_name: str = Field(min_length=1)
+    source_folder: str = Field(min_length=1)
+    output_folder: str = Field(min_length=1)
+    preset_id: str = "safe_review"
+    bgm_folder: str | None = None
+    visual_style_preset_id: str | None = None
+    process_mode: Literal["all_videos", "first_n", "selected"] = "all_videos"
+    max_videos: int | None = Field(default=None, gt=0)
+    selected_video_paths: list[str] = Field(default_factory=list)
+    review_subtitles_before_render: bool | None = None
+    auto_render_after_translation: bool | None = None
+    advanced_overrides: dict[str, Any] = Field(default_factory=dict)
+
+
+class DouyinOneClickBatchResponse(BaseModel):
+    project_id: str
+    job_id: str
+    status: str
+    preset_id: str
+    preset_name: str
+    total_outputs: int
+
+
+class DouyinPresetRecommendationRequest(BaseModel):
+    source_folder: str = Field(min_length=1)
+    current_settings: DouyinReupSettings | None = None
+
+
+class DouyinPresetRecommendationResponse(BaseModel):
+    preset_id: str
+    preset_name: str
+    reason: str
+    confidence: float = Field(ge=0, le=1)
+    signals: dict[str, Any] = Field(default_factory=dict)
+
+
+class DouyinRetryFailedRequest(BaseModel):
+    retry_steps: list[str] = Field(default_factory=lambda: ["asr", "translation", "render"])
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class DouyinRetryWithPresetRequest(BaseModel):
+    preset_id: str = "safe_review"
+    video_ids: list[str] = Field(default_factory=list)
+    retry_steps: list[str] = Field(default_factory=lambda: ["asr", "translation", "render"])
+    settings: dict[str, Any] = Field(default_factory=dict)
+    advanced_overrides: dict[str, Any] = Field(default_factory=dict)
+
+
+class DouyinRetryFailedResponse(BaseModel):
+    job_id: str
+    status: str
+    retry_outputs: int
 
 
 class DouyinReupJobResultsResponse(BaseModel):

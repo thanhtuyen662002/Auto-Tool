@@ -12,6 +12,7 @@ import ImportInboxPage from './pages/ImportInboxPage';
 import ProjectAssetsPage from './pages/ProjectAssetsPage';
 import PromptPackPage from './pages/PromptPackPage';
 import DouyinReupPage from './pages/DouyinReupPage';
+import SubtitleReviewPage from './pages/SubtitleReviewPage';
 
 const FALLBACK_VERSION = '0.2.0-rc1';
 
@@ -78,6 +79,16 @@ export default function App() {
                   isActive ? 'bg-blue-50 text-brand' : 'text-muted hover:bg-surface hover:text-ink'
                 }`
               }
+              to="/subtitle-review"
+            >
+              Subtitle Review
+            </NavLink>
+            <NavLink
+              className={({ isActive }) =>
+                `rounded-md px-3 py-2 font-medium ${
+                  isActive ? 'bg-blue-50 text-brand' : 'text-muted hover:bg-surface hover:text-ink'
+                }`
+              }
               to="/app-settings"
             >
               Cài đặt chung
@@ -100,6 +111,8 @@ export default function App() {
           <Route path="/projects/:projectId/content" element={<ContentManagerPage />} />
           <Route path="/import-inbox" element={<ImportInboxPage />} />
           <Route path="/douyin-reup" element={<DouyinReupPage />} />
+          <Route path="/subtitle-review" element={<SubtitleReviewPage />} />
+          <Route path="/subtitle-review/:documentId" element={<SubtitleReviewPage />} />
           <Route path="/app-settings" element={<AppSettingsPage />} />
           <Route path="*" element={<Navigate replace to="/" />} />
         </Routes>

@@ -1,0 +1,16 @@
+{
+  "project_name": "douyin-one-click-voice-priority",
+  "source_folder": "../../../sample_videos/douyin_reup_test_pack",
+  "output_folder": "../../outputs/douyin_reup_test_pack/one_click_voice_priority",
+  "preset_id": "voice_priority",
+  "bgm_folder": null,
+  "visual_style_preset_id": "clean_review_light",
+  "process_mode": "all_videos",
+  "max_videos": null,
+  "selected_video_paths": [],
+  "review_subtitles_before_render": true,
+  "auto_render_after_translation": false,
+  "advanced_overrides": {
+    "asr_vad_filter": true
+  }
+}

@@ -27,7 +27,7 @@ Backend:
 ```bash
 cd backend
 pip install -r requirements-dev.txt
-python -m app.main
+py -m uvicorn app.main:app --reload --port 8000
 ```
 
 Frontend:
@@ -119,7 +119,7 @@ Shopee Extension imports also store `extractor_debug`, including field-level ext
 
 ## Douyin Reup
 
-Douyin Reup là workflow local cho các video Douyin đã được người dùng tải sẵn vào máy. Tool không tải video từ Douyin, không OCR, không bypass watermark và không xoá watermark. Người dùng cần tự đảm bảo có quyền sử dụng video, subtitle và nhạc nền.
+Douyin Reup la workflow local cho cac video Douyin da duoc nguoi dung tai san vao may. Tool khong tai video tu Douyin, khong bypass watermark va khong xoa watermark. OCR hard-sub chi chay local tren video nguoi dung da co san. Nguoi dung can tu dam bao co quyen su dung video, subtitle va nhac nen.
 
 Luồng xử lý:
 
@@ -129,9 +129,12 @@ Chọn thư mục video Douyin local
 -> Ưu tiên file .srt đi kèm
 -> Nếu không có .srt thì thử subtitle nhúng
 -> Nếu vẫn không có subtitle thì dùng ASR optional
+-> Neu ASR fail hoac khong co subtitle thi fallback OCR hard-sub tieng Trung
 -> Dịch subtitle Trung -> Việt bằng Gemini
 -> Guard timing và wrap subtitle
--> Render video dọc với overlay/subtitle/nhạc nền
+-> Tạo Subtitle Review Document để sửa subtitle thủ công
+-> Approve subtitle đã sửa
+-> Render video dọc với overlay/subtitle/nhạc nền từ bản đã approve
 -> Ghi log riêng từng video và summary
 ```
 
@@ -139,16 +142,148 @@ Frontend page:
 
 ```txt
 /douyin-reup
+/subtitle-review
 ```
 
 API:
 
 ```txt
 POST /api/douyin-reup/scan
+GET  /api/douyin-reup/presets
+GET  /api/douyin-reup/presets/{preset_id}
+POST /api/douyin-reup/apply-preset
+POST /api/douyin-reup/recommend-preset
+POST /api/douyin-reup/one-click
 POST /api/douyin-reup/process
+POST /api/douyin-reup/ocr-test
 GET  /api/jobs/{job_id}
 GET  /api/douyin-reup/jobs/{job_id}/results
+POST /api/douyin-reup/jobs/{job_id}/retry-with-preset
+GET  /api/subtitle-review/documents
+GET  /api/subtitle-review/documents/{document_id}
+PUT  /api/subtitle-review/documents/{document_id}/lines/{line_index}
+PUT  /api/subtitle-review/documents/{document_id}
+POST /api/subtitle-review/documents/{document_id}/approve
+POST /api/subtitle-review/documents/{document_id}/render
+POST /api/subtitle-review/render-approved
+GET  /api/subtitle-review/documents/{document_id}/quality
+POST /api/subtitle-review/documents/{document_id}/quality/refresh
+GET  /api/subtitle-review/documents/{document_id}/quality/flagged-lines
+POST /api/subtitle-review/documents/{document_id}/lines/{line_index}/suggest-rewrite
 ```
+
+One-click presets:
+
+```txt
+safe_review           Default, translate then stop for subtitle review.
+fast_auto             Auto-render known-good batches without manual subtitle review.
+ocr_priority          Prefer hardcoded Chinese subtitle OCR before ASR.
+voice_priority        Prefer ASR for clear speech videos.
+clean_subtitle_only   Burn clean subtitles without overlay or BGM.
+music_recut           Auto-render with stronger background music mix.
+```
+
+One-click request example:
+
+```json
+{
+  "project_name": "douyin-one-click-safe-review",
+  "source_folder": "D:\\Videos\\douyin",
+  "output_folder": "D:\\Videos\\outputs",
+  "preset_id": "safe_review",
+  "bgm_folder": "D:\\Music\\bgm",
+  "visual_style_preset_id": "clean_review_light",
+  "process_mode": "all_videos",
+  "max_videos": null,
+  "selected_video_paths": [],
+  "review_subtitles_before_render": true,
+  "auto_render_after_translation": false,
+  "advanced_overrides": {}
+}
+```
+
+Config examples:
+
+```txt
+examples/douyin_reup_test_pack/configs/one_click_safe_review.json
+examples/douyin_reup_test_pack/configs/one_click_fast_auto.json
+examples/douyin_reup_test_pack/configs/one_click_ocr_priority.json
+examples/douyin_reup_test_pack/configs/one_click_voice_priority.json
+```
+
+### Subtitle Quality Scoring
+
+Moi Subtitle Review Document duoc cham diem rule-based ngay sau khi tao. UI hien thi average score, cac dong can review, critical/warning, bo loc, dieu huong den dong bi flag va approval guard. Cac rule bao gom do dai, so dong, reading speed, duration, ky tu Trung con sot, markdown/JSON leak, ky tu la, OCR/ASR confidence, source-target mismatch, lap text va timestamp overlap/out-of-range.
+
+Preset `safe_review` bat `auto_mark_low_quality_lines=true`; dong co score thap hoac critical se duoc danh dau `needs_fix`. Bao cao duoc luu tai `subtitle_quality_report.json`, va `douyin_reup_summary.json` co them tong hop `subtitle_quality`. Nut `Suggest shorter translation` tao goi y cho tung dong, khong tu dong rewrite toan bo subtitle.
+
+Known limitations:
+
+- Quality score la rule-based, khong dam bao phat hien moi loi dich.
+- Tool khong the ket luan ban dich dung 100%; user van nen kiem tra cac dong bi flag truoc khi render.
+- OCR/ASR confidence thap chi la tin hieu can review, khong phai ket luan chac chan.
+- Rewrite suggestion mac dinh la local rule-based khi khong cau hinh AI provider.
+
+### Subtitle Auto Shortener and Safe Rewrite
+
+Trong Subtitle Review, cac dong bi quality flag co nut `Suggest rewrite`. Tool tao toi da 3 goi y ngan hon, tinh truoc quality score/CPS, kiem tra keyword, thuong hieu, so lieu, don vi, markdown/JSON, ky tu Trung va forbidden claims. User chon `Apply` de cap nhat `edited_text`; quality report duoc refresh ngay sau do.
+
+Bulk rewrite cho phep chon style, issue type va so dong toi da. `Auto apply only safe high-score suggestions` chi ap dung khi suggestion khong co safety warning, ngan hon ban goc va co quality score tu 85% tro len. Mac dinh tinh nang nay tat.
+
+API:
+
+```txt
+POST /api/subtitle-review/documents/{document_id}/lines/{line_index}/rewrite-suggestions
+POST /api/subtitle-review/documents/{document_id}/lines/{line_index}/apply-rewrite
+POST /api/subtitle-review/documents/{document_id}/rewrite-flagged-lines
+```
+
+Rewrite data duoc luu trong SQLite, line `rewrite_history` va `subtitle_rewrite_log.json`. `douyin_reup_summary.json` co them `subtitle_rewrite` voi so suggestion da tao/ap dung va quality improvement trung binh.
+
+Known limitations:
+
+- Rewrite suggestion khong dam bao dung 100%; user van nen kiem tra truoc khi approve.
+- AI co the dua ra goi y chua hoan hao du safety validator da chan cac loi ro rang.
+- Auto apply chi nen dung cho suggestion an toan, ngan hon va score cao.
+- Neu OCR/ASR source sai, rewrite tieng Viet van co the sai theo source ban dau.
+
+### Final Output QA and Platform Export Pack
+
+Sau moi video render thanh cong, Douyin Reup tu dong chay QA ky thuat bang ffprobe/FFmpeg. Report kiem tra file, duration, 9:16, resolution, FPS, H.264/AAC, file size, audio volume, subtitle/overlay artifact va subtitle safe zone. Ket qua duoc luu trong `video_XXX_final_qa.json`, `video_XXX_log.json`, `final_qa_summary.json` va `douyin_reup_summary.json`.
+
+Results co tab `Final QA` de xem score/issue tung video, chay lai QA theo profile TikTok, Instagram Reels, YouTube Shorts hoac Generic Vertical, va retry render khi QA failed.
+
+Platform Export Pack tao:
+
+```txt
+export_pack/{platform}/
+  videos/
+  subtitles/
+  captions/captions.txt
+  captions/captions.csv
+  logs/
+  qa/final_qa_summary.json
+  posting_checklist.md
+  export_manifest.json
+```
+
+API:
+
+```txt
+POST /api/final-output-qa/check
+POST /api/final-output-qa/jobs/{job_id}/check
+POST /api/douyin-reup/jobs/{job_id}/export-pack
+GET  /api/douyin-reup/jobs/{job_id}/export-pack
+```
+
+Known limitations:
+
+- Final QA la kiem tra ky thuat rule-based, khong thay the viec xem lai video bang mat.
+- Subtitle visibility checker chua OCR lai video final de xac nhan chu da burn 100%.
+- Platform profiles la goi y ky thuat local, khong dam bao luon khop chinh sach moi nhat.
+- Tool khong tu dang video hoac dang nhap nen tang.
+
+Mặc định `review_subtitles_before_render=true` và `auto_render_after_translation=false`, nên Douyin Reup sẽ dừng ở trạng thái `needs_review` sau khi dịch subtitle. Người dùng mở `/subtitle-review`, sửa từng dòng tiếng Việt với preview video, lưu, approve, rồi queue render từ subtitle đã duyệt. Nếu muốn giữ luồng render cũ, đặt `review_subtitles_before_render=false` hoặc `auto_render_after_translation=true`.
 
 Ví dụ request scan:
 
@@ -170,13 +305,21 @@ Ví dụ request process:
     "source_language": "zh",
     "target_language": "vi",
     "translation_provider": "gemini",
-    "subtitle_source_priority": ["sidecar_srt", "embedded_subtitle", "asr"],
+    "subtitle_source_priority": ["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"],
     "use_sidecar_srt": true,
     "use_embedded_subtitle": true,
     "use_asr_if_no_subtitle": true,
     "asr_provider": "faster_whisper",
     "asr_model_size": "medium",
     "asr_device": "auto",
+    "use_ocr_if_asr_failed": true,
+    "use_ocr_if_no_subtitle": true,
+    "ocr_provider": "easyocr",
+    "ocr_language": "ch",
+    "ocr_sample_fps": 2.0,
+    "ocr_region_mode": "bottom_auto",
+    "ocr_min_confidence": 0.55,
+    "prefer_ocr_over_asr_when_text_visible": false,
     "visual_style_preset_id": "clean_review_light",
     "burn_subtitle": true,
     "add_overlay": true,
@@ -189,7 +332,9 @@ Ví dụ request process:
     "process_mode": "all",
     "max_videos": null,
     "selected_video_paths": [],
-    "keep_temp": false
+    "keep_temp": false,
+    "review_subtitles_before_render": true,
+    "auto_render_after_translation": false
   }
 }
 ```
@@ -216,8 +361,126 @@ Ghi chú:
 - Nếu Gemini lỗi, subtitle nguồn được giữ lại và job ghi warning, không crash toàn batch.
 - ASR dùng `faster-whisper`. Khi chạy backend bằng source code, cài bằng `py -m pip install -r backend/requirements.txt`. Khi chạy exe, package ASR được bundle trong exe nhưng model Whisper vẫn cần tải từ HuggingFace ở lần nhận diện đầu tiên.
 - Nếu runtime thiếu asset VAD `silero_vad_v6.onnx`, ASR sẽ tự retry không dùng VAD thay vì làm fail output. Bản exe build mới cũng bundle thư mục `faster_whisper/assets`.
-- Dùng file `.srt` đi kèm video là cách ổn định và nhanh nhất; ASR chỉ nên dùng khi video không có subtitle nguồn.
+- OCR hard-sub duoc dung sau sidecar/embedded/ASR, hoac khi bat `prefer_ocr_over_asr_when_text_visible`. Provider mac dinh la `easyocr`; co the doi sang `paddleocr` hoac `mock_ocr` de test pipeline khong can model OCR.
+- Khi mo app, Auto Tool tu kiem tra va tai runtime can thiet trong background: FFmpeg, Piper voice/model va OCR provider. OCR package duoc cai vao `%LOCALAPPDATA%\AutoTool\python_packages\pyXX` neu chua co trong environment.
+- PaddleOCR can `paddlepaddle` wheel phu hop voi Python dang chay. Neu paddlepaddle khong ho tro Python hien tai, dung EasyOCR mac dinh.
+- Co the tat auto-install bang `AUTO_TOOL_AUTO_INSTALL=0`, hoac chi tat OCR auto-install bang `AUTO_TOOL_AUTO_INSTALL_OCR=0`.
+- Xem trang thai runtime qua `GET /api/system/dependencies`; UI Douyin Reup cung hien thi trang thai OCR runtime.
+- Dùng file `.srt` đi kèm video là cách ổn định và nhanh nhất; ASR/OCR chỉ nên dùng khi video không có subtitle nguồn.
 - Nếu nhạc nền lỗi, renderer sẽ thử xuất video chỉ với audio gốc.
+
+## Douyin Reup Real Batch QA
+
+Real batch QA pack:
+
+```txt
+examples/douyin_reup_test_pack/
+```
+
+Đặt video Douyin thật vào:
+
+```txt
+sample_videos/douyin_reup_test_pack/
+```
+
+Chạy review mode:
+
+```bash
+cd backend
+python -m app.tools.douyin_reup_e2e_test --config ../examples/douyin_reup_test_pack/configs/douyin_reup_review_mode.json
+```
+
+Chạy test tích hợp không cần Gemini:
+
+```bash
+python -m app.tools.douyin_reup_e2e_test --config ../examples/douyin_reup_test_pack/configs/douyin_reup_review_mode.json --mock-translation
+```
+
+Chạy auto render mode:
+
+```bash
+python -m app.tools.douyin_reup_e2e_test --config ../examples/douyin_reup_test_pack/configs/douyin_reup_auto_render.json --auto-render
+```
+
+Flags:
+
+```txt
+--scan-only
+--translate-only
+--review-mode
+--render-approved
+--auto-render
+--skip-asr
+--mock-translation
+--debug
+```
+
+Review mode dừng sau bước dịch và tạo Subtitle Review Document. User mở `/subtitle-review`, sửa subtitle, approve, rồi render approved. Auto render mode bỏ qua review và render ngay sau khi dịch/timing guard.
+
+Retry failed videos:
+
+```txt
+POST /api/douyin-reup/jobs/{job_id}/retry-failed
+POST /api/douyin-reup/jobs/{job_id}/retry-with-preset
+```
+
+```json
+{
+  "retry_steps": ["asr", "translation", "render"],
+  "settings": {}
+}
+```
+
+Retry chỉ chọn output `status=failed` từ job cũ. Nếu output failed đã có `source_srt_file` hoặc `translated_srt_file`, retry sẽ ưu tiên dùng lại file đó thay vì chạy lại ASR/dịch không cần thiết.
+
+Retry with preset example:
+
+```json
+{
+  "preset_id": "ocr_priority",
+  "video_ids": ["video_001"],
+  "retry_steps": ["asr", "translation", "render"],
+  "settings": {
+    "ocr_sample_fps": 3.0
+  }
+}
+```
+
+`retry-with-preset` keeps retry cache from the failed job and records preset changes in each output `retry_history`.
+
+Common errors and fixes:
+
+```txt
+Không tìm thấy faster-whisper:
+  Cài `py -m pip install -r backend/requirements.txt` hoặc chạy với `--skip-asr`.
+
+Folder rỗng hoặc sai path:
+  Kiểm tra `source_folder` trong config và folder `sample_videos/douyin_reup_test_pack/`.
+
+Gemini translation failed:
+  Bổ sung API key hoặc dùng `--mock-translation` để test tích hợp local.
+
+BGM folder rỗng:
+  Output vẫn render, summary sẽ có warning.
+
+FFmpeg render lỗi:
+  Xem `failed_step=render`, `video_001_log.json`, và `douyin_reup_summary.json`.
+```
+
+Performance baseline template:
+
+```txt
+docs/DOUYIN_REUP_PERFORMANCE_BASELINE.md
+```
+
+Known limitations:
+
+```txt
+- Nếu video chỉ có chữ Trung dính trên màn hình và không có lời thoại rõ, ASR có thể không tạo được SRT tốt.
+- OCR hard-sub da co pipeline local, nhung ket qua can review thu cong vi OCR co the nhan sai chu.
+- Bản dịch tự động cần user kiểm tra lại.
+- Người dùng cần đảm bảo quyền sử dụng video và nhạc nền.
+```
 
 ## v0.2 QA Checklist
 
@@ -605,6 +868,18 @@ File exe sinh ra:
 
 ```txt
 backend/dist/AutoTool.exe
+```
+
+Build Chrome Extension:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build_chrome_extension.ps1
+```
+
+File extension zip sinh ra:
+
+```txt
+chrome-extension/auto-tool-shopee-extractor.zip
 ```
 
 Khi gửi sang máy khác, người dùng có thể mở exe. App sẽ tạo database local ở:

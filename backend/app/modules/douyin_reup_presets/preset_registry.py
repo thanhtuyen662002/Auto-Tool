@@ -1,0 +1,199 @@
+from __future__ import annotations
+
+from copy import deepcopy
+
+from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
+from app.modules.douyin_reup_presets.preset_schema import DouyinReupPreset, DouyinReupPresetMode
+
+
+def list_douyin_reup_presets() -> list[DouyinReupPreset]:
+    return deepcopy(_PRESETS)
+
+
+def get_douyin_reup_preset(preset_id: str) -> DouyinReupPreset | None:
+    cleaned = str(preset_id).strip().lower()
+    for preset in _PRESETS:
+        if preset.id.value == cleaned:
+            return preset.model_copy(deep=True)
+    return None
+
+
+def _settings(preset_id: DouyinReupPresetMode, preset_name: str, **updates) -> DouyinReupSettings:
+    payload = {
+        "enabled": True,
+        "preset_id": preset_id.value,
+        "preset_name": preset_name,
+        **updates,
+    }
+    return DouyinReupSettings.model_validate(payload)
+
+
+_PRESETS: list[DouyinReupPreset] = [
+    DouyinReupPreset(
+        id=DouyinReupPresetMode.safe_review,
+        name="Safe Review",
+        description="Use available subtitles first, fall back to ASR/OCR, then stop for subtitle review.",
+        recommended_for=["mixed subtitle quality", "first run", "quality control"],
+        not_recommended_for=["fully unattended render"],
+        ui_badge="Default",
+        is_default=True,
+        settings=_settings(
+            DouyinReupPresetMode.safe_review,
+            "Safe Review",
+            subtitle_source_priority=["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"],
+            use_sidecar_srt=True,
+            use_embedded_subtitle=True,
+            use_asr_if_no_subtitle=True,
+            use_ocr_if_asr_failed=True,
+            use_ocr_if_no_subtitle=True,
+            prefer_ocr_over_asr_when_text_visible=False,
+            review_subtitles_before_render=True,
+            auto_render_after_translation=False,
+            auto_mark_low_quality_lines=True,
+            enable_subtitle_rewrite_suggestions=True,
+            auto_generate_rewrite_for_flagged_lines=False,
+            auto_apply_safe_rewrites=False,
+            add_overlay=True,
+            add_bgm=True,
+            keep_original_audio=True,
+            bgm_volume=0.16,
+            original_audio_volume=0.85,
+        ),
+    ),
+    DouyinReupPreset(
+        id=DouyinReupPresetMode.fast_auto,
+        name="Fast Auto",
+        description="Process and render without subtitle review, using ASR first with OCR fallback.",
+        recommended_for=["known-good inputs", "quick batch", "low manual review"],
+        not_recommended_for=["new sources", "hardcoded Chinese subtitles only"],
+        ui_badge="Fast",
+        settings=_settings(
+            DouyinReupPresetMode.fast_auto,
+            "Fast Auto",
+            subtitle_source_priority=["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"],
+            use_sidecar_srt=True,
+            use_embedded_subtitle=True,
+            use_asr_if_no_subtitle=True,
+            use_ocr_if_asr_failed=True,
+            use_ocr_if_no_subtitle=True,
+            ocr_sample_fps=1.0,
+            review_subtitles_before_render=False,
+            auto_render_after_translation=True,
+            enable_subtitle_rewrite_suggestions=False,
+            auto_generate_rewrite_for_flagged_lines=False,
+            auto_apply_safe_rewrites=False,
+            add_overlay=True,
+            add_bgm=True,
+            keep_original_audio=True,
+            bgm_volume=0.18,
+            original_audio_volume=0.82,
+        ),
+    ),
+    DouyinReupPreset(
+        id=DouyinReupPresetMode.ocr_priority,
+        name="OCR Priority",
+        description="Prefer hardcoded subtitle OCR before ASR when Chinese text is visible.",
+        recommended_for=["hardcoded Chinese subtitles", "low voice clarity", "music-heavy videos"],
+        not_recommended_for=["no visible subtitles", "very small text"],
+        ui_badge="OCR",
+        settings=_settings(
+            DouyinReupPresetMode.ocr_priority,
+            "OCR Priority",
+            subtitle_source_priority=["sidecar_srt", "embedded_subtitle", "ocr_hardsub", "asr"],
+            use_sidecar_srt=True,
+            use_embedded_subtitle=True,
+            use_asr_if_no_subtitle=True,
+            use_ocr_if_asr_failed=True,
+            use_ocr_if_no_subtitle=True,
+            prefer_ocr_over_asr_when_text_visible=True,
+            ocr_provider="easyocr",
+            ocr_sample_fps=2.5,
+            ocr_min_confidence=0.5,
+            review_subtitles_before_render=True,
+            auto_render_after_translation=False,
+            add_overlay=True,
+            add_bgm=True,
+            keep_original_audio=True,
+        ),
+    ),
+    DouyinReupPreset(
+        id=DouyinReupPresetMode.voice_priority,
+        name="Voice Priority",
+        description="Use speech recognition as the primary fallback and keep OCR only as safety net.",
+        recommended_for=["clear speech", "few visible captions", "speaker-led videos"],
+        not_recommended_for=["music-only clips", "subtitle-only videos"],
+        ui_badge="Voice",
+        settings=_settings(
+            DouyinReupPresetMode.voice_priority,
+            "Voice Priority",
+            subtitle_source_priority=["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"],
+            use_sidecar_srt=True,
+            use_embedded_subtitle=True,
+            use_asr_if_no_subtitle=True,
+            use_ocr_if_asr_failed=True,
+            use_ocr_if_no_subtitle=False,
+            prefer_ocr_over_asr_when_text_visible=False,
+            asr_vad_filter=True,
+            review_subtitles_before_render=True,
+            auto_render_after_translation=False,
+            add_overlay=True,
+            add_bgm=True,
+            keep_original_audio=True,
+            original_audio_volume=0.9,
+            bgm_volume=0.12,
+        ),
+    ),
+    DouyinReupPreset(
+        id=DouyinReupPresetMode.clean_subtitle_only,
+        name="Clean Subtitle Only",
+        description="Translate and burn clean subtitles without overlay or background music.",
+        recommended_for=["minimal edit", "subtitle QA", "keep original look"],
+        not_recommended_for=["sale-style recut", "heavy branding"],
+        ui_badge="Clean",
+        settings=_settings(
+            DouyinReupPresetMode.clean_subtitle_only,
+            "Clean Subtitle Only",
+            subtitle_source_priority=["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"],
+            use_sidecar_srt=True,
+            use_embedded_subtitle=True,
+            use_asr_if_no_subtitle=True,
+            use_ocr_if_asr_failed=True,
+            use_ocr_if_no_subtitle=True,
+            review_subtitles_before_render=True,
+            auto_render_after_translation=False,
+            add_overlay=False,
+            add_bgm=False,
+            burn_subtitle=True,
+            keep_original_audio=True,
+            original_audio_volume=1.0,
+        ),
+    ),
+    DouyinReupPreset(
+        id=DouyinReupPresetMode.music_recut,
+        name="Music Recut",
+        description="Auto-render with stronger BGM mix while keeping original audio lower.",
+        recommended_for=["music montage", "product b-roll", "short sale clips"],
+        not_recommended_for=["dialogue-heavy videos", "subtitle QA pass"],
+        ui_badge="BGM",
+        settings=_settings(
+            DouyinReupPresetMode.music_recut,
+            "Music Recut",
+            subtitle_source_priority=["sidecar_srt", "embedded_subtitle", "ocr_hardsub", "asr"],
+            use_sidecar_srt=True,
+            use_embedded_subtitle=True,
+            use_asr_if_no_subtitle=True,
+            use_ocr_if_asr_failed=True,
+            use_ocr_if_no_subtitle=True,
+            prefer_ocr_over_asr_when_text_visible=True,
+            review_subtitles_before_render=False,
+            auto_render_after_translation=True,
+            add_overlay=True,
+            add_bgm=True,
+            keep_original_audio=True,
+            original_audio_volume=0.55,
+            bgm_volume=0.28,
+            enable_subtitle_rewrite_suggestions=True,
+            default_rewrite_style="casual_tiktok",
+        ),
+    ),
+]

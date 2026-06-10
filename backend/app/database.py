@@ -201,11 +201,118 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_product_assets_draft_id
             ON product_assets(draft_id);
+
+            CREATE TABLE IF NOT EXISTS subtitle_review_documents (
+                id TEXT PRIMARY KEY,
+                project_id TEXT,
+                job_id TEXT,
+                video_id TEXT NOT NULL,
+                video_path TEXT NOT NULL,
+
+                source_language TEXT NOT NULL,
+                target_language TEXT NOT NULL,
+                source_type TEXT,
+
+                source_srt_path TEXT,
+                translated_srt_path TEXT NOT NULL,
+                corrected_srt_path TEXT,
+                corrected_ass_path TEXT,
+
+                status TEXT NOT NULL,
+
+                line_count INTEGER NOT NULL,
+                reviewed_count INTEGER NOT NULL DEFAULT 0,
+                edited_count INTEGER NOT NULL DEFAULT 0,
+                warning_count INTEGER NOT NULL DEFAULT 0,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS subtitle_review_lines (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+
+                line_index INTEGER NOT NULL,
+                start_ms INTEGER NOT NULL,
+                end_ms INTEGER NOT NULL,
+
+                source_text TEXT,
+                translated_text TEXT NOT NULL,
+                edited_text TEXT,
+
+                status TEXT NOT NULL,
+                warnings_json TEXT,
+                user_note TEXT,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+
+                UNIQUE(document_id, line_index)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_subtitle_review_documents_job_id
+            ON subtitle_review_documents(job_id);
+
+            CREATE INDEX IF NOT EXISTS idx_subtitle_review_documents_project_id
+            ON subtitle_review_documents(project_id);
+
+            CREATE INDEX IF NOT EXISTS idx_subtitle_review_lines_document_id
+            ON subtitle_review_lines(document_id);
+
+            CREATE TABLE IF NOT EXISTS subtitle_quality_reports (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL UNIQUE,
+                project_id TEXT,
+                video_id TEXT,
+
+                average_score REAL NOT NULL,
+                total_lines INTEGER NOT NULL,
+                needs_review_count INTEGER NOT NULL,
+                critical_count INTEGER NOT NULL,
+                warning_count INTEGER NOT NULL,
+
+                report_json TEXT NOT NULL,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_subtitle_quality_document_id
+            ON subtitle_quality_reports(document_id);
+
+            CREATE TABLE IF NOT EXISTS subtitle_rewrite_suggestions (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+                line_index INTEGER NOT NULL,
+                source_text TEXT,
+                original_translation TEXT NOT NULL,
+                suggested_text TEXT NOT NULL,
+                style TEXT NOT NULL,
+                reason TEXT,
+                char_count_before INTEGER NOT NULL,
+                char_count_after INTEGER NOT NULL,
+                estimated_cps_before REAL,
+                estimated_cps_after REAL,
+                safety_warnings_json TEXT,
+                quality_score_before REAL,
+                quality_score_after REAL,
+                created_at TEXT NOT NULL,
+                applied_at TEXT,
+                auto_applied INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_subtitle_rewrite_document_line
+            ON subtitle_rewrite_suggestions(document_id, line_index);
             """
         )
         _ensure_column(conn, "projects", "latest_script_json", "TEXT")
         _ensure_column(conn, "projects", "custom_script_json", "TEXT")
         _ensure_column(conn, "product_drafts", "extractor_debug_json", "TEXT")
+        _ensure_column(conn, "subtitle_review_documents", "source_type", "TEXT")
+        _ensure_column(conn, "subtitle_review_lines", "rewrite_history_json", "TEXT")
+        _ensure_column(conn, "subtitle_rewrite_suggestions", "applied_at", "TEXT")
+        _ensure_column(conn, "subtitle_rewrite_suggestions", "auto_applied", "INTEGER NOT NULL DEFAULT 0")
 
 
 @contextmanager
@@ -768,6 +875,10 @@ def is_known_output_path(path: str) -> bool:
     target = Path(path).expanduser().resolve()
     with get_connection() as conn:
         rows = conn.execute("SELECT results_json FROM jobs WHERE results_json IS NOT NULL").fetchall()
+        try:
+            review_rows = conn.execute("SELECT video_path FROM subtitle_review_documents").fetchall()
+        except sqlite3.OperationalError:
+            review_rows = []
 
     for row in rows:
         try:
@@ -786,7 +897,44 @@ def is_known_output_path(path: str) -> bool:
                         return True
                 except OSError:
                     continue
+    for row in review_rows:
+        try:
+            if Path(row["video_path"]).expanduser().resolve() == target:
+                return True
+        except OSError:
+            continue
     return False
+
+
+def is_known_job_artifact_path(path: str) -> bool:
+    target = Path(path).expanduser().resolve()
+    with get_connection() as conn:
+        rows = conn.execute("SELECT results_json FROM jobs WHERE results_json IS NOT NULL").fetchall()
+    for row in rows:
+        try:
+            payload = json.loads(row["results_json"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        for value in _walk_json_values(payload):
+            if not isinstance(value, str) or not value:
+                continue
+            try:
+                if Path(value).expanduser().resolve() == target:
+                    return True
+            except OSError:
+                continue
+    return False
+
+
+def _walk_json_values(value: Any):
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _walk_json_values(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk_json_values(item)
+    else:
+        yield value
 
 
 def _row_to_project(row: sqlite3.Row) -> dict[str, Any]:

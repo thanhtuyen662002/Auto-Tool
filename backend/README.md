@@ -19,6 +19,7 @@ Frontend local nam trong thu muc `../frontend`. Backend van khong lam auto downl
 - Python 3.10+
 - FFmpeg va FFprobe. Neu khong co trong `PATH`, backend se tu tai FFmpeg Windows vao `%LOCALAPPDATA%\AutoTool\tools\ffmpeg` trong lan chay dau tien.
 - Neu chay bang file exe, launcher cung tu tai Piper Windows va voice tieng Viet vao `%LOCALAPPDATA%\AutoTool\tools\piper` trong lan mo dau tien.
+- OCR hard-sub mac dinh dung EasyOCR. Neu chua co, app tu cai package vao `%LOCALAPPDATA%\AutoTool\python_packages\pyXX` va EasyOCR tu tai model trong lan dau.
 - NumPy va OpenCV cho Smart Segment Scoring.
 
 ### Cai FFmpeg Tren Windows
@@ -568,6 +569,7 @@ backend\dist\AutoTool.exe
 ```
 
 Khi nguoi dung mo exe, app se tu kiem tra FFmpeg. Neu may chua co, app tai FFmpeg vao `%LOCALAPPDATA%\AutoTool\tools\ffmpeg` mot lan, sau do cac lan sau dung lai.
+Build script cung cai va bundle EasyOCR/Torch vao exe. Neu build khong bundle OCR hoac chay source code thieu package, startup se tu cai OCR vao `%LOCALAPPDATA%\AutoTool\python_packages\pyXX` trong background. Dat `AUTO_TOOL_AUTO_INSTALL_OCR=0` neu muon tat rieng OCR auto-install.
 
 ## Chay Frontend Local
 
@@ -699,6 +701,55 @@ Known limitations:
 - Render that voi `edge-tts` can internet.
 - Gemini loi hoac thieu key thi script variants fallback theo style, khong dung AI vision.
 - Chua co scene detection nang cao, auto download, auto post hay watermark bypass.
+
+## Subtitle Quality Scoring
+
+Subtitle Review tu dong tao `subtitle_quality_report.json` khi document duoc tao va refresh report sau khi sua subtitle. Module danh gia do dai, reading speed, duration, CJK con sot, markdown/JSON leak, ky tu la, OCR/ASR confidence, mismatch, repeated text va timestamp.
+
+API:
+
+```txt
+GET  /api/subtitle-review/documents/{document_id}/quality
+POST /api/subtitle-review/documents/{document_id}/quality/refresh
+GET  /api/subtitle-review/documents/{document_id}/quality/flagged-lines
+POST /api/subtitle-review/documents/{document_id}/lines/{line_index}/suggest-rewrite
+```
+
+Preset `safe_review` bat `auto_mark_low_quality_lines=true`. Score thap hoac critical se danh dau line la `needs_fix`; approve van duoc phep nhung response va UI se hien quality warning. Quality score chi la rule-based va OCR/ASR confidence chi la tin hieu can kiem tra, khong dam bao ban dich dung hoan toan.
+
+## Subtitle Auto Shortener and Safe Rewrite
+
+Module `subtitle_rewrite` tao 1-3 goi y rut gon cho tung dong, validate keyword/brand/so lieu/don vi/forbidden claim, tinh quality score du kien va luu suggestion vao SQLite. Gemini duoc dung khi co key; neu loi hoac `use_ai=false`, tool fallback sang rule-based shortener va gan warning.
+
+```txt
+POST /api/subtitle-review/documents/{document_id}/lines/{line_index}/rewrite-suggestions
+POST /api/subtitle-review/documents/{document_id}/lines/{line_index}/apply-rewrite
+POST /api/subtitle-review/documents/{document_id}/rewrite-flagged-lines
+```
+
+Apply suggestion cap nhat `edited_text`, `rewrite_history`, refresh quality report va ghi `subtitle_rewrite_log.json`. Bulk auto-apply chi chay khi suggestion khong co safety warning, ngan hon ban goc va score sau rewrite >= 0.85.
+
+Known limitations:
+
+- Rewrite suggestion khong dam bao dung 100%.
+- AI co the goi y chua hoan hao; user van nen review truoc khi approve.
+- OCR/ASR sai source co the lam rewrite sai theo.
+- Rule-based fallback uu tien an toan va co the khong rut gon du manh.
+
+## Final Output QA and Platform Export Pack
+
+Douyin render tu dong tao `video_XXX_final_qa.json` sau moi output thanh cong. QA dung ffprobe va FFmpeg volumedetect de kiem tra file/readability, duration, vertical 9:16, resolution, FPS, codec, audio volume, file size, subtitle/overlay artifact va ASS safe zone. Batch co them `final_qa_summary.json` va summary `final_output_qa`.
+
+```txt
+POST /api/final-output-qa/check
+POST /api/final-output-qa/jobs/{job_id}/check
+POST /api/douyin-reup/jobs/{job_id}/export-pack
+GET  /api/douyin-reup/jobs/{job_id}/export-pack
+```
+
+Export pack copy video final va cac subtitle/log/QA artifact duoc chon, tao `captions.txt`, `captions.csv`, `posting_checklist.md` va `export_manifest.json`. Ho tro profile `tiktok`, `instagram_reels`, `youtube_shorts`, `generic_vertical`.
+
+Known limitations: QA chi la rule-based; checker chua OCR lai final video; profile nen tang chi la goi y local; tool khong auto post.
 
 ## Ghi Chu
 

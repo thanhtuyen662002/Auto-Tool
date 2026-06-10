@@ -7,6 +7,7 @@ from app.adapters.ffmpeg_adapter import FFmpegError, probe_video, run_ffmpeg
 from app.modules.douyin_reup.bgm_mixer import BGMMixer
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem, TranslationResult
 from app.modules.douyin_reup.subtitle_timing_guard import parse_srt_blocks
+from app.modules.subtitle_review import ApproveSubtitleDocumentRequest, SubtitleReviewService, SubtitleReviewStatus
 from app.modules.visual_style.overlay_asset_builder import build_overlay_asset
 from app.modules.visual_style.style_schema import VisualStyleSettings
 from app.modules.visual_style.subtitle_style_renderer import generate_ass_subtitle
@@ -22,6 +23,73 @@ class DouyinRenderPipeline:
         self,
         video: DouyinVideoItem,
         translation_result: TranslationResult,
+        settings: DouyinReupSettings,
+        output_dir: str,
+        output_name: str,
+    ) -> dict:
+        return self._render_video_with_subtitle(
+            video=video,
+            subtitle_srt_path=translation_result.translated_srt_path,
+            subtitle_ass_path_override=None,
+            warnings=list(translation_result.warnings),
+            settings=settings,
+            output_dir=output_dir,
+            output_name=output_name,
+        )
+
+    def render_from_review_document(
+        self,
+        document_id: str,
+        settings: DouyinReupSettings,
+        output_dir: str,
+    ) -> dict:
+        service = SubtitleReviewService()
+        document = service.get_document(document_id)
+        if document.status != SubtitleReviewStatus.approved:
+            raise ValueError("Subtitle review document must be approved before render.")
+        if not document.corrected_srt_path:
+            document = service.approve_document(
+                document_id,
+                ApproveSubtitleDocumentRequest(
+                    generate_ass=not bool(document.corrected_ass_path),
+                    visual_style_preset_id=settings.visual_style_preset_id,
+                ),
+            )
+        media = probe_video(document.video_path)
+        video = DouyinVideoItem(
+            path=document.video_path,
+            filename=Path(document.video_path).name,
+            duration=media.duration,
+            width=media.width,
+            height=media.height,
+            fps=media.fps,
+            has_audio=media.has_audio,
+        )
+        result = self._render_video_with_subtitle(
+            video=video,
+            subtitle_srt_path=document.corrected_srt_path or document.translated_srt_path,
+            subtitle_ass_path_override=document.corrected_ass_path,
+            warnings=[],
+            settings=settings,
+            output_dir=output_dir,
+            output_name=f"{Path(document.video_path).stem}_reviewed.mp4",
+        )
+        result.update(
+            {
+                "source_srt_file": document.source_srt_path,
+                "translated_srt_file": document.translated_srt_path,
+                "corrected_srt_file": document.corrected_srt_path,
+                "corrected_ass_file": document.corrected_ass_path,
+            }
+        )
+        return result
+
+    def _render_video_with_subtitle(
+        self,
+        video: DouyinVideoItem,
+        subtitle_srt_path: str,
+        subtitle_ass_path_override: str | None,
+        warnings: list[str],
         settings: DouyinReupSettings,
         output_dir: str,
         output_name: str,
@@ -45,7 +113,6 @@ class DouyinRenderPipeline:
         overlay_path = target_dir / f"{Path(output_name).stem}_overlay.png"
         subtitle_ass_path = target_dir / f"{Path(output_name).stem}_vi.ass"
         output_path = target_dir / output_name
-        warnings = list(translation_result.warnings)
         errors: list[str] = []
 
         if settings.add_overlay:
@@ -53,20 +120,22 @@ class DouyinRenderPipeline:
         else:
             overlay_path = None  # type: ignore[assignment]
 
-        subtitle_blocks = parse_srt_blocks(translation_result.translated_srt_path)
+        subtitle_blocks = parse_srt_blocks(subtitle_srt_path)
         subtitle_lines = [
             {"start_hint": block.start, "end_hint": block.end, "text": block.text}
             for block in subtitle_blocks
         ]
-        if settings.burn_subtitle and subtitle_lines:
+        if settings.burn_subtitle and subtitle_ass_path_override and Path(subtitle_ass_path_override).exists():
+            subtitle_ass_path = Path(subtitle_ass_path_override)
+        elif settings.burn_subtitle and subtitle_lines:
             generate_ass_subtitle(subtitle_lines, preset, width, height, str(subtitle_ass_path))
         else:
             subtitle_ass_path = None  # type: ignore[assignment]
             if settings.burn_subtitle:
                 warnings.append("Không có subtitle hợp lệ để burn vào video.")
 
-        bgm_path = self.bgm_mixer.pick_bgm(settings.music_folder)
-        if settings.music_folder and not bgm_path:
+        bgm_path = self.bgm_mixer.pick_bgm(settings.music_folder) if settings.add_bgm else None
+        if settings.add_bgm and settings.music_folder and not bgm_path:
             warnings.append(f"Không tìm thấy file nhạc nền hợp lệ trong thư mục: {settings.music_folder}")
 
         try:
@@ -184,7 +253,7 @@ class DouyinRenderPipeline:
         audio_label: str | None = None
         if video.has_audio or bgm_input_index is not None:
             audio_filter, audio_label = self.bgm_mixer.build_audio_filter(
-                has_original_audio=video.has_audio,
+                has_original_audio=video.has_audio and settings.keep_original_audio,
                 has_bgm=bgm_input_index is not None,
                 original_audio_volume=settings.original_audio_volume,
                 bgm_volume=settings.bgm_volume,

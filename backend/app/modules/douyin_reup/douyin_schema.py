@@ -5,18 +5,22 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-SubtitleSourceType = Literal["sidecar_srt", "embedded_subtitle", "asr", "none"]
+SubtitleSourceType = Literal["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub", "none"]
 
 
 class DouyinReupSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
+    preset_id: str | None = None
+    preset_name: str | None = None
     source_language: str = "zh"
     target_language: str = "vi"
+    translation_style: str = "sat_nghia_troi_chay"
+    subtitle_position: str = "bottom_overlay"
     translation_provider: str = "gemini"
     subtitle_source_priority: list[str] = Field(
-        default_factory=lambda: ["sidecar_srt", "embedded_subtitle", "asr"]
+        default_factory=lambda: ["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"]
     )
     use_sidecar_srt: bool = True
     use_embedded_subtitle: bool = True
@@ -26,9 +30,25 @@ class DouyinReupSettings(BaseModel):
     asr_device: str = "auto"
     asr_vad_filter: bool = False
     asr_subtitle_offset_seconds: float = Field(default=-0.25, ge=-2.0, le=2.0)
+    use_ocr_if_asr_failed: bool = True
+    use_ocr_if_no_subtitle: bool = True
+    ocr_provider: str = "easyocr"
+    ocr_language: str = "ch"
+    ocr_sample_fps: float = Field(default=2.0, gt=0, le=10)
+    ocr_region_mode: str = "bottom_auto"
+    ocr_manual_region: dict | None = None
+    ocr_min_confidence: float = Field(default=0.55, ge=0, le=1)
+    ocr_dedupe_similarity: float = Field(default=0.86, ge=0, le=1)
+    ocr_min_text_length: int = Field(default=2, ge=1, le=50)
+    ocr_merge_gap_ms: int = Field(default=600, ge=0, le=10_000)
+    ocr_min_duration_ms: int = Field(default=500, ge=100, le=10_000)
+    ocr_max_duration_ms: int = Field(default=6000, ge=500, le=30_000)
+    prefer_ocr_over_asr_when_text_visible: bool = False
     visual_style_preset_id: str = "clean_review_light"
     burn_subtitle: bool = True
     add_overlay: bool = True
+    keep_original_audio: bool = True
+    add_bgm: bool = True
     music_folder: str | None = None
     bgm_volume: float = Field(default=0.16, ge=0, le=1)
     original_audio_volume: float = Field(default=0.85, ge=0, le=1)
@@ -39,6 +59,13 @@ class DouyinReupSettings(BaseModel):
     max_videos: int | None = Field(default=None, gt=0)
     selected_video_paths: list[str] = Field(default_factory=list)
     keep_temp: bool = False
+    review_subtitles_before_render: bool = True
+    auto_render_after_translation: bool = False
+    auto_mark_low_quality_lines: bool = True
+    enable_subtitle_rewrite_suggestions: bool = True
+    auto_generate_rewrite_for_flagged_lines: bool = False
+    auto_apply_safe_rewrites: bool = False
+    default_rewrite_style: str = "short_natural"
 
     @field_validator(
         "source_language",
@@ -47,8 +74,14 @@ class DouyinReupSettings(BaseModel):
         "asr_provider",
         "asr_model_size",
         "asr_device",
+        "ocr_provider",
+        "ocr_language",
+        "ocr_region_mode",
         "visual_style_preset_id",
         "process_mode",
+        "translation_style",
+        "subtitle_position",
+        "default_rewrite_style",
     )
     @classmethod
     def clean_text(cls, value: str) -> str:
@@ -74,7 +107,7 @@ class DouyinReupSettings(BaseModel):
     @field_validator("subtitle_source_priority")
     @classmethod
     def clean_priority(cls, value: list[str]) -> list[str]:
-        allowed = {"sidecar_srt", "embedded_subtitle", "asr"}
+        allowed = {"sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"}
         cleaned: list[str] = []
         for item in value:
             source = item.strip().lower()
@@ -82,7 +115,25 @@ class DouyinReupSettings(BaseModel):
                 raise ValueError(f"subtitle_source_priority không hỗ trợ: {item}")
             if source not in cleaned:
                 cleaned.append(source)
-        return cleaned or ["sidecar_srt", "embedded_subtitle", "asr"]
+        return cleaned or ["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"]
+
+    @field_validator("ocr_region_mode")
+    @classmethod
+    def validate_ocr_region_mode(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        allowed = {"bottom_auto", "middle_lower", "full_frame", "manual"}
+        if cleaned not in allowed:
+            raise ValueError(f"ocr_region_mode phải là một trong: {', '.join(sorted(allowed))}")
+        return cleaned
+
+    @field_validator("default_rewrite_style")
+    @classmethod
+    def validate_rewrite_style(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        allowed = {"short_natural", "very_short", "casual_tiktok", "clear_review", "sales_natural"}
+        if cleaned not in allowed:
+            raise ValueError(f"default_rewrite_style must be one of: {', '.join(sorted(allowed))}")
+        return cleaned
 
     @field_validator("process_mode")
     @classmethod
@@ -131,6 +182,10 @@ class SubtitleSourceResult(BaseModel):
     source_type: SubtitleSourceType
     source_srt_path: str | None = None
     language: str = "zh"
+    ocr_debug_json_path: str | None = None
+    ocr_frame_count: int = 0
+    ocr_detected_line_count: int = 0
+    ocr_average_confidence: float = 0.0
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
@@ -155,14 +210,30 @@ class DouyinOutputResult(BaseModel):
     path: str
     status: str
     source_video: str
+    preset_id: str | None = None
+    preset_name: str | None = None
     subtitle_source: str | None = None
     source_srt_file: str | None = None
     translated_srt_file: str | None = None
+    corrected_srt_file: str | None = None
     subtitle_ass_file: str | None = None
     overlay_file: str | None = None
     bgm_file: str | None = None
     log_file: str | None = None
+    subtitle_review_document_id: str | None = None
+    ocr_debug_json_path: str | None = None
+    ocr_frame_count: int = 0
+    ocr_detected_line_count: int = 0
+    ocr_average_confidence: float = 0.0
+    ocr_provider: str | None = None
+    ocr_region_mode: str | None = None
+    failed_step: str | None = None
+    error_message: str | None = None
+    can_retry: bool = False
     duration: float | None = None
+    durations: dict[str, float] = Field(default_factory=dict)
+    retry_history: list[dict[str, str | None]] = Field(default_factory=list)
+    final_output_qa: dict | None = None
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
@@ -180,4 +251,5 @@ class DouyinReupSummary(BaseModel):
     subtitle_sources: dict[str, int] = Field(default_factory=dict)
     failed_items: list[dict[str, str | int]] = Field(default_factory=list)
     outputs: list[DouyinOutputResult] = Field(default_factory=list)
+    subtitle_review: dict[str, int | bool] = Field(default_factory=dict)
     summary_file: str | None = None

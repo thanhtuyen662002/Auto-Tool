@@ -9,7 +9,12 @@ import os
 import uvicorn
 
 from app.api import create_app
-from app.utils.dependency_manager import RuntimeDependencyReport, ensure_runtime_dependencies
+from app.utils.dependency_manager import (
+    DEFAULT_OCR_PROVIDER,
+    RuntimeDependencyReport,
+    ensure_runtime_dependencies,
+    start_background_dependency_warmup,
+)
 from app.utils.env_loader import load_local_env
 from app.utils.logger import configure_logging, get_logger
 
@@ -31,6 +36,12 @@ def main() -> int:
     logger.info("Piper model: %s", report.piper_model_path or "not found")
     for warning in report.warnings:
         logger.warning(warning)
+    start_background_dependency_warmup(
+        include_piper=False,
+        include_ocr=True,
+        ocr_provider=os.getenv("AUTO_TOOL_OCR_PROVIDER", DEFAULT_OCR_PROVIDER),
+        warmup_ocr_models=True,
+    )
 
     host = "127.0.0.1"
     preferred_port = int(os.getenv("AUTO_TOOL_PORT", "8000"))

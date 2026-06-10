@@ -59,15 +59,49 @@ import type {
   UpdateSourceMediaReviewResponse,
   BrowsePathRequest,
   BrowsePathResponse,
+  SystemDependencyStatusResponse,
+  DouyinApplyPresetRequest,
+  DouyinApplyPresetResponse,
+  DouyinOneClickBatchRequest,
+  DouyinOneClickBatchResponse,
   DouyinReupJobResultsResponse,
+  DouyinOcrTestRequest,
+  DouyinOcrTestResponse,
+  DouyinPresetRecommendationResponse,
+  DouyinReupPreset,
+  DouyinReupPresetListResponse,
   DouyinReupProcessRequest,
   DouyinReupProcessResponse,
   DouyinReupScanResponse,
+  DouyinRetryFailedRequest,
+  DouyinRetryFailedResponse,
+  DouyinRetryWithPresetRequest,
+  CreateExportPackRequest,
+  FinalOutputQAJobResponse,
+  PlatformExportPackResponse,
+  PlatformTarget,
   ReferenceSummaryResponse,
   StoryboardRequest,
   StoryboardResponse,
   VideoPromptPackRequest,
   VideoPromptPackResponse,
+  ApproveSubtitleDocumentRequest,
+  RenderApprovedSubtitleDocumentsRequest,
+  RenderSubtitleReviewDocumentRequest,
+  SaveSubtitleReviewRequest,
+  SubtitleDocumentQualityReport,
+  SubtitleQualityFlaggedLinesResponse,
+  SubtitleRewriteSuggestionResponse,
+  ApplySubtitleRewriteResponse,
+  BulkRewriteFlaggedLinesRequest,
+  BulkSubtitleRewriteResponse,
+  GenerateSubtitleRewriteRequest,
+  SubtitleRewriteSuggestionsResponse,
+  SubtitleReviewDocument,
+  SubtitleReviewDocumentListResponse,
+  SubtitleReviewLine,
+  SubtitleReviewRenderResponse,
+  UpdateSubtitleLineRequest,
 } from '../types/project';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
@@ -152,6 +186,14 @@ export function browsePath(payload: BrowsePathRequest): Promise<BrowsePathRespon
   });
 }
 
+export function finalOutputQAReportUrl(path: string): string {
+  return `${API_BASE_URL}/api/final-output-qa/report?path=${encodeURIComponent(path)}`;
+}
+
+export function getSystemDependencies(): Promise<SystemDependencyStatusResponse> {
+  return request<SystemDependencyStatusResponse>('/api/system/dependencies');
+}
+
 export function scanProject(projectId: string): Promise<ScanResponse> {
   return request<ScanResponse>(`/api/projects/${projectId}/scan`, {
     method: 'POST',
@@ -160,6 +202,35 @@ export function scanProject(projectId: string): Promise<ScanResponse> {
 
 export function scanDouyinReupFolder(sourceFolder: string): Promise<DouyinReupScanResponse> {
   return request<DouyinReupScanResponse>('/api/douyin-reup/scan', {
+    method: 'POST',
+    body: JSON.stringify({ source_folder: sourceFolder }),
+  });
+}
+
+export function testDouyinHardsubOcr(payload: DouyinOcrTestRequest): Promise<DouyinOcrTestResponse> {
+  return request<DouyinOcrTestResponse>('/api/douyin-reup/ocr-test', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listDouyinReupPresets(): Promise<DouyinReupPresetListResponse> {
+  return request<DouyinReupPresetListResponse>('/api/douyin-reup/presets');
+}
+
+export function getDouyinReupPreset(presetId: string): Promise<DouyinReupPreset> {
+  return request<DouyinReupPreset>(`/api/douyin-reup/presets/${encodeURIComponent(presetId)}`);
+}
+
+export function applyDouyinReupPreset(payload: DouyinApplyPresetRequest): Promise<DouyinApplyPresetResponse> {
+  return request<DouyinApplyPresetResponse>('/api/douyin-reup/apply-preset', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function recommendDouyinReupPreset(sourceFolder: string): Promise<DouyinPresetRecommendationResponse> {
+  return request<DouyinPresetRecommendationResponse>('/api/douyin-reup/recommend-preset', {
     method: 'POST',
     body: JSON.stringify({ source_folder: sourceFolder }),
   });
@@ -174,8 +245,200 @@ export function startDouyinReupProcess(
   });
 }
 
+export function startDouyinOneClickBatch(
+  payload: DouyinOneClickBatchRequest,
+): Promise<DouyinOneClickBatchResponse> {
+  return request<DouyinOneClickBatchResponse>('/api/douyin-reup/one-click', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getDouyinReupJobResults(jobId: string): Promise<DouyinReupJobResultsResponse> {
   return request<DouyinReupJobResultsResponse>(`/api/douyin-reup/jobs/${jobId}/results`);
+}
+
+export function retryFailedDouyinReupJob(
+  jobId: string,
+  payload: DouyinRetryFailedRequest,
+): Promise<DouyinRetryFailedResponse> {
+  return request<DouyinRetryFailedResponse>(`/api/douyin-reup/jobs/${jobId}/retry-failed`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function retryDouyinReupJobWithPreset(
+  jobId: string,
+  payload: DouyinRetryWithPresetRequest,
+): Promise<DouyinRetryFailedResponse> {
+  return request<DouyinRetryFailedResponse>(`/api/douyin-reup/jobs/${jobId}/retry-with-preset`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function runFinalOutputQAForJob(
+  jobId: string,
+  platformTarget: PlatformTarget,
+): Promise<FinalOutputQAJobResponse> {
+  return request<FinalOutputQAJobResponse>(`/api/final-output-qa/jobs/${jobId}/check`, {
+    method: 'POST',
+    body: JSON.stringify({ platform_target: platformTarget }),
+  });
+}
+
+export function createDouyinExportPack(
+  jobId: string,
+  payload: CreateExportPackRequest,
+): Promise<PlatformExportPackResponse> {
+  return request<PlatformExportPackResponse>(`/api/douyin-reup/jobs/${jobId}/export-pack`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getDouyinExportPack(jobId: string): Promise<PlatformExportPackResponse> {
+  return request<PlatformExportPackResponse>(`/api/douyin-reup/jobs/${jobId}/export-pack`);
+}
+
+export function openDouyinExportPack(jobId: string): Promise<{ success: boolean; path: string }> {
+  return request<{ success: boolean; path: string }>(`/api/douyin-reup/jobs/${jobId}/export-pack/open`, {
+    method: 'POST',
+  });
+}
+
+export function listSubtitleReviewDocuments(filters: {
+  project_id?: string | null;
+  job_id?: string | null;
+  status?: string | null;
+} = {}): Promise<SubtitleReviewDocumentListResponse> {
+  const params = new URLSearchParams();
+  if (filters.project_id) params.set('project_id', filters.project_id);
+  if (filters.job_id) params.set('job_id', filters.job_id);
+  if (filters.status) params.set('status', filters.status);
+  const query = params.toString();
+  return request<SubtitleReviewDocumentListResponse>(`/api/subtitle-review/documents${query ? `?${query}` : ''}`);
+}
+
+export function getSubtitleReviewDocument(documentId: string): Promise<SubtitleReviewDocument> {
+  return request<SubtitleReviewDocument>(`/api/subtitle-review/documents/${documentId}`);
+}
+
+export function updateSubtitleReviewLine(
+  documentId: string,
+  lineIndex: number,
+  payload: UpdateSubtitleLineRequest,
+): Promise<SubtitleReviewLine> {
+  return request<SubtitleReviewLine>(`/api/subtitle-review/documents/${documentId}/lines/${lineIndex}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function saveSubtitleReviewDocument(
+  documentId: string,
+  payload: SaveSubtitleReviewRequest,
+): Promise<SubtitleReviewDocument> {
+  return request<SubtitleReviewDocument>(`/api/subtitle-review/documents/${documentId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function approveSubtitleReviewDocument(
+  documentId: string,
+  payload: ApproveSubtitleDocumentRequest,
+): Promise<SubtitleReviewDocument> {
+  return request<SubtitleReviewDocument>(`/api/subtitle-review/documents/${documentId}/approve`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getSubtitleQualityReport(documentId: string): Promise<SubtitleDocumentQualityReport> {
+  return request<SubtitleDocumentQualityReport>('/api/subtitle-review/documents/' + documentId + '/quality');
+}
+
+export function refreshSubtitleQualityReport(documentId: string): Promise<SubtitleDocumentQualityReport> {
+  return request<SubtitleDocumentQualityReport>(
+    '/api/subtitle-review/documents/' + documentId + '/quality/refresh',
+    { method: 'POST' },
+  );
+}
+
+export function getSubtitleQualityFlaggedLines(documentId: string): Promise<SubtitleQualityFlaggedLinesResponse> {
+  return request<SubtitleQualityFlaggedLinesResponse>(
+    '/api/subtitle-review/documents/' + documentId + '/quality/flagged-lines',
+  );
+}
+
+export function suggestSubtitleLineRewrite(
+  documentId: string,
+  lineIndex: number,
+  style = 'short_natural_vietnamese',
+): Promise<SubtitleRewriteSuggestionResponse> {
+  return request<SubtitleRewriteSuggestionResponse>(
+    '/api/subtitle-review/documents/' + documentId + '/lines/' + lineIndex + '/suggest-rewrite',
+    {
+      method: 'POST',
+      body: JSON.stringify({ style }),
+    },
+  );
+}
+
+export function generateSubtitleRewriteSuggestions(
+  documentId: string,
+  lineIndex: number,
+  payload: GenerateSubtitleRewriteRequest,
+): Promise<SubtitleRewriteSuggestionsResponse> {
+  return request<SubtitleRewriteSuggestionsResponse>(
+    `/api/subtitle-review/documents/${documentId}/lines/${lineIndex}/rewrite-suggestions`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function applySubtitleRewrite(
+  documentId: string,
+  lineIndex: number,
+  suggestionId: string,
+): Promise<ApplySubtitleRewriteResponse> {
+  return request<ApplySubtitleRewriteResponse>(
+    `/api/subtitle-review/documents/${documentId}/lines/${lineIndex}/apply-rewrite`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ suggestion_id: suggestionId, refresh_quality_score: true }),
+    },
+  );
+}
+
+export function rewriteFlaggedSubtitleLines(
+  documentId: string,
+  payload: BulkRewriteFlaggedLinesRequest,
+): Promise<BulkSubtitleRewriteResponse> {
+  return request<BulkSubtitleRewriteResponse>(
+    `/api/subtitle-review/documents/${documentId}/rewrite-flagged-lines`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function renderSubtitleReviewDocument(
+  documentId: string,
+  payload: RenderSubtitleReviewDocumentRequest,
+): Promise<SubtitleReviewRenderResponse> {
+  return request<SubtitleReviewRenderResponse>(`/api/subtitle-review/documents/${documentId}/render`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function renderApprovedSubtitleReviewDocuments(
+  payload: RenderApprovedSubtitleDocumentsRequest,
+): Promise<SubtitleReviewRenderResponse> {
+  return request<SubtitleReviewRenderResponse>('/api/subtitle-review/render-approved', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function analyzeProjectSegments(projectId: string): Promise<SegmentScoringSummary> {

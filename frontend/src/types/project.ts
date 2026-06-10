@@ -110,8 +110,12 @@ export interface VisualStyleSettings {
 
 export interface DouyinReupSettings {
   enabled: boolean;
+  preset_id?: string | null;
+  preset_name?: string | null;
   source_language: string;
   target_language: string;
+  translation_style: string;
+  subtitle_position: string;
   translation_provider: string;
   subtitle_source_priority: string[];
   use_sidecar_srt: boolean;
@@ -122,9 +126,25 @@ export interface DouyinReupSettings {
   asr_device: string;
   asr_vad_filter: boolean;
   asr_subtitle_offset_seconds: number;
+  use_ocr_if_asr_failed: boolean;
+  use_ocr_if_no_subtitle: boolean;
+  ocr_provider: string;
+  ocr_language: string;
+  ocr_sample_fps: number;
+  ocr_region_mode: 'bottom_auto' | 'middle_lower' | 'full_frame' | 'manual' | string;
+  ocr_manual_region?: { x: number; y: number; width: number; height: number } | null;
+  ocr_min_confidence: number;
+  ocr_dedupe_similarity: number;
+  ocr_min_text_length: number;
+  ocr_merge_gap_ms: number;
+  ocr_min_duration_ms: number;
+  ocr_max_duration_ms: number;
+  prefer_ocr_over_asr_when_text_visible: boolean;
   visual_style_preset_id: string;
   burn_subtitle: boolean;
   add_overlay: boolean;
+  keep_original_audio: boolean;
+  add_bgm: boolean;
   music_folder?: string | null;
   bgm_volume: number;
   original_audio_volume: number;
@@ -135,6 +155,13 @@ export interface DouyinReupSettings {
   max_videos?: number | null;
   selected_video_paths: string[];
   keep_temp: boolean;
+  review_subtitles_before_render: boolean;
+  auto_render_after_translation: boolean;
+  auto_mark_low_quality_lines: boolean;
+  enable_subtitle_rewrite_suggestions: boolean;
+  auto_generate_rewrite_for_flagged_lines: boolean;
+  auto_apply_safe_rewrites: boolean;
+  default_rewrite_style: SubtitleRewriteStyle;
 }
 
 export interface IndustrySettings {
@@ -226,6 +253,18 @@ export interface BrowsePathResponse {
   cancelled: boolean;
 }
 
+export interface SystemDependencyStatusResponse {
+  ffmpeg_path?: string | null;
+  ffprobe_path?: string | null;
+  piper_path?: string | null;
+  piper_model_path?: string | null;
+  piper_config_path?: string | null;
+  ocr_provider?: string | null;
+  ocr_available: boolean;
+  ocr_message?: string | null;
+  warnings: string[];
+}
+
 export interface MediaFile {
   path: string;
   duration: number;
@@ -279,19 +318,94 @@ export interface DouyinReupProcessResponse {
   status: string;
 }
 
+export interface DouyinReupPreset {
+  id: string;
+  name: string;
+  description: string;
+  recommended_for: string[];
+  not_recommended_for: string[];
+  settings: DouyinReupSettings;
+  ui_badge: string;
+  is_default: boolean;
+}
+
+export interface DouyinReupPresetListResponse {
+  presets: DouyinReupPreset[];
+}
+
+export interface DouyinApplyPresetRequest {
+  preset_id: string;
+  current_settings?: DouyinReupSettings | null;
+  overrides?: Record<string, unknown>;
+}
+
+export interface DouyinApplyPresetResponse {
+  preset: DouyinReupPreset;
+  settings: DouyinReupSettings;
+}
+
+export interface DouyinOneClickBatchRequest {
+  project_name: string;
+  source_folder: string;
+  output_folder: string;
+  preset_id?: string;
+  bgm_folder?: string | null;
+  visual_style_preset_id?: string | null;
+  process_mode?: 'all_videos' | 'first_n' | 'selected';
+  max_videos?: number | null;
+  selected_video_paths?: string[];
+  review_subtitles_before_render?: boolean | null;
+  auto_render_after_translation?: boolean | null;
+  advanced_overrides?: Record<string, unknown>;
+}
+
+export interface DouyinOneClickBatchResponse {
+  project_id: string;
+  job_id: string;
+  status: string;
+  preset_id: string;
+  preset_name: string;
+  total_outputs: number;
+}
+
+export interface DouyinPresetRecommendationResponse {
+  preset_id: string;
+  preset_name: string;
+  reason: string;
+  confidence: number;
+  signals: Record<string, unknown>;
+}
+
 export interface DouyinOutputResult {
   index: number;
   path: string;
   status: string;
   source_video: string;
+  preset_id?: string | null;
+  preset_name?: string | null;
   subtitle_source?: string | null;
   source_srt_file?: string | null;
   translated_srt_file?: string | null;
+  corrected_srt_file?: string | null;
   subtitle_ass_file?: string | null;
+  corrected_ass_file?: string | null;
   overlay_file?: string | null;
   bgm_file?: string | null;
   log_file?: string | null;
+  subtitle_review_document_id?: string | null;
+  ocr_debug_json_path?: string | null;
+  ocr_frame_count?: number;
+  ocr_detected_line_count?: number;
+  ocr_average_confidence?: number;
+  ocr_provider?: string | null;
+  ocr_region_mode?: string | null;
+  failed_step?: string | null;
+  error_message?: string | null;
+  can_retry?: boolean;
   duration?: number | null;
+  durations?: Record<string, number>;
+  retry_history?: Array<Record<string, string | null>>;
+  final_output_qa?: FinalOutputQASummary | null;
   warnings: string[];
   errors: string[];
 }
@@ -307,7 +421,353 @@ export interface DouyinReupSummary {
   subtitle_sources: Record<string, number>;
   failed_items: Array<{ index: number | string; reason: string }>;
   outputs: DouyinOutputResult[];
+  subtitle_review?: {
+    enabled: boolean;
+    documents_created: number;
+    approved: number;
+    pending: number;
+  };
+  success?: number;
+  failed?: number;
+  needs_review?: number;
+  rendered?: number;
+  failure_breakdown?: Record<string, number>;
+  performance?: {
+    scan_seconds: number;
+    average_asr_seconds_per_video: number;
+    average_ocr_seconds_per_video?: number;
+    average_translation_seconds_per_video: number;
+    average_render_seconds_per_video: number;
+    total_runtime_seconds: number;
+    slowest_step: string;
+  };
+  ocr_summary?: {
+    videos_attempted: number;
+    videos_success: number;
+    average_confidence: number;
+  };
+  preset?: {
+    id?: string | null;
+    name?: string | null;
+  };
+  settings_snapshot?: Partial<DouyinReupSettings>;
+  subtitle_rewrite?: {
+    enabled: boolean;
+    suggestions_created: number;
+    suggestions_applied: number;
+    auto_applied?: number;
+    average_quality_improvement: number;
+  };
+  final_output_qa?: FinalOutputQABatchSummary;
   summary_file?: string | null;
+}
+
+export type PlatformTarget = 'tiktok' | 'instagram_reels' | 'youtube_shorts' | 'generic_vertical';
+export type FinalOutputQAStatus = 'passed' | 'passed_with_warnings' | 'failed';
+
+export interface FinalOutputQAIssue {
+  issue_type: string;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  suggestion?: string | null;
+}
+
+export interface FinalOutputQASummary {
+  status: FinalOutputQAStatus;
+  score: number;
+  report_path?: string | null;
+  issues: FinalOutputQAIssue[];
+}
+
+export interface FinalOutputQAReport extends FinalOutputQASummary {
+  id: string;
+  job_id?: string | null;
+  project_id?: string | null;
+  video_id?: string | null;
+  platform_target: PlatformTarget;
+  output_video_path: string;
+  probe: Record<string, unknown>;
+  audio?: Record<string, unknown> | null;
+  subtitle_visibility?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface FinalOutputQABatchSummary {
+  platform_target?: PlatformTarget;
+  total_checked: number;
+  total?: number;
+  passed: number;
+  passed_with_warnings: number;
+  failed: number;
+  average_score: number;
+  issue_breakdown?: Record<string, number>;
+  summary_path?: string;
+}
+
+export interface FinalOutputQAJobResponse {
+  success: boolean;
+  reports: FinalOutputQAReport[];
+  summary: FinalOutputQABatchSummary;
+}
+
+export interface ExportPackItem {
+  label: string;
+  path: string;
+  file_type: string;
+  exists: boolean;
+}
+
+export interface PlatformExportPack {
+  id: string;
+  job_id?: string | null;
+  project_id?: string | null;
+  platform_target: PlatformTarget;
+  output_dir: string;
+  items: ExportPackItem[];
+  caption_txt_path?: string | null;
+  caption_csv_path?: string | null;
+  posting_checklist_path?: string | null;
+  qa_summary_path?: string | null;
+  manifest_path?: string | null;
+  created_at: string;
+}
+
+export interface CreateExportPackRequest {
+  platform_target: PlatformTarget;
+  output_dir?: string | null;
+  copy_videos: boolean;
+  include_subtitles: boolean;
+  include_logs: boolean;
+  include_captions: boolean;
+  include_posting_checklist: boolean;
+  output_indexes: number[];
+}
+
+export interface PlatformExportPackResponse {
+  success: boolean;
+  export_pack: PlatformExportPack;
+}
+
+export interface DouyinOcrTestRequest {
+  video_path: string;
+  settings: Partial<DouyinReupSettings>;
+}
+
+export interface DouyinOcrTestResponse {
+  success: boolean;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+}
+
+export interface DouyinRetryFailedRequest {
+  retry_steps: string[];
+  settings?: Partial<DouyinReupSettings>;
+}
+
+export interface DouyinRetryWithPresetRequest {
+  preset_id: string;
+  video_ids?: string[];
+  retry_steps?: string[];
+  settings?: Partial<DouyinReupSettings>;
+  advanced_overrides?: Record<string, unknown>;
+}
+
+export interface DouyinRetryFailedResponse {
+  job_id: string;
+  status: string;
+  retry_outputs: number;
+}
+
+export type SubtitleReviewStatus = 'pending' | 'reviewed' | 'needs_fix' | 'approved';
+export type SubtitleQualitySeverity = 'info' | 'warning' | 'critical';
+
+export interface SubtitleQualityIssue {
+  issue_type: string;
+  severity: SubtitleQualitySeverity;
+  message: string;
+  suggestion?: string | null;
+}
+
+export interface SubtitleLineQualityScore {
+  line_index: number;
+  score: number;
+  severity: SubtitleQualitySeverity;
+  needs_review: boolean;
+  source_text?: string | null;
+  translated_text: string;
+  edited_text?: string | null;
+  duration_ms: number;
+  char_count: number;
+  line_count: number;
+  chars_per_second: number;
+  ocr_confidence?: number | null;
+  asr_confidence?: number | null;
+  issues: SubtitleQualityIssue[];
+}
+
+export interface SubtitleDocumentQualityReport {
+  document_id: string;
+  video_id?: string | null;
+  project_id?: string | null;
+  average_score: number;
+  total_lines: number;
+  needs_review_count: number;
+  critical_count: number;
+  warning_count: number;
+  lines: SubtitleLineQualityScore[];
+  summary_warnings: string[];
+  issues_breakdown: Record<string, number>;
+  report_file?: string | null;
+  created_at: string;
+}
+
+export interface SubtitleQualityFlaggedLinesResponse {
+  items: SubtitleLineQualityScore[];
+}
+
+export interface SubtitleRewriteSuggestionResponse {
+  suggestion: string;
+  source: string;
+  issues: Array<Record<string, unknown>>;
+}
+
+export type SubtitleRewriteStyle = 'short_natural' | 'very_short' | 'casual_tiktok' | 'clear_review' | 'sales_natural';
+
+export interface SubtitleRewriteSuggestion {
+  id: string;
+  document_id: string;
+  line_index: number;
+  source_text?: string | null;
+  original_translation: string;
+  suggested_text: string;
+  style: SubtitleRewriteStyle;
+  reason?: string | null;
+  char_count_before: number;
+  char_count_after: number;
+  estimated_cps_before?: number | null;
+  estimated_cps_after?: number | null;
+  safety_warnings: string[];
+  quality_score_before?: number | null;
+  quality_score_after?: number | null;
+  created_at: string;
+  applied_at?: string | null;
+  auto_applied: boolean;
+}
+
+export interface GenerateSubtitleRewriteRequest {
+  style: SubtitleRewriteStyle;
+  suggestion_count: number;
+  max_chars?: number | null;
+  preserve_keywords: string[];
+  use_ai: boolean;
+}
+
+export interface SubtitleRewriteSuggestionsResponse {
+  success: boolean;
+  items: SubtitleRewriteSuggestion[];
+}
+
+export interface ApplySubtitleRewriteResponse {
+  success: boolean;
+  line: SubtitleReviewLine;
+}
+
+export interface BulkRewriteFlaggedLinesRequest {
+  style: SubtitleRewriteStyle;
+  max_lines: number;
+  only_issue_types: string[];
+  auto_apply_safe_suggestions: boolean;
+}
+
+export interface BulkSubtitleRewriteResponse {
+  success: boolean;
+  processed_lines: number;
+  suggestions_created: number;
+  auto_applied: number;
+  items: SubtitleRewriteSuggestion[];
+}
+
+export interface SubtitleReviewLine {
+  index: number;
+  start_ms: number;
+  end_ms: number;
+  source_text?: string | null;
+  translated_text: string;
+  edited_text?: string | null;
+  status: SubtitleReviewStatus;
+  warnings: string[];
+  user_note?: string | null;
+  quality_score?: number | null;
+  quality_needs_review: boolean;
+  quality_severity?: SubtitleQualitySeverity | null;
+  quality_issues: SubtitleQualityIssue[];
+  rewrite_history: Array<Record<string, unknown>>;
+}
+
+export interface SubtitleReviewDocument {
+  id: string;
+  project_id?: string | null;
+  job_id?: string | null;
+  video_id: string;
+  video_path: string;
+  source_language: string;
+  target_language: string;
+  source_type?: string | null;
+  source_srt_path?: string | null;
+  translated_srt_path: string;
+  corrected_srt_path?: string | null;
+  corrected_ass_path?: string | null;
+  status: SubtitleReviewStatus;
+  lines: SubtitleReviewLine[];
+  line_count: number;
+  reviewed_count: number;
+  edited_count: number;
+  warning_count: number;
+  quality_average_score?: number | null;
+  quality_needs_review_count: number;
+  quality_critical_count: number;
+  quality_warning_count: number;
+  approval_quality_warning?: string | null;
+  approval_quality_guard?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubtitleReviewDocumentListResponse {
+  items: SubtitleReviewDocument[];
+}
+
+export interface UpdateSubtitleLineRequest {
+  edited_text?: string | null;
+  status?: SubtitleReviewStatus | null;
+  user_note?: string | null;
+}
+
+export interface SaveSubtitleReviewRequest {
+  lines: SubtitleReviewLine[];
+  mark_as_reviewed: boolean;
+}
+
+export interface ApproveSubtitleDocumentRequest {
+  generate_ass: boolean;
+  visual_style_preset_id?: string | null;
+}
+
+export interface RenderSubtitleReviewDocumentRequest {
+  output_folder: string;
+  settings: DouyinReupSettings;
+}
+
+export interface RenderApprovedSubtitleDocumentsRequest {
+  job_id?: string | null;
+  project_id?: string | null;
+  output_folder: string;
+  settings: DouyinReupSettings;
+}
+
+export interface SubtitleReviewRenderResponse {
+  job_id: string;
+  status: string;
 }
 
 export interface DouyinReupJobResultsResponse {

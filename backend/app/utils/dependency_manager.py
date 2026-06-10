@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import importlib
+import importlib.util
+import logging
 import os
 import shutil
+import subprocess
+import sys
+import threading
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -22,6 +28,10 @@ PIPER_VI_CONFIG_URL = (
 )
 PIPER_VI_MODEL_NAME = "vi_VN-vais1000-medium.onnx"
 PIPER_VI_CONFIG_NAME = "vi_VN-vais1000-medium.onnx.json"
+DEFAULT_OCR_PROVIDER = "easyocr"
+
+
+logger = logging.getLogger(__name__)
 
 
 class DependencyError(RuntimeError):
@@ -38,6 +48,21 @@ class RuntimeDependencyReport:
     piper_config_path: str | None = None
     piper_auto_installed: bool = False
     warnings: tuple[str, ...] = ()
+    ocr_provider: str | None = None
+    ocr_available: bool = False
+    ocr_auto_installed: bool = False
+    ocr_message: str | None = None
+
+
+@dataclass(frozen=True)
+class OCRDependencyReport:
+    provider: str
+    available: bool
+    auto_install_attempted: bool = False
+    auto_installed: bool = False
+    package_dir: str | None = None
+    message: str | None = None
+    warnings: tuple[str, ...] = ()
 
 
 def auto_install_enabled() -> bool:
@@ -45,7 +70,18 @@ def auto_install_enabled() -> bool:
     return value not in {"0", "false", "no", "off"}
 
 
-def ensure_runtime_dependencies(auto_install: bool | None = None, include_piper: bool = False) -> RuntimeDependencyReport:
+def ocr_auto_install_enabled() -> bool:
+    value = os.getenv("AUTO_TOOL_AUTO_INSTALL_OCR", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def ensure_runtime_dependencies(
+    auto_install: bool | None = None,
+    include_piper: bool = False,
+    include_ocr: bool = False,
+    ocr_provider: str = DEFAULT_OCR_PROVIDER,
+    warmup_ocr_models: bool = False,
+) -> RuntimeDependencyReport:
     should_install = auto_install_enabled() if auto_install is None else auto_install
     installed = False
     piper_installed = False
@@ -73,6 +109,17 @@ def ensure_runtime_dependencies(auto_install: bool | None = None, include_piper:
             piper_model, piper_config = find_piper_voice_files()
         configure_piper_environment(piper, piper_model, piper_config)
 
+    ocr_report: OCRDependencyReport | None = None
+    if include_ocr:
+        ocr_report = ensure_ocr_dependency(
+            provider=ocr_provider,
+            auto_install=should_install and ocr_auto_install_enabled(),
+            warmup_models=warmup_ocr_models,
+        )
+        warnings.extend(ocr_report.warnings)
+        if ocr_report.message and not ocr_report.available:
+            warnings.append(ocr_report.message)
+
     return RuntimeDependencyReport(
         ffmpeg_path=str(ffmpeg) if ffmpeg else None,
         ffprobe_path=str(ffprobe) if ffprobe else None,
@@ -82,6 +129,10 @@ def ensure_runtime_dependencies(auto_install: bool | None = None, include_piper:
         piper_config_path=str(piper_config) if piper_config else None,
         piper_auto_installed=piper_installed,
         warnings=tuple(warnings),
+        ocr_provider=ocr_report.provider if ocr_report else None,
+        ocr_available=ocr_report.available if ocr_report else False,
+        ocr_auto_installed=ocr_report.auto_installed if ocr_report else False,
+        ocr_message=ocr_report.message if ocr_report else None,
     )
 
 
@@ -190,6 +241,257 @@ def configure_piper_environment(
         os.environ["PIPER_MODEL_PATH"] = str(model)
     if config and (not os.getenv("PIPER_CONFIG_PATH") or not Path(os.getenv("PIPER_CONFIG_PATH", "")).exists()):
         os.environ["PIPER_CONFIG_PATH"] = str(config)
+
+
+def ensure_ocr_dependency(
+    provider: str = DEFAULT_OCR_PROVIDER,
+    auto_install: bool | None = None,
+    warmup_models: bool = False,
+    language: str = "ch",
+) -> OCRDependencyReport:
+    normalized = normalize_ocr_provider(provider)
+    package_dir = configure_python_package_path()
+    if normalized == "mock_ocr":
+        return OCRDependencyReport(provider=normalized, available=True, package_dir=str(package_dir))
+
+    module_name, packages = _ocr_module_and_packages(normalized)
+    if _module_available(module_name):
+        message = None
+        warnings = _warmup_ocr_model(normalized, language) if warmup_models else []
+        return OCRDependencyReport(
+            provider=normalized,
+            available=True,
+            package_dir=str(package_dir),
+            message=message,
+            warnings=tuple(warnings),
+        )
+
+    should_install = auto_install_enabled() if auto_install is None else auto_install
+    should_install = should_install and ocr_auto_install_enabled()
+    if not should_install:
+        return OCRDependencyReport(
+            provider=normalized,
+            available=False,
+            package_dir=str(package_dir),
+            message=_missing_ocr_message(normalized),
+        )
+
+    try:
+        _install_python_packages(packages, package_dir)
+    except DependencyError as exc:
+        return OCRDependencyReport(
+            provider=normalized,
+            available=False,
+            auto_install_attempted=True,
+            package_dir=str(package_dir),
+            message=str(exc),
+        )
+
+    importlib.invalidate_caches()
+    configure_python_package_path(package_dir)
+    available = _module_available(module_name)
+    warnings = _warmup_ocr_model(normalized, language) if available and warmup_models else []
+    return OCRDependencyReport(
+        provider=normalized,
+        available=available,
+        auto_install_attempted=True,
+        auto_installed=available,
+        package_dir=str(package_dir),
+        message=None if available else _missing_ocr_message(normalized),
+        warnings=tuple(warnings),
+    )
+
+
+def normalize_ocr_provider(provider: str | None) -> str:
+    normalized = (provider or DEFAULT_OCR_PROVIDER).strip().lower()
+    if normalized in {"easy", "easy_ocr"}:
+        return "easyocr"
+    if normalized in {"paddle", "paddle_ocr"}:
+        return "paddleocr"
+    return normalized
+
+
+def configure_python_package_path(package_dir: Path | None = None) -> Path:
+    target = package_dir or local_python_package_dir()
+    target.mkdir(parents=True, exist_ok=True)
+    target_str = str(target)
+    if target_str not in sys.path:
+        sys.path.insert(0, target_str)
+    current = os.environ.get("PYTHONPATH", "")
+    parts = current.split(os.pathsep) if current else []
+    normalized = target_str.lower() if os.name == "nt" else target_str
+    if normalized not in {(part.lower() if os.name == "nt" else part) for part in parts}:
+        os.environ["PYTHONPATH"] = target_str + (os.pathsep + current if current else "")
+    return target
+
+
+def local_python_package_dir() -> Path:
+    configured = os.getenv("AUTO_TOOL_PYTHON_PACKAGES_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    version = f"py{sys.version_info.major}{sys.version_info.minor}"
+    return app_data_dir() / "python_packages" / version
+
+
+def _ocr_module_and_packages(provider: str) -> tuple[str, list[str]]:
+    if provider == "easyocr":
+        return "easyocr", ["easyocr"]
+    if provider == "paddleocr":
+        return "paddleocr", ["paddleocr", "paddlepaddle"]
+    raise DependencyError(f"OCR provider chưa được hỗ trợ: {provider}")
+
+
+def _module_available(module_name: str) -> bool:
+    return importlib.util.find_spec(module_name) is not None
+
+
+def _install_python_packages(packages: list[str], target_dir: Path) -> None:
+    python_command = _pip_python_command()
+    if not python_command:
+        raise DependencyError(
+            "Không tìm thấy Python runtime phù hợp để tự cài OCR. "
+            "Bản exe nên được build kèm OCR, hoặc đặt AUTO_TOOL_PYTHON_PATH tới python.exe cùng phiên bản."
+        )
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+    timeout_seconds = int(os.getenv("AUTO_TOOL_PIP_TIMEOUT_SECONDS", "1800"))
+    command = [
+        *python_command,
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        "--target",
+        str(target_dir),
+        *packages,
+    ]
+    logger.info("Installing OCR packages into %s: %s", target_dir, " ".join(packages))
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise DependencyError(
+            f"Cài OCR timeout sau {timeout_seconds}s. Mở lại app hoặc tăng AUTO_TOOL_PIP_TIMEOUT_SECONDS."
+        ) from exc
+    except OSError as exc:
+        raise DependencyError(f"Không thể chạy pip để cài OCR: {exc}") from exc
+
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "").strip()
+        raise DependencyError(f"Cài OCR packages thất bại: {details or 'pip returned a non-zero exit code.'}")
+
+
+def _pip_python_command() -> list[str] | None:
+    configured = os.getenv("AUTO_TOOL_PYTHON_PATH")
+    if configured:
+        candidate = Path(configured).expanduser()
+        if candidate.exists():
+            return [str(candidate.resolve())]
+
+    if not getattr(sys, "frozen", False):
+        return [sys.executable]
+
+    major = sys.version_info.major
+    minor = sys.version_info.minor
+    if os.name == "nt" and shutil.which("py"):
+        return ["py", f"-{major}.{minor}"]
+    if shutil.which("python"):
+        return ["python"]
+    return None
+
+
+def _missing_ocr_message(provider: str) -> str:
+    if provider == "easyocr":
+        return "EasyOCR is not installed. Auto Tool will try to install easyocr automatically when auto-install is enabled."
+    if provider == "paddleocr":
+        return (
+            "PaddleOCR is not installed. Auto Tool can try paddleocr+paddlepaddle, "
+            "but paddlepaddle must support the current Python version."
+        )
+    return f"OCR provider chưa được hỗ trợ: {provider}"
+
+
+def _warmup_ocr_model(provider: str, language: str) -> list[str]:
+    try:
+        if provider == "easyocr":
+            easyocr = importlib.import_module("easyocr")
+            lang = "ch_sim" if language in {"ch", "zh", "zh-cn"} else language
+            easyocr.Reader([lang], gpu=False, verbose=False)
+        elif provider == "paddleocr":
+            paddleocr = importlib.import_module("paddleocr")
+            paddleocr.PaddleOCR(use_angle_cls=True, lang=language or "ch", show_log=False)
+    except Exception as exc:
+        return [f"OCR model warmup failed for {provider}: {exc}"]
+    return []
+
+
+_DEPENDENCY_WARMUP_STARTED = False
+_DEPENDENCY_WARMUP_LOCK = threading.Lock()
+
+
+def start_background_dependency_warmup(
+    include_piper: bool = True,
+    include_ocr: bool = True,
+    ocr_provider: str = DEFAULT_OCR_PROVIDER,
+    warmup_ocr_models: bool = True,
+) -> threading.Thread | None:
+    global _DEPENDENCY_WARMUP_STARTED
+    enabled = os.getenv("AUTO_TOOL_STARTUP_DEPENDENCY_WARMUP", "1").strip().lower()
+    if enabled in {"0", "false", "no", "off"}:
+        return None
+    if "pytest" in sys.modules or os.getenv("PYTEST_CURRENT_TEST"):
+        return None
+    with _DEPENDENCY_WARMUP_LOCK:
+        if _DEPENDENCY_WARMUP_STARTED:
+            return None
+        _DEPENDENCY_WARMUP_STARTED = True
+
+    thread = threading.Thread(
+        target=_background_dependency_warmup,
+        args=(include_piper, include_ocr, ocr_provider, warmup_ocr_models),
+        daemon=True,
+        name="auto-tool-dependency-warmup",
+    )
+    thread.start()
+    return thread
+
+
+def _background_dependency_warmup(
+    include_piper: bool,
+    include_ocr: bool,
+    ocr_provider: str,
+    warmup_ocr_models: bool,
+) -> None:
+    try:
+        report = ensure_runtime_dependencies(
+            auto_install=None,
+            include_piper=include_piper,
+            include_ocr=include_ocr,
+            ocr_provider=ocr_provider,
+            warmup_ocr_models=warmup_ocr_models,
+        )
+        logger.info("Dependency warmup FFmpeg: %s", report.ffmpeg_path or "not found")
+        logger.info("Dependency warmup FFprobe: %s", report.ffprobe_path or "not found")
+        if include_piper:
+            logger.info("Dependency warmup Piper: %s", report.piper_path or "not found")
+            logger.info("Dependency warmup Piper model: %s", report.piper_model_path or "not found")
+        if include_ocr:
+            logger.info(
+                "Dependency warmup OCR %s: %s",
+                report.ocr_provider or ocr_provider,
+                "available" if report.ocr_available else "not available",
+            )
+        for warning in report.warnings:
+            logger.warning(warning)
+    except Exception as exc:
+        logger.warning("Runtime dependency warmup failed: %s", exc)
 
 
 def install_ffmpeg_windows() -> bool:

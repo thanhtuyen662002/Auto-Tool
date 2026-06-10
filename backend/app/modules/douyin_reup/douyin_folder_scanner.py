@@ -26,10 +26,9 @@ class DouyinFolderScanner:
         if not folder.exists() or not folder.is_dir():
             raise FileNotFoundError(f"Không tìm thấy thư mục video Douyin: {folder}")
 
-        candidates = sorted(
-            path for path in folder.iterdir() if path.is_file() and path.suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS
-        )
-        self.total_files = len([path for path in folder.iterdir() if path.is_file()])
+        files = [path for path in folder.iterdir() if path.is_file() and not path.name.startswith(".")]
+        candidates = sorted(path for path in files if path.suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS)
+        self.total_files = len(files)
         self.invalid_files = 0
         self.errors = []
 
