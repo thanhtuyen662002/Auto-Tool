@@ -1,0 +1,7 @@
+{
+  "project_name": "silent-beauty-goods-qa",
+  "source_folder": "../../../sample_videos/silent_mode_test_pack",
+  "output_folder": "../../../examples/outputs/silent_mode_test_pack/beauty_goods",
+  "product_context": {"industry": "beauty_goods", "features": ["thiết kế nhỏ gọn"], "cta": "Xem kỹ thông tin trước khi chọn nhé"},
+  "settings": {"enabled": true, "preset_id": "silent_chill_immersive", "enable_silent_immersive_mode": true, "silent_mode_strategy": "chill_immersive", "silent_caption_tone": "clean_review", "silent_review_before_render": true}
+}

@@ -1,0 +1,7 @@
+{
+  "project_name": "silent-home-goods-qa",
+  "source_folder": "../../../sample_videos/silent_mode_test_pack",
+  "output_folder": "../../../examples/outputs/silent_mode_test_pack/home_goods",
+  "product_context": {"industry": "home_goods", "features": ["giúp góc nhà gọn hơn"], "cta": "Lưu lại cho góc nhà nhỏ nha"},
+  "settings": {"enabled": true, "preset_id": "silent_chill_immersive", "enable_silent_immersive_mode": true, "silent_mode_strategy": "chill_immersive", "silent_caption_tone": "natural", "silent_review_before_render": true}
+}

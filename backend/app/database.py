@@ -212,6 +212,7 @@ def init_db() -> None:
                 source_language TEXT NOT NULL,
                 target_language TEXT NOT NULL,
                 source_type TEXT,
+                context_json TEXT,
 
                 source_srt_path TEXT,
                 translated_srt_path TEXT NOT NULL,
@@ -304,12 +305,45 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_subtitle_rewrite_document_line
             ON subtitle_rewrite_suggestions(document_id, line_index);
+
+            CREATE TABLE IF NOT EXISTS silent_visual_tag_reports (
+                id TEXT PRIMARY KEY,
+                job_id TEXT,
+                project_id TEXT,
+                video_path TEXT NOT NULL,
+                report_json TEXT NOT NULL,
+                recommended_industry TEXT,
+                recommended_strategy TEXT,
+                average_confidence REAL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_silent_visual_tag_reports_video
+            ON silent_visual_tag_reports(video_path);
+
+            CREATE TABLE IF NOT EXISTS silent_segment_tag_overrides (
+                id TEXT PRIMARY KEY,
+                plan_id TEXT NOT NULL,
+                segment_id TEXT NOT NULL,
+                tags_json TEXT NOT NULL,
+                primary_industry TEXT,
+                primary_scene TEXT,
+                primary_action TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(plan_id, segment_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_silent_segment_tag_overrides_plan
+            ON silent_segment_tag_overrides(plan_id);
             """
         )
         _ensure_column(conn, "projects", "latest_script_json", "TEXT")
         _ensure_column(conn, "projects", "custom_script_json", "TEXT")
         _ensure_column(conn, "product_drafts", "extractor_debug_json", "TEXT")
         _ensure_column(conn, "subtitle_review_documents", "source_type", "TEXT")
+        _ensure_column(conn, "subtitle_review_documents", "context_json", "TEXT")
         _ensure_column(conn, "subtitle_review_lines", "rewrite_history_json", "TEXT")
         _ensure_column(conn, "subtitle_rewrite_suggestions", "applied_at", "TEXT")
         _ensure_column(conn, "subtitle_rewrite_suggestions", "auto_applied", "INTEGER NOT NULL DEFAULT 0")

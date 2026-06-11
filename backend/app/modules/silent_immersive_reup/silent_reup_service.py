@@ -51,6 +51,29 @@ class SilentReupService:
         target_dir = ensure_dir(output_dir or Path(video_path).with_suffix("").parent / "_silent_reup_plan" / Path(video_path).stem)
         return self.pipeline.build_plan(video_path, settings, str(target_dir), product_context)
 
+    def regenerate_captions(
+        self,
+        plan: SilentReupPlan,
+        *,
+        output_dir: str,
+        industry: str,
+        tone: str,
+        strategy: str | None = None,
+        product_context: dict | None = None,
+        use_visual_tags: bool = True,
+        respect_user_tag_overrides: bool = True,
+    ) -> SilentReupPlan:
+        return self.pipeline.regenerate_captions(
+            plan,
+            output_dir=output_dir,
+            industry=industry,
+            tone=tone,
+            strategy=strategy,
+            product_context=product_context,
+            use_visual_tags=use_visual_tags,
+            respect_user_tag_overrides=respect_user_tag_overrides,
+        )
+
 
 def is_silent_reup_settings(settings: DouyinReupSettings) -> bool:
     return bool(settings.enable_silent_immersive_mode and (settings.preset_id or "").strip() in SILENT_PRESET_IDS)

@@ -29,6 +29,27 @@ def test_caption_generator_uses_product_context():
     assert len(captions[0].text) <= 52
 
 
+def test_caption_generator_without_product_context_uses_generic_caption():
+    segment = SilentVisualSegment(
+        id="seg_001",
+        video_path="clip.mp4",
+        start=0,
+        end=2,
+        duration=2,
+        segment_type=VisualSegmentType.product_reveal,
+    )
+
+    captions = ImmersiveCaptionGenerator().generate_captions(
+        video_path="clip.mp4",
+        segments=[segment],
+        strategy="chill_immersive",
+        product_context=None,
+    )
+
+    assert captions[0].text
+    assert len(captions[0].text) <= 52
+
+
 def test_ocr_caption_has_priority(tmp_path):
     srt = tmp_path / "ocr_vi.srt"
     srt.write_text("1\n00:00:00,000 --> 00:00:02,000\nCaption từ OCR\n", encoding="utf-8")

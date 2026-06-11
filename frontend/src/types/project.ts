@@ -173,6 +173,7 @@ export interface DouyinReupSettings {
   generate_visual_captions: boolean;
   visual_caption_language: string;
   visual_caption_style: string;
+  silent_caption_tone: 'natural' | 'cute' | 'clean_review' | 'sales_light' | 'chill' | string;
   generate_voiceover_for_silent_video: boolean;
   silent_voiceover_provider: string;
   silent_voiceover_voice: string;
@@ -420,6 +421,7 @@ export interface DouyinOutputResult {
   silent_plan_file?: string | null;
   voiceover_file?: string | null;
   voiceover_script_file?: string | null;
+  voiceover_subtitle_file?: string | null;
   ocr_debug_json_path?: string | null;
   ocr_frame_count?: number;
   ocr_detected_line_count?: number;
@@ -747,6 +749,7 @@ export interface SubtitleReviewDocument {
   source_language: string;
   target_language: string;
   source_type?: string | null;
+  context: Record<string, unknown>;
   source_srt_path?: string | null;
   translated_srt_path: string;
   corrected_srt_path?: string | null;
@@ -826,7 +829,152 @@ export interface SilentReupDetectResponse {
 export interface SilentReupPlanResponse {
   success: boolean;
   plan_id: string;
-  plan: Record<string, unknown>;
+  plan: SilentReupPlan;
+}
+
+export interface SilentCaptionLine {
+  index: number;
+  start: number;
+  end: number;
+  text: string;
+  source: string;
+  segment_id?: string | null;
+  template_id?: string | null;
+  selected_industry?: string | null;
+  selected_intent?: string | null;
+  selection_reason?: string | null;
+  quality_score?: number | null;
+  quality_needs_review?: boolean;
+  quality_issues?: string[];
+  warnings: string[];
+}
+
+export type VisualTagCategory = 'industry' | 'scene' | 'action' | 'product_stage' | 'quality';
+
+export interface SilentVisualTag {
+  tag: string;
+  category: VisualTagCategory;
+  confidence: number;
+  source: 'product_context' | 'ocr_text' | 'folder_name' | 'filename' | 'segment_type' | 'visual_rule' | 'user';
+  reason?: string | null;
+}
+
+export interface SilentVisualSegment {
+  id: string;
+  video_path: string;
+  start: number;
+  end: number;
+  duration: number;
+  segment_type: string;
+  visual_score: number;
+  motion_score?: number | null;
+  sharpness_score?: number | null;
+  brightness_score?: number | null;
+  representative_frame_path?: string | null;
+  ocr_text?: string | null;
+  visual_tags: SilentVisualTag[];
+  primary_industry?: string | null;
+  primary_scene?: string | null;
+  primary_action?: string | null;
+  visual_tag_confidence: number;
+  warnings: string[];
+}
+
+export interface SegmentVisualTagResult {
+  segment_id: string;
+  video_path: string;
+  start: number;
+  end: number;
+  tags: SilentVisualTag[];
+  primary_industry?: string | null;
+  primary_scene?: string | null;
+  primary_action?: string | null;
+  confidence: number;
+  warnings: string[];
+}
+
+export interface VideoVisualTagReport {
+  video_path: string;
+  project_id?: string | null;
+  job_id?: string | null;
+  segment_results: SegmentVisualTagResult[];
+  video_level_tags: SilentVisualTag[];
+  recommended_industry?: string | null;
+  recommended_strategy?: string | null;
+  average_confidence: number;
+  warnings: string[];
+  created_at: string;
+}
+
+export interface SilentVisualTagVocabulary {
+  industry: string[];
+  scene: string[];
+  action: string[];
+  product_stage: string[];
+  quality: string[];
+}
+
+export interface SilentReupPlan {
+  video_path: string;
+  strategy: string;
+  has_speech: boolean;
+  speech_score: number;
+  visual_segments: SilentVisualSegment[];
+  captions: SilentCaptionLine[];
+  generate_voiceover: boolean;
+  voiceover_script?: string | null;
+  recommended_audio_mode: string;
+  caption_generation: {
+    industry: string;
+    tone: string;
+    strategy: string;
+    template_count_available: number;
+    captions_generated: number;
+    regeneration_count: number;
+    average_quality_score: number;
+    warnings: string[];
+  };
+  visual_tagging: {
+    enabled: boolean;
+    recommended_industry: string;
+    recommended_strategy: string;
+    average_confidence: number;
+    tag_sources: Record<string, number>;
+    report_id?: string | null;
+    warnings: string[];
+  };
+  visual_tag_report?: VideoVisualTagReport | null;
+  warnings: string[];
+}
+
+export interface SilentCaptionTemplate {
+  id: string;
+  industry: string;
+  intent: string;
+  strategy: string;
+  text: string;
+  tone: string;
+  max_chars: number;
+  tags: string[];
+}
+
+export interface SilentCaptionTemplateListResponse {
+  items: SilentCaptionTemplate[];
+  total: number;
+}
+
+export interface SilentCaptionIndustriesResponse {
+  items: Array<{ id: string; name: string }>;
+}
+
+export interface SilentReupReviewDocumentResponse {
+  success: boolean;
+  document_id: string;
+}
+
+export interface SilentVisualTagReportResponse {
+  success: boolean;
+  report: VideoVisualTagReport;
 }
 
 export interface SilentReupRenderResponse {

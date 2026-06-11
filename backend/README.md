@@ -751,6 +751,39 @@ Export pack copy video final va cac subtitle/log/QA artifact duoc chon, tao `cap
 
 Known limitations: QA chi la rule-based; checker chua OCR lai final video; profile nen tang chi la goi y local; tool khong auto post.
 
+## Silent / Immersive Product Reup
+
+Silent Mode xu ly video khong co loi thoai ro rang theo flow: speech detection -> visual segments -> OCR neu co chu Trung -> caption Viet -> review tuy chon -> voiceover tuy chon -> render -> Final QA -> Export Pack.
+
+```txt
+POST /api/silent-reup/detect
+POST /api/silent-reup/plan
+POST /api/silent-reup/render
+POST /api/silent-reup/one-click
+```
+
+Neu `faster-whisper` da cai, speech detector tu dong dung model `tiny` va VAD. Dat `AUTO_TOOL_SILENT_SPEECH_ASR=0` de chi dung audio-energy fallback; dat `AUTO_TOOL_SILENT_SPEECH_MODEL` de doi model. Subtitle Review luu `context_json` de giu plan, product context va settings; render sau approve se tao lai voiceover tu caption da sua.
+
+Artifact chinh: `silent_reup_plan.json`, `silent_reup_log.json`, `*_silent_segments.json`, `*_voiceover_script.txt`, `*_voiceover_sub.srt`, voice audio va `video_XXX_final_qa.json`.
+
+### Lightweight Visual Tagging
+
+Sau scene classification va OCR, Silent pipeline gan tag rule-based theo product context, OCR, folder/file name, segment type va motion/brightness/sharpness. Moi segment luu `visual_tags`, primary industry/scene/action va confidence; plan luu report cung recommended industry/strategy.
+
+Caption template uu tien segment primary industry, industry user chon, video recommendation, product context, roi fallback `general_product`. User co the sua tag trong plan preview va regenerate caption ma khong analyze video hoac OCR lai. Tag user co confidence `1.0`.
+
+```txt
+GET  /api/silent-reup/visual-tags/vocabulary
+POST /api/silent-reup/plans/{plan_id}/visual-tags
+GET  /api/silent-reup/plans/{plan_id}/visual-tags
+PUT  /api/silent-reup/plans/{plan_id}/segments/{segment_id}/tags
+POST /api/silent-reup/plans/{plan_id}/regenerate-captions
+```
+
+Regenerate options: `industry: "auto"`, `use_visual_tags`, `respect_user_tag_overrides`. Tagging chi la heuristic nhe, khong phai object detection/AI vision; user van nen review tag va caption.
+
+Known limitations: caption visual van la rule/template-based; OCR chi co ich khi chu hien ro; speech detection co the nham nhac/hat voi loi thoai; user van can review caption va video final.
+
 ## Ghi Chu
 
 - TTS mac dinh dung `edge_tts` voice tieng Viet neural va xuat `*_voice.mp3`. Piper co the xuat `.wav`; gTTS la backup online va silent la fallback cuoi.

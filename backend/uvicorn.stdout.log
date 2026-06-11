@@ -1,5 +1,7 @@
-INFO:     127.0.0.1:57433 - "POST /api/final-output-qa/jobs/p40-final-job-1781081532840/check HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57434 - "GET /api/final-output-qa/report?path=C%3A%5CUsers%5CAdmin%5CAppData%5CLocal%5CTemp%5Cp40-final-m82o901c%5Cvideo_001_final_qa.json HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57435 - "POST /api/douyin-reup/jobs/p40-final-job-1781081532840/export-pack HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57436 - "GET /api/douyin-reup/jobs/p40-final-job-1781081532840/export-pack HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57422 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58923 - "POST /api/silent-reup/plan HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58923 - "GET /api/silent-reup/plans/d3ae78e8-3af4-427c-999e-788873eff27c/visual-tags HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58923 - "PUT /api/silent-reup/plans/d3ae78e8-3af4-427c-999e-788873eff27c/segments/seg_001/tags HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58923 - "POST /api/silent-reup/plans/d3ae78e8-3af4-427c-999e-788873eff27c/regenerate-captions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58923 - "POST /api/silent-reup/plans/d3ae78e8-3af4-427c-999e-788873eff27c/review-document HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63690 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63690 - "GET /api/silent-reup/visual-tags/vocabulary HTTP/1.1" 200 OK

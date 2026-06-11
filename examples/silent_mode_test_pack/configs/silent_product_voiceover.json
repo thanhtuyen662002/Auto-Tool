@@ -1,0 +1,18 @@
+{
+  "project_name": "silent-product-voiceover-qa",
+  "source_folder": "../../../sample_videos/silent_mode_test_pack",
+  "output_folder": "../../../examples/outputs/silent_mode_test_pack/product_voiceover",
+  "product_context": {"industry": "general_product", "features": ["dùng hằng ngày khá tiện"], "cta": "Xem kỹ rồi chọn mẫu phù hợp nhé"},
+  "settings": {
+    "enabled": true,
+    "preset_id": "silent_product_voiceover",
+    "preset_name": "Không thoại - Tạo voice review Việt",
+    "enable_silent_immersive_mode": true,
+    "silent_mode_strategy": "product_review_voiceover",
+    "silent_caption_tone": "clean_review",
+    "use_ocr_if_no_subtitle": true,
+    "generate_voiceover_for_silent_video": true,
+    "silent_voiceover_provider": "edge_tts",
+    "silent_review_before_render": true
+  }
+}

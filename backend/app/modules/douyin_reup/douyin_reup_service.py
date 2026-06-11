@@ -482,7 +482,7 @@ class DouyinReupService:
             )
             steps["silent_caption_srt"] = "ok"
 
-            if settings.silent_review_before_render and settings.review_subtitles_before_render and not settings.auto_render_after_translation:
+            if settings.silent_review_before_render and not settings.auto_render_after_translation:
                 failed_step = "review_document"
                 document = self.subtitle_review_service.create_document_from_srt(
                     video_id=f"douyin_silent_{index:03d}",
@@ -494,6 +494,21 @@ class DouyinReupService:
                     source_language=settings.source_language,
                     target_language=settings.target_language,
                     source_type=caption_source or "visual_generated",
+                    context={
+                        "reup_mode": "silent_immersive",
+                        "silent_strategy": plan.strategy,
+                        "silent_plan_file": self.silent_pipeline.last_plan_path,
+                        "speech_score": plan.speech_score,
+                        "has_speech": plan.has_speech,
+                        "recommended_audio_mode": plan.recommended_audio_mode,
+                        "generate_voiceover": settings.generate_voiceover_for_silent_video,
+                        "voiceover_script_file": self.silent_pipeline.last_voiceover_script_path,
+                        "voiceover_subtitle_file": self.silent_pipeline.last_voiceover_subtitle_path,
+                        "product_context": _product_context(config),
+                        "visual_tagging": plan.visual_tagging.model_dump(mode="json"),
+                        "visual_tag_report": plan.visual_tag_report.model_dump(mode="json") if plan.visual_tag_report else None,
+                        "settings_snapshot": settings.model_dump(mode="json"),
+                    },
                     auto_mark_low_quality_lines=settings.auto_mark_low_quality_lines,
                     enable_subtitle_rewrite_suggestions=settings.enable_subtitle_rewrite_suggestions,
                     auto_generate_rewrite_for_flagged_lines=settings.auto_generate_rewrite_for_flagged_lines,
@@ -521,7 +536,10 @@ class DouyinReupService:
                     speech_score=plan.speech_score,
                     caption_source=caption_source,
                     silent_plan_file=self.silent_pipeline.last_plan_path,
+                    silent_caption_generation=plan.caption_generation.model_dump(mode="json"),
+                    silent_visual_tagging=plan.visual_tagging.model_dump(mode="json"),
                     voiceover_script_file=self.silent_pipeline.last_voiceover_script_path,
+                    voiceover_subtitle_file=self.silent_pipeline.last_voiceover_subtitle_path,
                     ocr_debug_json_path=self.silent_pipeline.last_ocr_debug_json_path,
                     ocr_frame_count=self.silent_pipeline.last_ocr_frame_count,
                     ocr_detected_line_count=self.silent_pipeline.last_ocr_detected_line_count,
@@ -583,8 +601,11 @@ class DouyinReupService:
                 speech_score=plan.speech_score,
                 caption_source=caption_source,
                 silent_plan_file=render_result.plan_path,
+                silent_caption_generation=plan.caption_generation.model_dump(mode="json"),
+                silent_visual_tagging=plan.visual_tagging.model_dump(mode="json"),
                 voiceover_file=render_result.voiceover_path,
                 voiceover_script_file=self.silent_pipeline.last_voiceover_script_path,
+                voiceover_subtitle_file=render_result.voiceover_subtitle_path,
                 ocr_debug_json_path=self.silent_pipeline.last_ocr_debug_json_path,
                 ocr_frame_count=self.silent_pipeline.last_ocr_frame_count,
                 ocr_detected_line_count=self.silent_pipeline.last_ocr_detected_line_count,
@@ -622,6 +643,7 @@ class DouyinReupService:
                 silent_plan_file=self.silent_pipeline.last_plan_path,
                 voiceover_file=render_result.voiceover_path if render_result else None,
                 voiceover_script_file=self.silent_pipeline.last_voiceover_script_path,
+                voiceover_subtitle_file=(render_result.voiceover_subtitle_path if render_result else self.silent_pipeline.last_voiceover_subtitle_path),
                 ocr_debug_json_path=self.silent_pipeline.last_ocr_debug_json_path,
                 ocr_frame_count=self.silent_pipeline.last_ocr_frame_count,
                 ocr_detected_line_count=self.silent_pipeline.last_ocr_detected_line_count,
@@ -660,7 +682,11 @@ class DouyinReupService:
                 "caption_srt_path": caption_srt_path or (render_result.caption_srt_path if render_result else None),
                 "voiceover_file": render_result.voiceover_path if render_result else None,
                 "voiceover_script_file": self.silent_pipeline.last_voiceover_script_path,
+                "voiceover_subtitle_file": (
+                    render_result.voiceover_subtitle_path if render_result else self.silent_pipeline.last_voiceover_subtitle_path
+                ),
                 "ocr_debug_json_path": self.silent_pipeline.last_ocr_debug_json_path,
+                "visual_tagging": plan.visual_tagging.model_dump(mode="json") if plan else None,
             }
             if errors:
                 payload.update(
@@ -743,6 +769,7 @@ def _product_context(config: ProjectConfig) -> dict[str, Any]:
         "features": list(product.features),
         "cta": product.cta,
         "category": config.industry.preset_id if config.industry else None,
+        "industry": config.industry.preset_id if config.industry else None,
     }
 
 

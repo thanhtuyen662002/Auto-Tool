@@ -16,3 +16,18 @@ def test_scene_classifier_uses_timeline_and_motion():
     assert result[0].segment_type == VisualSegmentType.product_reveal
     assert result[1].segment_type == VisualSegmentType.demo
     assert result[2].segment_type in {VisualSegmentType.result, VisualSegmentType.closeup}
+
+
+def test_scene_classifier_uses_chinese_ocr_keyword():
+    segment = SilentVisualSegment(
+        id="ocr",
+        video_path="clip.mp4",
+        start=0,
+        end=2,
+        duration=2,
+        ocr_text="沉浸式开箱",
+    )
+
+    result = ImmersiveSceneClassifier().classify_segments([segment])
+
+    assert result[0].segment_type == VisualSegmentType.unboxing

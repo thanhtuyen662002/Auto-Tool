@@ -96,6 +96,7 @@ const DEFAULT_RENDER_SETTINGS: DouyinReupSettings = {
   generate_visual_captions: true,
   visual_caption_language: 'vi',
   visual_caption_style: 'natural_short',
+  silent_caption_tone: 'natural',
   generate_voiceover_for_silent_video: false,
   silent_voiceover_provider: 'edge_tts',
   silent_voiceover_voice: 'vi-VN-HoaiMyNeural',
@@ -875,6 +876,10 @@ function formatSourceType(source?: string | null): string {
     embedded_subtitle: 'Embedded subtitle',
     asr: 'ASR',
     ocr_hardsub: 'OCR hard-sub',
+    ocr_translation: 'OCR translated caption',
+    visual_generated: 'Visual generated caption',
+    template: 'Template caption',
+    manual: 'Manual caption',
   };
   return source ? labels[source] ?? source : '-';
 }

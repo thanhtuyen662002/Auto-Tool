@@ -71,3 +71,34 @@ def test_retry_with_preset_queues_selected_failed_outputs_and_settings(tmp_path:
     assert captured["retry_steps"] == {"asr"}
     assert captured["settings_override"]["preset_id"] == "ocr_priority"
     assert captured["settings_override"]["ocr_sample_fps"] == 3.0
+
+
+def test_retry_with_preset_allows_selected_success_output_for_mode_change(tmp_path: Path, monkeypatch):
+    database.DB_PATH = tmp_path / "retry-success.db"
+    database.init_db()
+    project = _config(tmp_path / "source", tmp_path / "out")
+    database.create_project("project-success", project.model_dump(mode="json"))
+    database.create_job("job-success", "project-success", preview_only=False, total_outputs=1)
+    database.update_job(
+        "job-success",
+        results_json=json.dumps(
+            {"outputs": [{"index": 1, "status": "success", "path": "out.mp4", "source_video": "source.mp4"}]}
+        ),
+    )
+    monkeypatch.setattr("app.api.start_background_dependency_warmup", lambda **_kwargs: None)
+    captured = {}
+    monkeypatch.setattr(
+        "app.api._queue_douyin_retry_failed_job",
+        lambda **kwargs: captured.update(kwargs) or "job-mode-change",
+    )
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/douyin-reup/jobs/job-success/retry-with-preset",
+            json={"preset_id": "silent_product_voiceover", "video_ids": ["video_001"]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["retry_outputs"] == 1
+    assert captured["failed_outputs"][0]["status"] == "success"
+    assert captured["settings_override"]["generate_voiceover_for_silent_video"] is True

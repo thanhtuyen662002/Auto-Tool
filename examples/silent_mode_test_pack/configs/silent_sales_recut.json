@@ -1,0 +1,17 @@
+{
+  "project_name": "silent-sales-recut-qa",
+  "source_folder": "../../../sample_videos/silent_mode_test_pack",
+  "output_folder": "../../../examples/outputs/silent_mode_test_pack/sales_recut",
+  "product_context": {"industry": "general_product", "features": ["thiết kế nhỏ gọn"], "cta": "Lưu lại để tham khảo nha"},
+  "settings": {
+    "enabled": true,
+    "preset_id": "silent_sales_recut",
+    "preset_name": "Không thoại - Recut bán hàng nhanh",
+    "enable_silent_immersive_mode": true,
+    "silent_mode_strategy": "sales_recut",
+    "silent_caption_tone": "sales_light",
+    "use_ocr_if_no_subtitle": true,
+    "generate_voiceover_for_silent_video": false,
+    "silent_review_before_render": true
+  }
+}

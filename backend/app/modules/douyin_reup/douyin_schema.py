@@ -77,6 +77,7 @@ class DouyinReupSettings(BaseModel):
     generate_visual_captions: bool = True
     visual_caption_language: str = "vi"
     visual_caption_style: str = "natural_short"
+    silent_caption_tone: Literal["natural", "cute", "clean_review", "sales_light", "chill"] = "natural"
     generate_voiceover_for_silent_video: bool = False
     silent_voiceover_provider: str = "edge_tts"
     silent_voiceover_voice: str = "vi-VN-HoaiMyNeural"
@@ -104,6 +105,7 @@ class DouyinReupSettings(BaseModel):
         "silent_mode_strategy",
         "visual_caption_language",
         "visual_caption_style",
+        "silent_caption_tone",
         "silent_voiceover_provider",
         "silent_voiceover_voice",
     )
@@ -256,8 +258,11 @@ class DouyinOutputResult(BaseModel):
     speech_score: float | None = None
     caption_source: str | None = None
     silent_plan_file: str | None = None
+    silent_caption_generation: dict[str, Any] | None = None
+    silent_visual_tagging: dict[str, Any] | None = None
     voiceover_file: str | None = None
     voiceover_script_file: str | None = None
+    voiceover_subtitle_file: str | None = None
     ocr_debug_json_path: str | None = None
     ocr_frame_count: int = 0
     ocr_detected_line_count: int = 0

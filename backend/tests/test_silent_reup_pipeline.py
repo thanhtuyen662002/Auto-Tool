@@ -97,3 +97,20 @@ def test_silent_pipeline_render_from_plan_uses_existing_renderer(tmp_path, monke
     assert result.status == "success"
     assert result.output_video_path
     assert Path(result.caption_srt_path or "").exists()
+
+
+def test_silent_pipeline_respects_disabled_visual_caption_generation(tmp_path):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"fake")
+    settings = DouyinReupSettings(
+        enabled=True,
+        preset_id="silent_chill_immersive",
+        use_ocr_if_no_subtitle=False,
+        generate_visual_captions=False,
+    )
+
+    pipeline = SilentReupPipeline(speech_detector=FakeDetector(), visual_analyzer=FakeAnalyzer())
+    plan = pipeline.build_plan(str(video), settings, str(tmp_path / "work"), None)
+
+    assert plan.captions == []
+    assert any("disabled" in warning for warning in plan.warnings)

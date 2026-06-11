@@ -79,6 +79,11 @@ import type {
   SilentReupDetectResponse,
   SilentReupPlanResponse,
   SilentReupRenderResponse,
+  SilentCaptionIndustriesResponse,
+  SilentCaptionTemplateListResponse,
+  SilentReupReviewDocumentResponse,
+  SilentVisualTagReportResponse,
+  SilentVisualTagVocabulary,
   CreateExportPackRequest,
   FinalOutputQAJobResponse,
   PlatformExportPackResponse,
@@ -283,6 +288,75 @@ export function renderSilentReupPlan(planId: string, settings: Record<string, un
   return request<SilentReupRenderResponse>('/api/silent-reup/render', {
     method: 'POST',
     body: JSON.stringify({ plan_id: planId, settings }),
+  });
+}
+
+export function listSilentCaptionIndustries(): Promise<SilentCaptionIndustriesResponse> {
+  return request<SilentCaptionIndustriesResponse>('/api/silent-caption-templates/industries');
+}
+
+export function listSilentCaptionTemplates(params: {
+  industry?: string;
+  intent?: string;
+  strategy?: string;
+} = {}): Promise<SilentCaptionTemplateListResponse> {
+  const query = new URLSearchParams();
+  if (params.industry) query.set('industry', params.industry);
+  if (params.intent) query.set('intent', params.intent);
+  if (params.strategy) query.set('strategy', params.strategy);
+  const suffix = query.size ? `?${query.toString()}` : '';
+  return request<SilentCaptionTemplateListResponse>(`/api/silent-caption-templates${suffix}`);
+}
+
+export function regenerateSilentReupCaptions(
+  planId: string,
+  payload: {
+    industry: string;
+    tone: string;
+    strategy?: string;
+    use_visual_tags?: boolean;
+    respect_user_tag_overrides?: boolean;
+  },
+): Promise<SilentReupPlanResponse> {
+  return request<SilentReupPlanResponse>(`/api/silent-reup/plans/${planId}/regenerate-captions`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getSilentVisualTagVocabulary(): Promise<SilentVisualTagVocabulary> {
+  return request<SilentVisualTagVocabulary>('/api/silent-reup/visual-tags/vocabulary');
+}
+
+export function generateSilentVisualTags(planId: string): Promise<SilentVisualTagReportResponse> {
+  return request<SilentVisualTagReportResponse>(`/api/silent-reup/plans/${planId}/visual-tags`, {
+    method: 'POST',
+  });
+}
+
+export function getSilentVisualTags(planId: string): Promise<SilentVisualTagReportResponse> {
+  return request<SilentVisualTagReportResponse>(`/api/silent-reup/plans/${planId}/visual-tags`);
+}
+
+export function updateSilentSegmentVisualTags(
+  planId: string,
+  segmentId: string,
+  payload: {
+    tags: string[];
+    primary_industry?: string | null;
+    primary_scene?: string | null;
+    primary_action?: string | null;
+  },
+): Promise<SilentReupPlanResponse> {
+  return request<SilentReupPlanResponse>(`/api/silent-reup/plans/${planId}/segments/${segmentId}/tags`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createSilentReupReviewDocument(planId: string): Promise<SilentReupReviewDocumentResponse> {
+  return request<SilentReupReviewDocumentResponse>(`/api/silent-reup/plans/${planId}/review-document`, {
+    method: 'POST',
   });
 }
 

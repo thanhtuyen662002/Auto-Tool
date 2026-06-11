@@ -2,16 +2,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   applyDouyinReupPreset,
+  buildSilentReupPlan,
+  createSilentReupReviewDocument,
   createDouyinExportPack,
   finalOutputQAReportUrl,
   getDouyinExportPack,
   getDouyinReupJobResults,
   getJobStatus,
   getSystemDependencies,
+  getSilentVisualTagVocabulary,
   getVisualStyles,
+  listSilentCaptionIndustries,
   listDouyinReupPresets,
   openDouyinExportPack,
   recommendDouyinReupPreset,
+  regenerateSilentReupCaptions,
+  updateSilentSegmentVisualTags,
   renderApprovedSubtitleReviewDocuments,
   retryDouyinReupJobWithPreset,
   retryFailedDouyinReupJob,
@@ -24,6 +30,7 @@ import {
 import ApiErrorBox from '../components/ApiErrorBox';
 import PathInput from '../components/PathInput';
 import SliderInput from '../components/SliderInput';
+import SegmentTagEditor from '../components/silent/SegmentTagEditor';
 import type {
   DouyinOutputResult,
   DouyinPresetRecommendationResponse,
@@ -35,6 +42,8 @@ import type {
   PlatformExportPack,
   PlatformTarget,
   SystemDependencyStatusResponse,
+  SilentReupPlanResponse,
+  SilentVisualTagVocabulary,
   VisualStylePreset,
 } from '../types/project';
 
@@ -48,9 +57,28 @@ type ExportOptions = {
 
 type SilentProductContext = {
   product_name: string;
-  category: string;
+  industry: string;
   features: string;
   cta: string;
+};
+
+const DEFAULT_SILENT_INDUSTRIES = [
+  { id: 'general_product', name: 'General Product' },
+  { id: 'home_goods', name: 'Home Goods' },
+  { id: 'kitchen_goods', name: 'Kitchen Goods' },
+  { id: 'storage_organization', name: 'Storage / Organization' },
+  { id: 'desk_setup', name: 'Desk Setup' },
+  { id: 'dorm_goods', name: 'Dorm Goods' },
+  { id: 'beauty_goods', name: 'Beauty Goods' },
+  { id: 'cleaning_goods', name: 'Cleaning Goods' },
+];
+
+const DEFAULT_VISUAL_TAG_VOCABULARY: SilentVisualTagVocabulary = {
+  industry: DEFAULT_SILENT_INDUSTRIES.map((item) => item.id),
+  scene: ['home_scene', 'kitchen_scene', 'bathroom_scene', 'bedroom_scene', 'desk_scene', 'dorm_scene', 'vanity_scene', 'storage_scene', 'cleaning_scene'],
+  action: ['unboxing', 'opening_package', 'hands_operation', 'placing_product', 'assembling', 'testing', 'pouring', 'wiping', 'cleaning', 'organizing', 'folding', 'comparison', 'before_after', 'closeup', 'product_reveal', 'usage_demo', 'result_showcase'],
+  product_stage: ['packaging', 'first_look', 'detail_closeup', 'demo_step', 'benefit_scene', 'final_result', 'cta_scene'],
+  quality: ['clear_frame', 'dark_frame', 'high_motion', 'low_motion', 'stable_shot', 'blur_risk'],
 };
 
 const DEFAULT_SETTINGS: DouyinReupSettings = {
@@ -118,6 +146,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   generate_visual_captions: true,
   visual_caption_language: 'vi',
   visual_caption_style: 'natural_short',
+  silent_caption_tone: 'natural',
   generate_voiceover_for_silent_video: false,
   silent_voiceover_provider: 'edge_tts',
   silent_voiceover_voice: 'vi-VN-HoaiMyNeural',
@@ -137,7 +166,7 @@ export default function DouyinReupPage() {
   const [settings, setSettings] = useState<DouyinReupSettings>(DEFAULT_SETTINGS);
   const [silentProductContext, setSilentProductContext] = useState<SilentProductContext>({
     product_name: '',
-    category: '',
+    industry: 'general_product',
     features: '',
     cta: '',
   });
@@ -168,6 +197,10 @@ export default function DouyinReupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [silentIndustries, setSilentIndustries] = useState<Array<{ id: string; name: string }>>([]);
+  const [captionPreview, setCaptionPreview] = useState<SilentReupPlanResponse | null>(null);
+  const [visualTagVocabulary, setVisualTagVocabulary] = useState<SilentVisualTagVocabulary>(DEFAULT_VISUAL_TAG_VOCABULARY);
+  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
 
   const done = jobStatus?.status === 'completed' || jobStatus?.status === 'completed_with_errors' || jobStatus?.status === 'failed';
   const canStart = sourceFolder.trim() && outputFolder.trim() && !busy && (!jobStatus || done);
@@ -210,6 +243,12 @@ export default function DouyinReupPage() {
     getSystemDependencies()
       .then(setDependencyStatus)
       .catch(() => setDependencyStatus(null));
+    listSilentCaptionIndustries()
+      .then((response) => setSilentIndustries(response.items))
+      .catch(() => setSilentIndustries(DEFAULT_SILENT_INDUSTRIES));
+    getSilentVisualTagVocabulary()
+      .then(setVisualTagVocabulary)
+      .catch(() => setVisualTagVocabulary(DEFAULT_VISUAL_TAG_VOCABULARY));
   }, []);
 
   useEffect(() => {
@@ -288,7 +327,10 @@ export default function DouyinReupPage() {
         review_subtitles_before_render: settings.review_subtitles_before_render,
         auto_render_after_translation: settings.auto_render_after_translation,
         product_context: buildSilentProductContext(silentProductContext),
-        advanced_overrides: mode === 'advanced' ? { ...settings } : {},
+        advanced_overrides: {
+          ...(mode === 'advanced' ? settings : {}),
+          silent_caption_tone: settings.silent_caption_tone,
+        },
       });
       setJobId(response.job_id);
       setJobStatus({
@@ -371,6 +413,86 @@ export default function DouyinReupPage() {
     setSilentProductContext((current) => ({ ...current, ...updates }));
   }
 
+  async function handleGenerateCaptionPreview() {
+    const videoPath = selectedPaths[0] || videos.find((video) => video.status === 'valid')?.path;
+    if (!videoPath) {
+      setError('Hãy scan thư mục và chọn ít nhất một video để tạo caption preview.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await buildSilentReupPlan({
+        video_path: videoPath,
+        settings: {
+          ...settings,
+          silent_caption_tone: settings.silent_caption_tone,
+        },
+        product_context: buildSilentProductContext(silentProductContext),
+      });
+      setCaptionPreview(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể tạo caption preview.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRegenerateCaptionPreview() {
+    if (!captionPreview) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await regenerateSilentReupCaptions(captionPreview.plan_id, {
+        industry: silentProductContext.industry,
+        tone: settings.silent_caption_tone,
+        strategy: settings.silent_mode_strategy,
+        use_visual_tags: true,
+        respect_user_tag_overrides: true,
+      });
+      setCaptionPreview(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể tạo lại captions.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSaveSegmentTags(segmentId: string, payload: {
+    tags: string[];
+    primary_industry: string | null;
+    primary_scene: string | null;
+    primary_action: string | null;
+  }) {
+    if (!captionPreview) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await updateSilentSegmentVisualTags(captionPreview.plan_id, segmentId, payload);
+      setCaptionPreview(response);
+      setEditingSegmentId(null);
+      setActionMessage(`Updated visual tags for ${segmentId}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể lưu visual tags.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCreateCaptionReviewDocument() {
+    if (!captionPreview) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await createSilentReupReviewDocument(captionPreview.plan_id);
+      navigate(`/subtitle-review/${response.document_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể tạo review document.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleRunFinalQA() {
     if (!jobId) return;
     setBusy(true);
@@ -443,7 +565,7 @@ export default function DouyinReupPage() {
     try {
       const response = await retryFailedDouyinReupJob(jobId, {
         retry_steps: ['asr', 'translation', 'render'],
-        settings,
+        settings: settings.music_folder ? { music_folder: settings.music_folder } : {},
       });
       navigate(`/queue/douyin-reup/${response.job_id}`);
     } catch (err) {
@@ -623,14 +745,32 @@ export default function DouyinReupPage() {
                   </label>
                   <label className="block">
                     <span className="mb-1 block text-sm font-medium text-ink">Ngành hàng</span>
-                    <input
+                    <select
                       className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
                       lang="vi"
-                      value={silentProductContext.category}
-                      onChange={(event) => updateSilentProductContext({ category: event.target.value })}
-                    />
+                      value={silentProductContext.industry}
+                      onChange={(event) => updateSilentProductContext({ industry: event.target.value })}
+                    >
+                      {(silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES).map((industry) => (
+                        <option key={industry.id} value={industry.id}>{industry.name}</option>
+                      ))}
+                    </select>
                   </label>
                 </div>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-ink">Caption tone</span>
+                  <select
+                    className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
+                    value={settings.silent_caption_tone}
+                    onChange={(event) => updateSettings({ silent_caption_tone: event.target.value })}
+                  >
+                    <option value="natural">Natural</option>
+                    <option value="cute">Cute</option>
+                    <option value="clean_review">Clean Review</option>
+                    <option value="sales_light">Sales Light</option>
+                    <option value="chill">Chill</option>
+                  </select>
+                </label>
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-ink">Điểm nổi bật</span>
                   <textarea
@@ -650,6 +790,110 @@ export default function DouyinReupPage() {
                     onChange={(event) => updateSilentProductContext({ cta: event.target.value })}
                   />
                 </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="rounded-md border border-emerald-700 px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+                    type="button"
+                    disabled={busy || videos.length === 0}
+                    onClick={() => void handleGenerateCaptionPreview()}
+                  >
+                    Generate captions preview
+                  </button>
+                  {captionPreview ? (
+                    <>
+                      <button
+                        className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-ink hover:border-brand disabled:opacity-50"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRegenerateCaptionPreview()}
+                      >
+                        Regenerate captions
+                      </button>
+                      <button
+                        className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleCreateCaptionReviewDocument()}
+                      >
+                        Create review document
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+                {captionPreview ? (
+                  <div className="border-t border-emerald-200 pt-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-ink">Generated captions preview</h4>
+                      <span className="text-xs text-muted">
+                        {captionPreview.plan.caption_generation.industry} · {captionPreview.plan.caption_generation.tone} · quality {Math.round(captionPreview.plan.caption_generation.average_quality_score * 100)}%
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 border-y border-emerald-200 py-3 text-xs text-ink sm:grid-cols-3">
+                      <div><span className="font-semibold">Recommended industry:</span> {formatVisualTag(captionPreview.plan.visual_tagging.recommended_industry)}</div>
+                      <div><span className="font-semibold">Confidence:</span> {Math.round(captionPreview.plan.visual_tagging.average_confidence * 100)}%</div>
+                      <div><span className="font-semibold">Strategy:</span> {formatSilentStrategy(captionPreview.plan.visual_tagging.recommended_strategy)}</div>
+                      <div className="sm:col-span-3 text-muted">
+                        Reason: {formatTagSourceSummary(captionPreview.plan.visual_tagging.tag_sources)}
+                      </div>
+                      <div className="flex flex-wrap items-end gap-2 sm:col-span-3">
+                        <span className="font-semibold">Use another industry:</span>
+                        <select
+                          className="h-9 rounded-md border border-line bg-white px-2 text-xs"
+                          value={silentProductContext.industry}
+                          onChange={(event) => updateSilentProductContext({ industry: event.target.value })}
+                        >
+                          {(silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES).map((industry) => (
+                            <option key={industry.id} value={industry.id}>{industry.name}</option>
+                          ))}
+                        </select>
+                        <button className="rounded-md border border-line bg-white px-3 py-2 font-semibold text-ink disabled:opacity-50" type="button" disabled={busy} onClick={() => void handleRegenerateCaptionPreview()}>
+                          Apply and regenerate captions
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-3">
+                      {captionPreview.plan.visual_segments.map((segment, segmentIndex) => {
+                        const caption = captionPreview.plan.captions.find((item) => item.segment_id === segment.id)
+                          ?? captionPreview.plan.captions[segmentIndex];
+                        return (
+                          <div key={segment.id} className="rounded-md border border-line bg-white p-3 text-xs text-ink">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <div className="font-semibold">Segment {segmentIndex + 1} · {formatCaptionTime(segment.start)} → {formatCaptionTime(segment.end)}</div>
+                                <div className="mt-1 text-muted">Type: {formatVisualTag(segment.segment_type)} · Confidence: {Math.round(segment.visual_tag_confidence * 100)}%</div>
+                              </div>
+                              <button className="rounded-md border border-line px-2 py-1 font-semibold text-ink" type="button" onClick={() => setEditingSegmentId((current) => current === segment.id ? null : segment.id)}>
+                                {editingSegmentId === segment.id ? 'Close editor' : 'Edit tags'}
+                              </button>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {segment.visual_tags.map((tag) => (
+                                <span key={`${segment.id}-${tag.tag}`} className="rounded bg-slate-100 px-2 py-1" title={`${tag.source}: ${Math.round(tag.confidence * 100)}%`}>
+                                  {tag.tag}
+                                </span>
+                              ))}
+                            </div>
+                            {caption ? (
+                              <div className="mt-3 border-t border-line pt-2">
+                                <div className={caption.quality_needs_review ? 'font-semibold text-amber-800' : 'font-semibold'}>{caption.text}</div>
+                                <div className="mt-1 text-muted">{caption.selection_reason || `Caption picked from: ${caption.selected_industry || 'general_product'} + ${caption.selected_intent || 'hook'}`}</div>
+                              </div>
+                            ) : null}
+                            {editingSegmentId === segment.id ? (
+                              <SegmentTagEditor
+                                segment={segment}
+                                vocabulary={visualTagVocabulary}
+                                disabled={busy}
+                                onSave={(payload) => handleSaveSegmentTags(segment.id, payload)}
+                                onRegenerate={handleRegenerateCaptionPreview}
+                              />
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1037,7 +1281,19 @@ export default function DouyinReupPage() {
                     <div>Voiceover: {output.voiceover_file ? 'Có' : 'Không'}</div>
                     <div>BGM: {output.bgm_file ? 'Đã thêm' : 'Không'}</div>
                     <div className="break-all">Plan: {output.silent_plan_file || '-'}</div>
+                    <div className="break-all">Voiceover script: {output.voiceover_script_file || '-'}</div>
+                    <div className="break-all">Voiceover subtitle: {output.voiceover_subtitle_file || '-'}</div>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      {output.subtitle_review_document_id ? (
+                        <button
+                          className="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 disabled:text-muted"
+                          type="button"
+                          disabled={busy || !jobId}
+                          onClick={() => void handleRenderApproved()}
+                        >
+                          Render approved
+                        </button>
+                      ) : null}
                       <button
                         className="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 disabled:text-muted"
                         type="button"
@@ -1113,7 +1369,7 @@ export default function DouyinReupPage() {
                     className="ml-2 mt-3 inline-block rounded-md bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                     to={`/subtitle-review/${output.subtitle_review_document_id}`}
                   >
-                    Review subtitle
+                    {output.reup_mode === 'silent_immersive' ? 'Review captions' : 'Review subtitle'}
                   </Link>
                 ) : null}
               </article>
@@ -1347,13 +1603,32 @@ function formatCaptionSource(source?: string | null): string {
 function buildSilentProductContext(context: SilentProductContext): Record<string, unknown> {
   return {
     product_name: context.product_name.trim(),
-    category: context.category.trim(),
+    category: context.industry,
+    industry: context.industry,
     features: context.features
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean),
     cta: context.cta.trim(),
   };
+}
+
+function formatCaptionTime(seconds: number): string {
+  const safe = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(safe / 60);
+  const remainder = safe % 60;
+  return `${minutes}:${String(remainder).padStart(2, '0')}`;
+}
+
+function formatVisualTag(value?: string | null): string {
+  if (!value) return '-';
+  return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatTagSourceSummary(sources: Record<string, number>): string {
+  const entries = Object.entries(sources).filter(([, count]) => count > 0);
+  if (!entries.length) return 'No strong keyword source; visual rules were used.';
+  return entries.map(([source, count]) => `${source.replaceAll('_', ' ')} (${count})`).join(', ');
 }
 
 function formatOcrDependencyStatus(status: SystemDependencyStatusResponse | null): string {

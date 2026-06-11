@@ -57,6 +57,8 @@ def build_douyin_reup_summary(
             "pending": len(needs_review),
         },
         silent_immersive=_silent_immersive_summary(outputs, settings),
+        silent_caption_templates=_silent_caption_template_summary(outputs),
+        silent_visual_tagging=_silent_visual_tagging_summary(outputs),
         success=successful_outputs,
         failed=len(failures),
         needs_review=len(needs_review),
@@ -215,4 +217,30 @@ def _silent_immersive_summary(outputs: list[DouyinOutputResult], settings: Any) 
         "videos_processed_silent": len([output for output in silent_outputs if output.status in {"success", "needs_review"}]),
         "strategies": dict(strategies),
         "caption_sources": dict(caption_sources),
+    }
+
+
+def _silent_caption_template_summary(outputs: list[DouyinOutputResult]) -> dict[str, Any]:
+    metadata = [
+        output.silent_caption_generation
+        for output in outputs
+        if output.silent_caption_generation
+    ]
+    industries = Counter(str(item.get("industry") or "general_product") for item in metadata)
+    scores = [float(item.get("average_quality_score") or 0.0) for item in metadata]
+    return {
+        "industry_usage": dict(industries),
+        "average_caption_quality_score": round(sum(scores) / len(scores), 4) if scores else 0.0,
+        "regenerated_count": sum(int(item.get("regeneration_count") or 0) for item in metadata),
+    }
+
+
+def _silent_visual_tagging_summary(outputs: list[DouyinOutputResult]) -> dict[str, Any]:
+    metadata = [output.silent_visual_tagging for output in outputs if output.silent_visual_tagging]
+    industries = Counter(str(item.get("recommended_industry") or "general_product") for item in metadata)
+    confidences = [float(item.get("average_confidence") or 0.0) for item in metadata]
+    return {
+        "videos_tagged": len(metadata),
+        "average_confidence": round(sum(confidences) / len(confidences), 4) if confidences else 0.0,
+        "recommended_industries": dict(industries),
     }

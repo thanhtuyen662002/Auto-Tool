@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import tempfile
+from importlib.util import find_spec
 from pathlib import Path
 
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_video
@@ -75,7 +76,12 @@ class SpeechPresenceDetector:
     def _should_run_asr(self) -> bool:
         if self.enable_asr is not None:
             return self.enable_asr
-        return os.getenv("AUTO_TOOL_SILENT_SPEECH_ASR", "").strip().lower() in {"1", "true", "yes", "on"}
+        configured = os.getenv("AUTO_TOOL_SILENT_SPEECH_ASR", "").strip().lower()
+        if configured in {"0", "false", "no", "off"}:
+            return False
+        if configured in {"1", "true", "yes", "on"}:
+            return True
+        return find_spec("faster_whisper") is not None
 
     @staticmethod
     def _audio_energy_score(video_path: str, max_duration: float, warnings: list[str]) -> float:
@@ -125,7 +131,7 @@ class SpeechPresenceDetector:
                 provider="faster_whisper",
                 model_size=os.getenv("AUTO_TOOL_SILENT_SPEECH_MODEL", "tiny"),
                 device=os.getenv("AUTO_TOOL_SILENT_SPEECH_DEVICE", "auto"),
-                vad_filter=False,
+                vad_filter=True,
             )
             try:
                 return len(parse_srt_blocks(str(output_path)))

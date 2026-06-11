@@ -27,6 +27,8 @@ from app.modules.product_reference_prompt.reference_schema import (
 )
 from app.modules.script_writer.script_writer import ProductVideoScript
 from app.modules.silent_immersive_reup.silent_schema import SilentReupPlan
+from app.modules.silent_caption_templates.caption_template_schema import SilentCaptionTemplate
+from app.modules.silent_visual_tagging.visual_tag_schema import VideoVisualTagReport
 from app.modules.source_media_manager.media_manager_schema import (
     BulkSegmentReviewResponse,
     MediaReviewStatus,
@@ -269,6 +271,41 @@ class SilentReupRenderRequest(BaseModel):
 class SilentReupRenderResponse(BaseModel):
     success: bool
     job_id: str
+
+
+class SilentCaptionRegenerateRequest(BaseModel):
+    industry: str = "auto"
+    tone: str = "natural"
+    strategy: str | None = None
+    use_visual_tags: bool = True
+    respect_user_tag_overrides: bool = True
+
+
+class SilentCaptionTemplateListResponse(BaseModel):
+    items: list[SilentCaptionTemplate] = Field(default_factory=list)
+    total: int = 0
+
+
+class SilentCaptionIndustriesResponse(BaseModel):
+    items: list[dict[str, str]] = Field(default_factory=list)
+
+
+class SilentReupReviewDocumentResponse(BaseModel):
+    success: bool
+    document_id: str
+
+
+class SilentVisualTagReportResponse(BaseModel):
+    success: bool
+    report: VideoVisualTagReport
+
+
+class SilentVisualTagVocabularyResponse(BaseModel):
+    industry: list[str] = Field(default_factory=list)
+    scene: list[str] = Field(default_factory=list)
+    action: list[str] = Field(default_factory=list)
+    product_stage: list[str] = Field(default_factory=list)
+    quality: list[str] = Field(default_factory=list)
 
 
 class SilentReupOneClickRequest(BaseModel):

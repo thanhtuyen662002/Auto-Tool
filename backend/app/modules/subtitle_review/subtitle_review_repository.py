@@ -20,12 +20,12 @@ class SubtitleReviewRepository:
                 """
                 INSERT INTO subtitle_review_documents (
                     id, project_id, job_id, video_id, video_path,
-                    source_language, target_language, source_type,
+                    source_language, target_language, source_type, context_json,
                     source_srt_path, translated_srt_path, corrected_srt_path, corrected_ass_path,
                     status, line_count, reviewed_count, edited_count, warning_count,
                     created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 _document_values(document),
             )
@@ -68,7 +68,7 @@ class SubtitleReviewRepository:
                 """
                 UPDATE subtitle_review_documents
                 SET project_id = ?, job_id = ?, video_id = ?, video_path = ?,
-                    source_language = ?, target_language = ?, source_type = ?,
+                    source_language = ?, target_language = ?, source_type = ?, context_json = ?,
                     source_srt_path = ?, translated_srt_path = ?, corrected_srt_path = ?, corrected_ass_path = ?,
                     status = ?, line_count = ?, reviewed_count = ?, edited_count = ?, warning_count = ?,
                     updated_at = ?
@@ -82,6 +82,7 @@ class SubtitleReviewRepository:
                     document.source_language,
                     document.target_language,
                     document.source_type,
+                    json.dumps(document.context, ensure_ascii=False),
                     document.source_srt_path,
                     document.translated_srt_path,
                     document.corrected_srt_path,
@@ -201,6 +202,7 @@ class SubtitleReviewRepository:
             source_language=row["source_language"],
             target_language=row["target_language"],
             source_type=row["source_type"] if "source_type" in row.keys() else None,
+            context=json.loads(row["context_json"] or "{}") if "context_json" in row.keys() else {},
             source_srt_path=row["source_srt_path"],
             translated_srt_path=row["translated_srt_path"],
             corrected_srt_path=row["corrected_srt_path"],
@@ -227,6 +229,7 @@ def _document_values(document: SubtitleReviewDocument) -> tuple[Any, ...]:
         document.source_language,
         document.target_language,
         document.source_type,
+        json.dumps(document.context, ensure_ascii=False),
         document.source_srt_path,
         document.translated_srt_path,
         document.corrected_srt_path,

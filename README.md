@@ -102,6 +102,22 @@ POST /api/silent-reup/render
 POST /api/silent-reup/one-click
 ```
 
+Speech detection automatically uses the bundled `faster-whisper` package with the small `tiny` model when audio is present. Set `AUTO_TOOL_SILENT_SPEECH_ASR=0` to force the audio-energy fallback, or set `AUTO_TOOL_SILENT_SPEECH_MODEL` to choose another local model size.
+
+When review is enabled, the Subtitle Review document stores the Silent plan, strategy, product context, and settings snapshot. Rendering approved captions regenerates Vietnamese voiceover from the edited text, then runs Final Output QA. Standalone `/api/silent-reup/render` jobs also run Final Output QA and can be exported through the regular Platform Export Pack API.
+
+Generated artifacts include:
+
+```txt
+silent_reup_plan.json
+silent_reup_log.json
+*_silent_segments.json
+*_voiceover_script.txt
+*_voiceover_sub.srt
+silent_voiceover.mp3
+video_001_final_qa.json
+```
+
 Important settings live inside `douyin_reup`:
 
 ```json
@@ -127,6 +143,7 @@ Known limitations:
 - OCR is only useful when Chinese text is visible in the video image.
 - The tool does not remove burned-in Chinese text or watermark from the original video.
 - Users should review generated captions before posting.
+- Faster Whisper speech detection is heuristic and can still confuse singing, loud music, or very short speech with non-dialogue audio.
 
 ## Douyin Reup RC Assets
 
@@ -2257,6 +2274,55 @@ POST /api/projects/{project_id}/video-prompt-pack
 Prompt Accuracy Lock nhắc model giữ đúng tên sản phẩm, thương hiệu, màu sắc, form dáng, logo, chi tiết vật lý và chỉ dùng claim đã có trong product info/specs. Nếu Safety Guard phát hiện warning, warning đó được đưa vào forbidden claims để giảm rủi ro prompt bịa hoặc nói quá sự thật.
 
 Nếu project chưa có ảnh tham chiếu, Prompt Pack vẫn tạo được nhưng sẽ có warning: prompt chỉ dựa trên text nên độ chính xác hình ảnh có thể thấp hơn.
+
+---
+
+## Silent Mode Real Batch QA
+
+Đặt video local có quyền sử dụng vào `sample_videos/silent_mode_test_pack/`, chọn một config trong `examples/silent_mode_test_pack/configs/`, rồi chạy từ folder `backend`:
+
+```powershell
+python -m app.tools.silent_mode_e2e_test --config ../examples/silent_mode_test_pack/configs/silent_chill_immersive.json --review-mode
+```
+
+CLI hỗ trợ scan, detect, plan, review, render, Final QA và Export Pack. Xem checklist tại `docs/SILENT_MODE_QA_CHECKLIST.md`.
+
+## Caption Template Pack
+
+Silent Mode có hơn 120 caption tiếng Việt theo ngành `General Product`, `Home Goods`, `Kitchen Goods`, `Storage / Organization`, `Desk Setup`, `Dorm Goods`, `Beauty Goods` và `Cleaning Goods`. Caption được chọn theo loại cảnh, tone và strategy; OCR translation đạt quality vẫn được ưu tiên.
+
+Trong Douyin Reup, chọn silent preset để dùng Industry selector và tone `Natural`, `Cute`, `Clean Review`, `Sales Light` hoặc `Chill`. Sau khi scan video, có thể tạo preview, đổi ngành/tone và bấm `Regenerate captions`; thao tác này dùng lại visual segments, không phân tích video lần nữa.
+
+Caption có diversity guard trong video và batch, giới hạn độ dài, tránh claim mạnh và chạy qua Subtitle Quality Scoring trước khi đưa vào Subtitle Review.
+
+## Lightweight Visual Tagging
+
+Silent Mode gan tag rule-based cho tung visual segment tu product context, OCR, ten folder/file, segment type va cac chi so motion, brightness, sharpness. Report gom industry, scene, action, product stage, quality, confidence, nguon tag va recommended industry/strategy.
+
+Caption duoc chon theo thu tu: segment primary industry, industry user chon, video recommended industry, product context, sau cung la `general_product`. Intent uu tien primary action va product stage truoc segment type. Plan preview hien tag, confidence va ly do chon caption.
+
+Trong Douyin Reup, bam `Edit Tags` tren segment de sua primary industry/scene/action va cac tag kem theo. Tag do user luu co confidence `1.0`. Sau do bam `Regenerate Caption`; tool chi dung plan va tag hien tai, khong analyze video hoac OCR lai.
+
+API:
+
+```txt
+GET  /api/silent-reup/visual-tags/vocabulary
+POST /api/silent-reup/plans/{plan_id}/visual-tags
+GET  /api/silent-reup/plans/{plan_id}/visual-tags
+PUT  /api/silent-reup/plans/{plan_id}/segments/{segment_id}/tags
+POST /api/silent-reup/plans/{plan_id}/regenerate-captions
+```
+
+Regenerate ho tro `industry: "auto"`, `use_visual_tags` va `respect_user_tag_overrides`. `silent_reup_plan.json` luu visual tagging metadata/report; `douyin_reup_summary.json` tong hop so video, confidence trung binh va recommended industries.
+
+Visual tagging la heuristic nhe, khong hieu sau hinh anh nhu AI vision va khong nhan dien chinh xac tung do vat. Ket qua co the kem chinh xac khi thieu OCR/product context; user nen sua tag va review caption truoc khi render.
+
+### Silent Mode Known Limitations
+
+- Caption template là mô tả hoặc gợi ý chung, không hiểu sâu toàn bộ nội dung video.
+- Nếu không có product context, caption sẽ ít cụ thể hơn.
+- Người dùng vẫn nên review caption trước khi đăng.
+- Tool không xóa chữ Trung hoặc watermark có sẵn trong video.
 
 ---
 

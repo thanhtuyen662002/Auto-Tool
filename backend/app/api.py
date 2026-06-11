@@ -5,6 +5,8 @@ import logging
 import os
 import threading
 import uuid
+from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -101,6 +103,22 @@ from app.modules.script_writer.script_writer import ProductVideoScript
 from app.modules.silent_immersive_reup.silent_reup_pipeline import SilentReupPipeline
 from app.modules.silent_immersive_reup.silent_reup_service import SilentReupService
 from app.modules.silent_immersive_reup.silent_schema import SilentReupPlan
+from app.modules.silent_visual_tagging.visual_tag_repository import VisualTagRepository
+from app.modules.silent_visual_tagging.visual_tag_schema import (
+    TAG_CATEGORY_BY_NAME,
+    VISUAL_TAG_VOCABULARY,
+    SilentVisualTaggingMetadata,
+    SegmentVisualTagResult,
+    UpdateSegmentVisualTagsRequest,
+    VideoVisualTagReport,
+    VisualTag,
+    VisualTagCategory,
+)
+from app.modules.silent_visual_tagging.visual_tag_service import VisualTagService
+from app.modules.silent_caption_templates.caption_template_service import (
+    SilentCaptionTemplateService,
+    list_industries as list_silent_caption_industries,
+)
 from app.modules.source_media_manager.media_manager_service import MediaManagerService, build_source_media_summary
 from app.modules.source_media_manager.segment_review_service import SegmentReviewService
 from app.modules.timeline_templates.template_registry import list_timeline_templates
@@ -171,11 +189,17 @@ from app.schemas.api_schema import (
     SegmentScoringResponse,
     SilentReupDetectRequest,
     SilentReupDetectResponse,
+    SilentCaptionIndustriesResponse,
+    SilentCaptionRegenerateRequest,
+    SilentCaptionTemplateListResponse,
     SilentReupOneClickRequest,
     SilentReupPlanRequest,
     SilentReupPlanResponse,
     SilentReupRenderRequest,
     SilentReupRenderResponse,
+    SilentReupReviewDocumentResponse,
+    SilentVisualTagReportResponse,
+    SilentVisualTagVocabularyResponse,
     ScriptVariantStyleItem,
     ScriptVariantStylesResponse,
     ScriptVariantSummaryItem,
@@ -465,6 +489,224 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail=exc.errors()) from exc
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Không thể tạo silent reup plan: {exc}") from exc
+
+    @app.get("/api/silent-caption-templates/industries", response_model=SilentCaptionIndustriesResponse)
+    def get_silent_caption_industries() -> SilentCaptionIndustriesResponse:
+        return SilentCaptionIndustriesResponse(items=list_silent_caption_industries())
+
+    @app.get("/api/silent-caption-templates", response_model=SilentCaptionTemplateListResponse)
+    def list_silent_caption_templates(
+        industry: str | None = None,
+        intent: str | None = None,
+        strategy: str | None = None,
+    ) -> SilentCaptionTemplateListResponse:
+        items = SilentCaptionTemplateService().list_templates(
+            industry=industry,
+            intent=intent,
+            strategy=strategy,
+        )
+        return SilentCaptionTemplateListResponse(items=items, total=len(items))
+
+    @app.get(
+        "/api/silent-reup/visual-tags/vocabulary",
+        response_model=SilentVisualTagVocabularyResponse,
+    )
+    def get_silent_visual_tag_vocabulary() -> SilentVisualTagVocabularyResponse:
+        return SilentVisualTagVocabularyResponse(**VISUAL_TAG_VOCABULARY)
+
+    @app.post(
+        "/api/silent-reup/plans/{plan_id}/visual-tags",
+        response_model=SilentVisualTagReportResponse,
+    )
+    def generate_silent_visual_tags(plan_id: str) -> SilentVisualTagReportResponse:
+        stored = _SILENT_PLAN_STORE.get(plan_id)
+        if not stored:
+            raise HTTPException(status_code=404, detail=f"Silent plan not found: {plan_id}")
+        plan = SilentReupPlan.model_validate(stored["plan"])
+        service = VisualTagService()
+        report = service.tag_video_segments(
+            plan.video_path,
+            plan.visual_segments,
+            product_context=stored.get("product_context") or {},
+            folder_name=Path(plan.video_path).parent.name,
+            filename=Path(plan.video_path).stem,
+            ocr_text_by_segment={segment.id: segment.ocr_text or "" for segment in plan.visual_segments},
+        )
+        segments = service.apply_report_to_segments(plan.visual_segments, report)
+        plan = _plan_with_visual_tag_report(plan, segments, report)
+        _save_visual_tagged_plan(plan_id, stored, plan, report)
+        return SilentVisualTagReportResponse(success=True, report=report)
+
+    @app.get(
+        "/api/silent-reup/plans/{plan_id}/visual-tags",
+        response_model=SilentVisualTagReportResponse,
+    )
+    def get_silent_visual_tags(plan_id: str) -> SilentVisualTagReportResponse:
+        stored = _SILENT_PLAN_STORE.get(plan_id)
+        if not stored:
+            raise HTTPException(status_code=404, detail=f"Silent plan not found: {plan_id}")
+        plan = SilentReupPlan.model_validate(stored["plan"])
+        report = plan.visual_tag_report
+        if report is None and plan.visual_tagging.report_id:
+            report = VisualTagRepository().get_report(plan.visual_tagging.report_id)
+        if report is None:
+            raise HTTPException(status_code=404, detail=f"Visual tag report not found for silent plan: {plan_id}")
+        return SilentVisualTagReportResponse(success=True, report=report)
+
+    @app.put(
+        "/api/silent-reup/plans/{plan_id}/segments/{segment_id}/tags",
+        response_model=SilentReupPlanResponse,
+    )
+    def update_silent_segment_visual_tags(
+        plan_id: str,
+        segment_id: str,
+        request: UpdateSegmentVisualTagsRequest,
+    ) -> SilentReupPlanResponse:
+        stored = _SILENT_PLAN_STORE.get(plan_id)
+        if not stored:
+            raise HTTPException(status_code=404, detail=f"Silent plan not found: {plan_id}")
+        plan = SilentReupPlan.model_validate(stored["plan"])
+        target = next((segment for segment in plan.visual_segments if segment.id == segment_id), None)
+        if target is None:
+            raise HTTPException(status_code=404, detail=f"Silent segment not found: {segment_id}")
+        if request.segment_id is not None and request.segment_id != segment_id:
+            raise HTTPException(status_code=400, detail="Body segment_id must match the segment_id in the URL.")
+        user_tags = [
+            VisualTag(
+                tag=tag,
+                category=TAG_CATEGORY_BY_NAME[tag],
+                confidence=1.0,
+                source="user",
+                reason="User override",
+            )
+            for tag in request.tags
+        ]
+        primary_industry = request.primary_industry or _first_tag(user_tags, VisualTagCategory.industry)
+        primary_scene = request.primary_scene or _first_tag(user_tags, VisualTagCategory.scene)
+        primary_action = request.primary_action or _first_tag(user_tags, VisualTagCategory.action)
+        updated_segment = target.model_copy(
+            update={
+                "visual_tags": user_tags,
+                "primary_industry": primary_industry,
+                "primary_scene": primary_scene,
+                "primary_action": primary_action,
+                "visual_tag_confidence": 1.0,
+            }
+        )
+        segments = [updated_segment if segment.id == segment_id else segment for segment in plan.visual_segments]
+        report = _report_from_tagged_segments(plan, segments)
+        plan = _plan_with_visual_tag_report(plan, segments, report)
+        VisualTagRepository().upsert_override(plan_id, segment_id, request)
+        _save_visual_tagged_plan(plan_id, stored, plan, report)
+        return SilentReupPlanResponse(success=True, plan_id=plan_id, plan=plan)
+
+    @app.post(
+        "/api/silent-reup/plans/{plan_id}/regenerate-captions",
+        response_model=SilentReupPlanResponse,
+    )
+    def regenerate_silent_plan_captions(
+        plan_id: str,
+        request: SilentCaptionRegenerateRequest,
+    ) -> SilentReupPlanResponse:
+        stored = _SILENT_PLAN_STORE.get(plan_id)
+        if not stored:
+            raise HTTPException(status_code=404, detail=f"Silent plan not found: {plan_id}")
+        try:
+            plan = SilentReupPlan.model_validate(stored["plan"])
+            context = dict(stored.get("product_context") or {})
+            if request.industry != "auto":
+                context["industry"] = request.industry
+            if not request.respect_user_tag_overrides:
+                tag_service = VisualTagService()
+                report = tag_service.tag_video_segments(
+                    plan.video_path,
+                    plan.visual_segments,
+                    product_context=context,
+                    folder_name=Path(plan.video_path).parent.name,
+                    filename=Path(plan.video_path).stem,
+                    ocr_text_by_segment={segment.id: segment.ocr_text or "" for segment in plan.visual_segments},
+                )
+                plan = _plan_with_visual_tag_report(
+                    plan,
+                    tag_service.apply_report_to_segments(plan.visual_segments, report),
+                    report,
+                )
+            service = SilentReupService()
+            regenerated = service.regenerate_captions(
+                plan,
+                output_dir=stored["output_dir"],
+                industry=request.industry,
+                tone=request.tone,
+                strategy=request.strategy,
+                product_context=context,
+                use_visual_tags=request.use_visual_tags,
+                respect_user_tag_overrides=request.respect_user_tag_overrides,
+            )
+            settings = DouyinReupSettings.model_validate(
+                {
+                    **stored["settings"],
+                    "silent_caption_tone": request.tone,
+                    "silent_mode_strategy": request.strategy or plan.strategy,
+                }
+            )
+            stored.update(
+                {
+                    "plan": regenerated.model_dump(mode="json"),
+                    "settings": settings.model_dump(mode="json"),
+                    "product_context": context,
+                }
+            )
+            return SilentReupPlanResponse(success=True, plan_id=plan_id, plan=regenerated)
+        except ValidationError as exc:
+            raise HTTPException(status_code=400, detail=exc.errors()) from exc
+        except (LookupError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post(
+        "/api/silent-reup/plans/{plan_id}/review-document",
+        response_model=SilentReupReviewDocumentResponse,
+    )
+    def create_silent_plan_review_document(plan_id: str) -> SilentReupReviewDocumentResponse:
+        stored = _SILENT_PLAN_STORE.get(plan_id)
+        if not stored:
+            raise HTTPException(status_code=404, detail=f"Silent plan not found: {plan_id}")
+        existing_id = stored.get("review_document_id")
+        if existing_id:
+            try:
+                SubtitleReviewService().get_document(str(existing_id))
+                return SilentReupReviewDocumentResponse(success=True, document_id=str(existing_id))
+            except LookupError:
+                pass
+        plan = SilentReupPlan.model_validate(stored["plan"])
+        settings = DouyinReupSettings.model_validate(stored["settings"])
+        pipeline = SilentReupPipeline()
+        caption_srt = pipeline.write_caption_srt(plan, stored["output_dir"])
+        document = SubtitleReviewService().create_document_from_srt(
+            video_id=f"silent_plan_{plan_id[:8]}",
+            video_path=plan.video_path,
+            translated_srt_path=caption_srt,
+            source_srt_path=None,
+            source_language=settings.source_language,
+            target_language=settings.target_language,
+            source_type=_silent_plan_caption_source(plan),
+            context={
+                "reup_mode": "silent_immersive",
+                "silent_strategy": plan.strategy,
+                "silent_plan_file": str(Path(stored["output_dir"]) / "silent_reup_plan.json"),
+                "caption_generation": plan.caption_generation.model_dump(mode="json"),
+                "visual_tagging": plan.visual_tagging.model_dump(mode="json"),
+                "visual_tag_report": plan.visual_tag_report.model_dump(mode="json") if plan.visual_tag_report else None,
+                "product_context": stored.get("product_context") or {},
+                "settings_snapshot": settings.model_dump(mode="json"),
+            },
+            auto_mark_low_quality_lines=settings.auto_mark_low_quality_lines,
+            enable_subtitle_rewrite_suggestions=settings.enable_subtitle_rewrite_suggestions,
+            auto_generate_rewrite_for_flagged_lines=settings.auto_generate_rewrite_for_flagged_lines,
+            auto_apply_safe_rewrites=settings.auto_apply_safe_rewrites,
+            default_rewrite_style=settings.default_rewrite_style,
+        )
+        stored["review_document_id"] = document.id
+        return SilentReupReviewDocumentResponse(success=True, document_id=document.id)
 
     @app.post("/api/silent-reup/render", response_model=SilentReupRenderResponse)
     def render_silent_reup_plan(request: SilentReupRenderRequest) -> SilentReupRenderResponse:
@@ -1750,19 +1992,22 @@ def create_app() -> FastAPI:
         request: DouyinRetryWithPresetRequest,
     ) -> DouyinRetryFailedResponse:
         original_job = _get_job_or_404(job_id)
-        failed_outputs = [
+        all_outputs = [
             output
             for output in (original_job.get("results") or {}).get("outputs", [])
-            if isinstance(output, dict)
-            and (
-                output.get("status") == "failed"
-                or (isinstance(output.get("final_output_qa"), dict) and output["final_output_qa"].get("status") == "failed")
-            )
-            and output.get("source_video")
+            if isinstance(output, dict) and output.get("source_video")
         ]
-        failed_outputs = _filter_douyin_outputs_by_ids(failed_outputs, request.video_ids)
-        if not failed_outputs:
-            raise HTTPException(status_code=400, detail="Không có video failed hợp lệ để retry.")
+        if request.video_ids:
+            retry_outputs = _filter_douyin_outputs_by_ids(all_outputs, request.video_ids)
+        else:
+            retry_outputs = [
+                output
+                for output in all_outputs
+                if output.get("status") == "failed"
+                or (isinstance(output.get("final_output_qa"), dict) and output["final_output_qa"].get("status") == "failed")
+            ]
+        if not retry_outputs:
+            raise HTTPException(status_code=400, detail="Không tìm thấy video hợp lệ để xử lý lại bằng preset đã chọn.")
 
         project = database.get_project(original_job["project_id"])
         if not project:
@@ -1783,11 +2028,11 @@ def create_app() -> FastAPI:
 
         retry_job_id = _queue_douyin_retry_failed_job(
             original_job_id=job_id,
-            failed_outputs=failed_outputs,
+            failed_outputs=retry_outputs,
             retry_steps=set(request.retry_steps or ["asr", "translation", "render"]),
             settings_override=retry_settings.model_dump(mode="json"),
         )
-        return DouyinRetryFailedResponse(job_id=retry_job_id, status="queued", retry_outputs=len(failed_outputs))
+        return DouyinRetryFailedResponse(job_id=retry_job_id, status="queued", retry_outputs=len(retry_outputs))
 
     @app.get("/api/files/video", response_model=None)
     def get_video_file(path: str = Query(...)) -> FileResponse:
@@ -2007,8 +2252,41 @@ def run_silent_reup_plan_job(
         database.update_job(job_id, status="running", current_step="silent_render", progress=10)
         plan = SilentReupPlan.model_validate(plan_payload)
         settings = DouyinReupSettings.model_validate(settings_payload)
-        result = SilentReupPipeline().render_from_plan(plan, settings, output_dir)
+        pipeline = SilentReupPipeline()
+        result = pipeline.render_from_plan(plan, settings, output_dir)
         success = result.status == "success" and bool(result.output_video_path)
+        qa_summary = None
+        if success and result.output_video_path:
+            qa_report = FinalOutputQAService().run_qa_for_output(
+                result.output_video_path,
+                PlatformTarget.tiktok,
+                job_id=job_id,
+                project_id=job.get("project_id"),
+                video_id="video_001",
+                ass_path=result.caption_ass_path,
+                overlay_path=result.overlay_path,
+                subtitle_expected=settings.burn_subtitle,
+                audio_expected=(
+                    settings.keep_immersive_original_audio
+                    or settings.add_bgm_for_silent_video
+                    or settings.generate_voiceover_for_silent_video
+                ),
+                overlay_expected=settings.add_overlay,
+                report_path=str(Path(output_dir) / "video_001_final_qa.json"),
+            )
+            qa_summary = {
+                "status": qa_report.status,
+                "score": qa_report.score,
+                "report_path": qa_report.report_path,
+                "issues": [issue.model_dump(mode="json") for issue in qa_report.issues],
+            }
+            if result.log_path:
+                try:
+                    silent_log = json.loads(Path(result.log_path).read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    silent_log = result.model_dump(mode="json")
+                silent_log["final_output_qa"] = qa_summary
+                write_json(result.log_path, silent_log)
         output = {
             "index": 1,
             "path": result.output_video_path or "",
@@ -2020,12 +2298,42 @@ def run_silent_reup_plan_job(
             "caption_source": _silent_plan_caption_source(plan),
             "translated_srt_file": result.caption_srt_path,
             "subtitle_ass_file": result.caption_ass_path,
+            "overlay_file": result.overlay_path,
             "voiceover_file": result.voiceover_path,
+            "voiceover_subtitle_file": result.voiceover_subtitle_path,
+            "voiceover_script_file": pipeline.last_voiceover_script_path,
             "bgm_file": result.bgm_path,
             "silent_plan_file": result.plan_path,
+            "log_file": result.log_path,
+            "final_output_qa": qa_summary,
             "warnings": result.warnings,
             "errors": result.errors,
         }
+        project = database.get_project(job.get("project_id")) if job.get("project_id") else None
+        project_name = str(((project or {}).get("config") or {}).get("project_name") or f"silent-reup-{job_id[:8]}")
+        summary_path = Path(output_dir) / "silent_reup_job_summary.json"
+        summary = {
+            "project_name": project_name,
+            "output_folder": output_dir,
+            "total_videos": 1,
+            "processed_outputs": 1,
+            "successful_outputs": 1 if success else 0,
+            "failed_outputs": 0 if success else 1,
+            "warnings_count": len(result.warnings),
+            "subtitle_sources": {_silent_plan_caption_source(plan): 1},
+            "failed_items": [] if success else [{"index": 1, "reason": "; ".join(result.errors) or "Silent render failed"}],
+            "outputs": [output],
+            "silent_immersive": {
+                "enabled": True,
+                "videos_detected_silent": 1 if not plan.has_speech else 0,
+                "videos_processed_silent": 1 if success else 0,
+                "strategies": {plan.strategy: 1},
+                "caption_sources": {_silent_plan_caption_source(plan): 1},
+            },
+            "final_output_qa": _final_qa_summary_from_outputs([output]),
+            "summary_file": str(summary_path),
+        }
+        write_json(summary_path, summary)
         database.update_job(
             job_id,
             status="completed" if success else "completed_with_errors",
@@ -2035,7 +2343,7 @@ def run_silent_reup_plan_job(
             completed_outputs=1 if success else 0,
             failed_outputs=0 if success else 1,
             output_folder=output_dir,
-            results_json=json.dumps({"outputs": [output]}, ensure_ascii=False),
+            results_json=json.dumps({"summary": summary, "outputs": [output]}, ensure_ascii=False),
         )
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
@@ -2162,6 +2470,8 @@ def run_subtitle_review_render_job(
     completed = 0
     settings = DouyinReupSettings.model_validate(settings_payload)
     pipeline = DouyinRenderPipeline()
+    silent_pipeline = SilentReupPipeline(render_pipeline=pipeline)
+    review_service = SubtitleReviewService()
 
     try:
         database.update_job(job_id, status="running", current_step="render_approved_subtitles", progress=1)
@@ -2169,7 +2479,23 @@ def run_subtitle_review_render_job(
             try:
                 document_dir = ensure_dir(output_root / f"video_{index:03d}")
                 log_path = document_dir / f"video_{index:03d}_log.json"
-                result = pipeline.render_from_review_document(document_id, settings, str(document_dir))
+                document = review_service.get_document(document_id)
+                is_silent = (document.context or {}).get("reup_mode") == "silent_immersive"
+                document_settings = settings
+                if is_silent and isinstance((document.context or {}).get("settings_snapshot"), dict):
+                    document_settings = DouyinReupSettings.model_validate(
+                        {
+                            **document.context["settings_snapshot"],
+                            "review_subtitles_before_render": False,
+                            "silent_review_before_render": False,
+                            "auto_render_after_translation": True,
+                        }
+                    )
+                result = (
+                    silent_pipeline.render_review_document(document, document_settings, str(document_dir))
+                    if is_silent
+                    else pipeline.render_from_review_document(document_id, document_settings, str(document_dir))
+                )
                 qa_report = FinalOutputQAService().run_qa_for_output(
                     str(result["path"]),
                     PlatformTarget.tiktok,
@@ -2178,9 +2504,13 @@ def run_subtitle_review_render_job(
                     video_id=f"video_{index:03d}",
                     ass_path=result.get("corrected_ass_file") or result.get("subtitle_ass_file"),
                     overlay_path=result.get("overlay_file"),
-                    subtitle_expected=settings.burn_subtitle,
-                    audio_expected=settings.keep_original_audio or settings.add_bgm,
-                    overlay_expected=settings.add_overlay,
+                    subtitle_expected=document_settings.burn_subtitle,
+                    audio_expected=(
+                        document_settings.keep_immersive_original_audio
+                        or document_settings.add_bgm_for_silent_video
+                        or document_settings.generate_voiceover_for_silent_video
+                    ) if is_silent else (document_settings.keep_original_audio or document_settings.add_bgm),
+                    overlay_expected=document_settings.add_overlay,
                     report_path=str(document_dir / f"video_{index:03d}_final_qa.json"),
                 )
                 qa_summary = {
@@ -2196,6 +2526,9 @@ def run_subtitle_review_render_job(
                         "input_document": document_id,
                         "status": "success",
                         "steps": {"render": "ok"},
+                        "reup_mode": result.get("reup_mode"),
+                        "silent_strategy": result.get("silent_strategy"),
+                        "voiceover_file": result.get("voiceover_file"),
                         "final_output_qa": qa_summary,
                         "warnings": result.get("warnings") or [],
                         "errors": result.get("errors") or [],
@@ -2207,6 +2540,7 @@ def run_subtitle_review_render_job(
                         "path": result["path"],
                         "status": "success",
                         "source_video": result.get("source_video"),
+                        "subtitle_source": result.get("caption_source") if is_silent else document.source_type,
                         "source_srt_file": result.get("source_srt_file"),
                         "translated_srt_file": result.get("translated_srt_file"),
                         "corrected_srt_file": result.get("corrected_srt_file"),
@@ -2214,6 +2548,14 @@ def run_subtitle_review_render_job(
                         "corrected_ass_file": result.get("corrected_ass_file"),
                         "overlay_file": result.get("overlay_file"),
                         "bgm_file": result.get("bgm_file"),
+                        "voiceover_file": result.get("voiceover_file"),
+                        "voiceover_script_file": result.get("voiceover_script_file"),
+                        "voiceover_subtitle_file": result.get("voiceover_subtitle_file"),
+                        "reup_mode": result.get("reup_mode"),
+                        "silent_strategy": result.get("silent_strategy"),
+                        "speech_score": result.get("speech_score"),
+                        "caption_source": result.get("caption_source"),
+                        "silent_plan_file": result.get("silent_plan_file"),
                         "log_file": str(log_path),
                         "duration": result.get("duration"),
                         "warnings": result.get("warnings") or [],
@@ -2269,15 +2611,44 @@ def run_subtitle_review_render_job(
             )
 
         status = "completed" if failed == 0 else "completed_with_errors"
+        project = database.get_project(job.get("project_id")) if job.get("project_id") else None
+        project_name = str(((project or {}).get("config") or {}).get("project_name") or f"subtitle-review-{job_id[:8]}")
+        summary_path = output_root / "subtitle_review_render_summary.json"
         summary = {
+            "project_name": project_name,
             "output_folder": str(output_root),
+            "total_videos": total,
             "processed_outputs": len(outputs),
             "successful_outputs": completed,
             "failed_outputs": failed,
+            "warnings_count": sum(len(output.get("warnings") or []) for output in outputs),
+            "subtitle_sources": dict(
+                Counter(str(output.get("subtitle_source") or "reviewed") for output in outputs)
+            ),
+            "failed_items": [
+                {"index": output.get("index") or 0, "reason": output.get("error_message") or "Render failed"}
+                for output in outputs
+                if output.get("status") == "failed"
+            ],
             "outputs": outputs,
+            "silent_immersive": {
+                "enabled": any(output.get("reup_mode") == "silent_immersive" for output in outputs),
+                "videos_detected_silent": sum(1 for output in outputs if output.get("reup_mode") == "silent_immersive"),
+                "videos_processed_silent": sum(
+                    1 for output in outputs if output.get("reup_mode") == "silent_immersive" and output.get("status") == "success"
+                ),
+                "strategies": dict(
+                    Counter(
+                        str(output.get("silent_strategy") or "unknown")
+                        for output in outputs
+                        if output.get("reup_mode") == "silent_immersive"
+                    )
+                ),
+            },
             "final_output_qa": _final_qa_summary_from_outputs(outputs),
+            "summary_file": str(summary_path),
         }
-        write_json(output_root / "subtitle_review_render_summary.json", summary)
+        write_json(summary_path, summary)
         database.update_job(
             job_id,
             status=status,
@@ -2421,6 +2792,116 @@ def _silent_plan_caption_source(plan: SilentReupPlan) -> str:
     return sources[0] if sources else "template"
 
 
+def _first_tag(tags: list[VisualTag], category: VisualTagCategory) -> str | None:
+    return next((tag.tag for tag in tags if tag.category == category), None)
+
+
+def _report_from_tagged_segments(
+    plan: SilentReupPlan,
+    segments: list,
+) -> VideoVisualTagReport:
+    segment_results = [
+        SegmentVisualTagResult(
+            segment_id=segment.id,
+            video_path=segment.video_path,
+            start=segment.start,
+            end=segment.end,
+            tags=segment.visual_tags,
+            primary_industry=segment.primary_industry,
+            primary_scene=segment.primary_scene,
+            primary_action=segment.primary_action,
+            confidence=segment.visual_tag_confidence,
+            warnings=[],
+        )
+        for segment in segments
+    ]
+    strongest: dict[str, VisualTag] = {}
+    for result in segment_results:
+        for tag in result.tags:
+            current = strongest.get(tag.tag)
+            if current is None or tag.confidence > current.confidence or tag.source == "user":
+                strongest[tag.tag] = tag
+    industry_scores: Counter[str] = Counter()
+    for result in segment_results:
+        if result.primary_industry:
+            industry_scores[result.primary_industry] += result.confidence or 0.1
+    recommended_industry = (
+        industry_scores.most_common(1)[0][0]
+        if industry_scores
+        else plan.visual_tagging.recommended_industry
+    )
+    action_counts = Counter(result.primary_action for result in segment_results if result.primary_action)
+    if action_counts["comparison"] or action_counts["before_after"] or action_counts["result_showcase"] >= 2:
+        recommended_strategy = "sales_recut"
+    elif action_counts["testing"] or action_counts["usage_demo"] >= 3:
+        recommended_strategy = "product_review_voiceover"
+    else:
+        recommended_strategy = "chill_immersive"
+    average_confidence = (
+        sum(result.confidence for result in segment_results) / len(segment_results)
+        if segment_results
+        else 0.0
+    )
+    return VideoVisualTagReport(
+        video_path=plan.video_path,
+        project_id=plan.visual_tag_report.project_id if plan.visual_tag_report else None,
+        job_id=plan.visual_tag_report.job_id if plan.visual_tag_report else None,
+        segment_results=segment_results,
+        video_level_tags=sorted(strongest.values(), key=lambda item: (-item.confidence, item.tag)),
+        recommended_industry=recommended_industry or "general_product",
+        recommended_strategy=recommended_strategy,
+        average_confidence=round(average_confidence, 4),
+        warnings=[],
+        created_at=(
+            plan.visual_tag_report.created_at
+            if plan.visual_tag_report
+            else datetime.now().replace(microsecond=0).isoformat()
+        ),
+    )
+
+
+def _plan_with_visual_tag_report(
+    plan: SilentReupPlan,
+    segments: list,
+    report: VideoVisualTagReport,
+) -> SilentReupPlan:
+    metadata = plan.visual_tagging.model_copy(
+        update={
+            "enabled": True,
+            "recommended_industry": report.recommended_industry or "general_product",
+            "recommended_strategy": report.recommended_strategy or "chill_immersive",
+            "average_confidence": report.average_confidence,
+            "tag_sources": dict(Counter(tag.source for result in report.segment_results for tag in result.tags)),
+            "warnings": report.warnings,
+        }
+    )
+    return plan.model_copy(
+        update={
+            "visual_segments": segments,
+            "visual_tagging": metadata,
+            "visual_tag_report": report,
+        }
+    )
+
+
+def _save_visual_tagged_plan(
+    plan_id: str,
+    stored: dict[str, Any],
+    plan: SilentReupPlan,
+    report: VideoVisualTagReport,
+) -> None:
+    try:
+        report_id = VisualTagRepository().save_report(report)
+        plan.visual_tagging = plan.visual_tagging.model_copy(update={"report_id": report_id})
+    except Exception as exc:
+        plan.visual_tagging = plan.visual_tagging.model_copy(
+            update={"warnings": [*plan.visual_tagging.warnings, f"Could not persist visual tag report: {exc}"]}
+        )
+    stored["plan"] = plan.model_dump(mode="json")
+    write_json(Path(stored["output_dir"]) / "silent_reup_plan.json", stored["plan"])
+    _SILENT_PLAN_STORE[plan_id] = stored
+
+
 def _build_douyin_project_config(request: DouyinReupProcessRequest) -> ProjectConfig:
     return _build_douyin_project_config_from_settings(
         project_name=request.project_name,
@@ -2477,6 +2958,13 @@ def _build_douyin_project_config_from_settings(
                 "duck_under_voice": False,
             },
             "visual_style": {"preset_id": settings.visual_style_preset_id},
+            "industry": {
+                "preset_id": str(
+                    (product_context or {}).get("industry")
+                    or (product_context or {}).get("category")
+                    or "general_product"
+                )
+            },
             "douyin_reup": settings.model_dump(mode="json"),
         }
     )

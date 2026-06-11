@@ -1,0 +1,17 @@
+{
+  "project_name": "silent-chill-immersive-qa",
+  "source_folder": "../../../sample_videos/silent_mode_test_pack",
+  "output_folder": "../../../examples/outputs/silent_mode_test_pack/chill_immersive",
+  "product_context": {"industry": "general_product", "features": ["gọn và dễ dùng"], "cta": "Lưu lại để tham khảo nha"},
+  "settings": {
+    "enabled": true,
+    "preset_id": "silent_chill_immersive",
+    "preset_name": "Không thoại - Chill immersive",
+    "enable_silent_immersive_mode": true,
+    "silent_mode_strategy": "chill_immersive",
+    "silent_caption_tone": "chill",
+    "use_ocr_if_no_subtitle": true,
+    "generate_voiceover_for_silent_video": false,
+    "silent_review_before_render": true
+  }
+}

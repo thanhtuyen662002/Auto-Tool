@@ -1,14 +1,26 @@
 from __future__ import annotations
 
-import itertools
 from pathlib import Path
 
 from app.adapters.ffmpeg_adapter import probe_video
 from app.modules.douyin_reup.subtitle_timing_guard import parse_srt_blocks
+from app.modules.silent_caption_templates import SilentCaptionIntent, SilentCaptionTemplateService
+from app.modules.silent_caption_templates.caption_template_service import normalize_industry
 from app.modules.silent_immersive_reup.silent_schema import ImmersiveCaptionLine, SilentVisualSegment, VisualSegmentType
+from app.modules.subtitle_quality.subtitle_quality_scorer import SubtitleQualityScorer
+from app.modules.subtitle_review.subtitle_review_schema import SubtitleLine
+from app.modules.silent_visual_tagging.visual_tag_schema import VisualTagCategory
 
 
 class ImmersiveCaptionGenerator:
+    def __init__(
+        self,
+        template_service: SilentCaptionTemplateService | None = None,
+        quality_scorer: SubtitleQualityScorer | None = None,
+    ) -> None:
+        self.template_service = template_service or SilentCaptionTemplateService()
+        self.quality_scorer = quality_scorer or SubtitleQualityScorer()
+
     def generate_captions(
         self,
         video_path: str,
@@ -16,11 +28,17 @@ class ImmersiveCaptionGenerator:
         strategy: str,
         product_context: dict | None = None,
         ocr_translated_srt_path: str | None = None,
+        industry: str | None = None,
+        tone: str = "natural",
+        recent_caption_texts: list[str] | None = None,
+        video_recommended_industry: str | None = None,
+        use_visual_tags: bool = True,
     ) -> list[ImmersiveCaptionLine]:
         if ocr_translated_srt_path and Path(ocr_translated_srt_path).exists():
             captions = self._captions_from_ocr(ocr_translated_srt_path, video_path)
-            if captions:
-                return captions
+            scored = self._score_captions(captions)
+            if scored and _average_quality(scored) >= 0.7:
+                return scored
 
         if not segments:
             media = probe_video(video_path)
@@ -36,22 +54,116 @@ class ImmersiveCaptionGenerator:
                 )
             ]
 
-        templates = _templates(strategy, product_context)
+        selected_industry = industry if industry and industry != "auto" else None
+        product_industry = (product_context or {}).get("industry") or (product_context or {}).get("category")
+        recent = list(recent_caption_texts or [])
         captions: list[ImmersiveCaptionLine] = []
-        for index, (segment, text) in enumerate(zip(segments, itertools.cycle(templates)), start=1):
+        for index, segment in enumerate(segments, start=1):
             if segment.duration < 0.35:
                 continue
-            captions.append(
-                ImmersiveCaptionLine(
-                    index=index,
-                    start=segment.start,
-                    end=segment.end,
-                    text=_short_caption(_scene_specific_text(segment.segment_type, text, product_context)),
-                    source="visual_generated",
-                    segment_id=segment.id,
+            segment_industry = normalize_industry(
+                (segment.primary_industry if use_visual_tags else None)
+                or selected_industry
+                or video_recommended_industry
+                or product_industry
+            )
+            intent = _intent_for_segment(segment.segment_type, segment if use_visual_tags else None)
+            if len(segments) > 1 and index == len(segments):
+                intent = SilentCaptionIntent.cta
+            caption = self._generate_template_caption(
+                index=index,
+                segment=segment,
+                industry=segment_industry,
+                intent=intent,
+                strategy=strategy,
+                tone=tone,
+                product_context=product_context,
+                recent=recent,
+                selection_reason=_selection_reason(segment, segment_industry, intent, use_visual_tags),
+            )
+            captions.append(caption)
+            recent.append(caption.text)
+        return captions
+
+    def _generate_template_caption(
+        self,
+        *,
+        index: int,
+        segment: SilentVisualSegment,
+        industry: str,
+        intent: SilentCaptionIntent,
+        strategy: str,
+        tone: str,
+        product_context: dict | None,
+        recent: list[str],
+        selection_reason: str,
+    ) -> ImmersiveCaptionLine:
+        avoid = list(recent)
+        best: ImmersiveCaptionLine | None = None
+        for _attempt in range(3):
+            template = self.template_service.pick_template(
+                industry=industry,
+                intent=intent.value,
+                strategy=strategy,
+                product_context=product_context,
+                avoid_recent_texts=avoid,
+                tone=tone,
+            )
+            text = self.template_service.render_template(template, product_context)
+            source = "template"
+            product_name = _product_name(product_context)
+            if product_name and intent == SilentCaptionIntent.product_reveal:
+                text = _short_caption(f"{product_name}: {text}", max_chars=56)
+                source = "visual_generated"
+            candidate = ImmersiveCaptionLine(
+                index=index,
+                start=segment.start,
+                end=segment.end,
+                text=text,
+                source=source,
+                segment_id=segment.id,
+                template_id=template.id,
+                selected_industry=template.industry.value,
+                selected_intent=template.intent.value,
+                selection_reason=selection_reason,
+            )
+            scored = self._score_captions([candidate])[0]
+            best = scored
+            if not scored.quality_needs_review:
+                return scored
+            avoid.append(text)
+        return best or candidate
+
+    def _score_captions(self, captions: list[ImmersiveCaptionLine]) -> list[ImmersiveCaptionLine]:
+        lines = [
+            SubtitleLine(
+                index=caption.index,
+                start_ms=round(caption.start * 1000),
+                end_ms=round(caption.end * 1000),
+                source_text=None,
+                translated_text=caption.text,
+            )
+            for caption in captions
+        ]
+        result: list[ImmersiveCaptionLine] = []
+        for index, (caption, line) in enumerate(zip(captions, lines)):
+            score = self.quality_scorer.score_line(
+                line,
+                previous_line=lines[index - 1] if index > 0 else None,
+                next_line=lines[index + 1] if index + 1 < len(lines) else None,
+                source_type=caption.source,
+            )
+            result.append(
+                caption.model_copy(
+                    update={
+                        "quality_score": score.score,
+                        "quality_needs_review": score.needs_review,
+                        "quality_issues": [issue.issue_type.value for issue in score.issues],
+                        "warnings": [*caption.warnings, *[issue.message for issue in score.issues]],
+                    }
                 )
             )
-        return captions
+        return result
 
     @staticmethod
     def _captions_from_ocr(path: str, video_path: str) -> list[ImmersiveCaptionLine]:
@@ -73,46 +185,72 @@ class ImmersiveCaptionGenerator:
         return captions
 
 
-def _templates(strategy: str, product_context: dict | None) -> list[str]:
-    name = _product_name(product_context)
-    cta = _cta(product_context)
-    feature = _first_feature(product_context)
-    if strategy == "product_review_voiceover":
-        return [
-            f"{name} hợp với nhu cầu dùng hằng ngày" if name else "Món này hợp với nhu cầu dùng hằng ngày",
-            f"Thiết kế gọn, thao tác nhìn khá đơn giản",
-            f"Điểm đáng chú ý là {feature}" if feature else "Nhìn tổng thể khá gọn và dễ dùng",
-            cta or "Có thể tham khảo thêm nếu thấy phù hợp",
-        ]
-    if strategy == "sales_recut":
-        return [
-            f"{name} nhìn nhỏ mà khá tiện" if name else "Món đồ nhỏ mà nhìn khá tiện",
-            f"Góc nhà gọn hơn khi dùng đúng chỗ",
-            "Thao tác đơn giản, dễ quan sát",
-            cta or "Lưu lại để tham khảo nhé",
-        ]
-    return [
-        f"{name} nhìn khá gọn gàng" if name else "Món đồ này nhìn khá gọn gàng",
-        "Thiết kế đặt trong nhà khá hợp",
-        f"Phù hợp khi cần {feature}" if feature else "Dùng trong nhà tiện hơn hẳn",
-        "Nhỏ vậy mà khá hữu ích",
-        cta or "Ai thích đồ gọn gàng nên lưu lại",
-    ]
+def _intent_for_segment(
+    segment_type: VisualSegmentType,
+    segment: SilentVisualSegment | None = None,
+) -> SilentCaptionIntent:
+    action = (segment.primary_action or "") if segment else ""
+    tag_names = {tag.tag for tag in (segment.visual_tags if segment else [])}
+    action_mapping = {
+        "unboxing": SilentCaptionIntent.unboxing,
+        "opening_package": SilentCaptionIntent.unboxing,
+        "closeup": SilentCaptionIntent.closeup,
+        "usage_demo": SilentCaptionIntent.demo,
+        "testing": SilentCaptionIntent.demo,
+        "organizing": SilentCaptionIntent.demo,
+        "cleaning": SilentCaptionIntent.demo,
+        "wiping": SilentCaptionIntent.demo,
+        "final_result": SilentCaptionIntent.result,
+        "result_showcase": SilentCaptionIntent.result,
+        "before_after": SilentCaptionIntent.result,
+        "product_reveal": SilentCaptionIntent.product_reveal,
+    }
+    if action in action_mapping:
+        return action_mapping[action]
+    for tag in (
+        "unboxing",
+        "opening_package",
+        "closeup",
+        "usage_demo",
+        "testing",
+        "organizing",
+        "cleaning",
+        "wiping",
+        "result_showcase",
+        "before_after",
+        "product_reveal",
+    ):
+        if tag in tag_names:
+            return action_mapping[tag]
+    if "detail_closeup" in tag_names:
+        return SilentCaptionIntent.closeup
+    if "benefit_scene" in tag_names:
+        return SilentCaptionIntent.benefit
+    if "cta_scene" in tag_names:
+        return SilentCaptionIntent.cta
+    mapping = {
+        VisualSegmentType.product_reveal: SilentCaptionIntent.product_reveal,
+        VisualSegmentType.unboxing: SilentCaptionIntent.unboxing,
+        VisualSegmentType.closeup: SilentCaptionIntent.closeup,
+        VisualSegmentType.demo: SilentCaptionIntent.demo,
+        VisualSegmentType.before_after: SilentCaptionIntent.result,
+        VisualSegmentType.usage_scene: SilentCaptionIntent.benefit,
+        VisualSegmentType.result: SilentCaptionIntent.result,
+        VisualSegmentType.transition: SilentCaptionIntent.hook,
+        VisualSegmentType.unknown: SilentCaptionIntent.benefit,
+    }
+    return mapping.get(segment_type, SilentCaptionIntent.hook)
 
 
-def _scene_specific_text(segment_type: VisualSegmentType, fallback: str, product_context: dict | None) -> str:
-    name = _product_name(product_context)
-    if segment_type == VisualSegmentType.unboxing:
-        return f"Mở hộp {name} nhìn khá chỉn chu" if name else "Mở hộp nhìn khá chỉn chu"
-    if segment_type == VisualSegmentType.closeup:
-        return f"Cận cảnh chi tiết của {name}" if name else "Cận cảnh chi tiết sản phẩm"
-    if segment_type == VisualSegmentType.demo:
-        return "Thao tác sử dụng nhìn khá đơn giản"
-    if segment_type == VisualSegmentType.before_after:
-        return "Nhìn phần trước và sau khá rõ khác biệt"
-    if segment_type == VisualSegmentType.result:
-        return "Kết quả sau khi dùng nhìn gọn hơn"
-    return fallback
+def _selection_reason(
+    segment: SilentVisualSegment,
+    industry: str,
+    intent: SilentCaptionIntent,
+    use_visual_tags: bool,
+) -> str:
+    sources = sorted({tag.source for tag in segment.visual_tags}) if use_visual_tags else []
+    suffix = f"; tag sources: {', '.join(sources)}" if sources else ""
+    return f"Caption picked from: {industry} + {intent.value}{suffix}"
 
 
 def _product_name(product_context: dict | None) -> str:
@@ -150,3 +288,8 @@ def _short_caption(text: str, max_chars: int = 52) -> str:
             break
         result.append(word)
     return " ".join(result) or cleaned[:max_chars].rstrip()
+
+
+def _average_quality(captions: list[ImmersiveCaptionLine]) -> float:
+    scores = [caption.quality_score for caption in captions if caption.quality_score is not None]
+    return sum(scores) / len(scores) if scores else 1.0

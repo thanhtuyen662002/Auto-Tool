@@ -64,6 +64,7 @@ class DouyinRenderPipeline:
         document_id: str,
         settings: DouyinReupSettings,
         output_dir: str,
+        voiceover_path: str | None = None,
     ) -> dict:
         service = SubtitleReviewService()
         document = service.get_document(document_id)
@@ -95,7 +96,7 @@ class DouyinRenderPipeline:
             settings=settings,
             output_dir=output_dir,
             output_name=f"{Path(document.video_path).stem}_reviewed.mp4",
-            voiceover_path=None,
+            voiceover_path=voiceover_path,
         )
         result.update(
             {

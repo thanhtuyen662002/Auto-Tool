@@ -66,6 +66,7 @@ class SubtitleReviewDocument(BaseModel):
     source_language: str = "zh"
     target_language: str = "vi"
     source_type: str | None = None
+    context: dict = Field(default_factory=dict)
     source_srt_path: str | None = None
     translated_srt_path: str
     corrected_srt_path: str | None = None
