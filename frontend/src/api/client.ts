@@ -111,29 +111,28 @@ import type {
   SubtitleReviewRenderResponse,
   UpdateSubtitleLineRequest,
 } from '../types/project';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
+import { backendUrl } from '../services/api';
 
 export function videoFileUrl(path: string): string {
-  return `${API_BASE_URL}/api/files/video?path=${encodeURIComponent(path)}`;
+  return backendUrl(`/api/files/video?path=${encodeURIComponent(path)}`);
 }
 
 export function assetFileUrl(pathOrUrl: string): string {
-  if (pathOrUrl.startsWith('/')) return `${API_BASE_URL}${pathOrUrl}`;
+  if (pathOrUrl.startsWith('/')) return backendUrl(pathOrUrl);
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
-  return `${API_BASE_URL}/api/files/image?path=${encodeURIComponent(pathOrUrl)}`;
+  return backendUrl(`/api/files/image?path=${encodeURIComponent(pathOrUrl)}`);
 }
 
 export function thumbnailFileUrl(path: string): string {
-  return `${API_BASE_URL}/api/files/thumbnail?path=${encodeURIComponent(path)}`;
+  return backendUrl(`/api/files/thumbnail?path=${encodeURIComponent(path)}`);
 }
 
 export function productAssetFileUrl(assetId: string): string {
-  return `${API_BASE_URL}/api/product-assets/${encodeURIComponent(assetId)}/file`;
+  return backendUrl(`/api/product-assets/${encodeURIComponent(assetId)}/file`);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(backendUrl(path), {
     ...init,
     headers: {
       Accept: 'application/json',
@@ -195,7 +194,7 @@ export function browsePath(payload: BrowsePathRequest): Promise<BrowsePathRespon
 }
 
 export function finalOutputQAReportUrl(path: string): string {
-  return `${API_BASE_URL}/api/final-output-qa/report?path=${encodeURIComponent(path)}`;
+  return backendUrl(`/api/final-output-qa/report?path=${encodeURIComponent(path)}`);
 }
 
 export function getSystemDependencies(): Promise<SystemDependencyStatusResponse> {

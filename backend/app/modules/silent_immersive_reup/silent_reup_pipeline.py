@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from pathlib import Path
+from time import perf_counter
 
 from app.adapters.ffmpeg_adapter import probe_video
 from app.modules.douyin_reup.douyin_render_pipeline import DouyinRenderPipeline
@@ -30,6 +31,7 @@ from app.modules.silent_visual_tagging.visual_tag_repository import VisualTagRep
 from app.modules.silent_visual_tagging.visual_tag_schema import SilentVisualTaggingMetadata
 from app.modules.silent_visual_tagging.visual_tag_service import VisualTagService
 from app.utils.file_utils import ensure_dir, write_json
+from app.version import APP_VERSION
 
 
 class SilentReupPipeline:
@@ -79,6 +81,7 @@ class SilentReupPipeline:
         output_dir: str,
         product_context: dict | None = None,
     ) -> SilentReupPlan:
+        started = perf_counter()
         self.last_plan_path = None
         self.last_caption_srt_path = None
         self.last_ocr_source_srt_path = None
@@ -226,6 +229,50 @@ class SilentReupPipeline:
         plan_path = target_dir / "silent_reup_plan.json"
         write_json(plan_path, plan.model_dump(mode="json"))
         self.last_plan_path = str(plan_path)
+        visual_tag_report_path = target_dir / "visual_tag_report.json"
+        write_json(visual_tag_report_path, visual_tag_report.model_dump(mode="json"))
+        caption_log_path = target_dir / "caption_generation_log.json"
+        write_json(
+            caption_log_path,
+            {
+                "version": APP_VERSION,
+                "mode": "silent_immersive",
+                "preset_id": settings.preset_id,
+                "strategy": settings.silent_mode_strategy,
+                "industry": industry,
+                "status": "success" if captions else "success_with_warnings",
+                "steps": ["ocr", "visual_tagging", "caption_generation", "quality_scoring"],
+                "failed_step": None,
+                "warnings": generation_warnings,
+                "errors": [],
+                "durations": {"total_seconds": round(perf_counter() - started, 3)},
+                "paths": {
+                    "plan": str(plan_path),
+                    "visual_tag_report": str(visual_tag_report_path),
+                    "ocr_source_srt": self.last_ocr_source_srt_path,
+                    "ocr_translated_srt": self.last_ocr_translated_srt_path,
+                },
+                "caption_generation": plan.caption_generation.model_dump(mode="json"),
+                "caption_sources": dict(Counter(caption.source for caption in captions)),
+            },
+        )
+        write_json(
+            target_dir / "silent_reup_log.json",
+            _standard_silent_log(
+                settings=settings,
+                industry=industry,
+                status="planned",
+                steps=["speech_detection", "visual_segmentation", "ocr", "visual_tagging", "caption_generation"],
+                warnings=plan.warnings,
+                durations={"plan_seconds": round(perf_counter() - started, 3)},
+                paths={
+                    "video": video_path,
+                    "plan": str(plan_path),
+                    "visual_tag_report": str(visual_tag_report_path),
+                    "caption_generation_log": str(caption_log_path),
+                },
+            ),
+        )
         if plan.generate_voiceover and plan.voiceover_script:
             self.last_voiceover_subtitle_path = self._write_voiceover_subtitle(plan, target_dir)
         return plan
@@ -394,7 +441,19 @@ class SilentReupPipeline:
 
         log_path = target_dir / "silent_reup_log.json"
         result = result.model_copy(update={"log_path": str(log_path)})
-        write_json(log_path, result.model_dump(mode="json"))
+        write_json(
+            log_path,
+            _standard_silent_log(
+                settings=settings,
+                industry=plan.caption_generation.industry,
+                status=result.status,
+                steps=["caption_export", "voiceover", "render"],
+                failed_step="render" if result.status == "failed" else None,
+                warnings=result.warnings,
+                errors=result.errors,
+                paths=result.model_dump(mode="json"),
+            ),
+        )
         return result
 
     def render_review_document(
@@ -460,7 +519,19 @@ class SilentReupPipeline:
                 "voiceover_subtitle_file": self.last_voiceover_subtitle_path,
             }
         )
-        write_json(target_dir / "silent_reup_log.json", result)
+        write_json(
+            target_dir / "silent_reup_log.json",
+            _standard_silent_log(
+                settings=settings,
+                industry=plan.caption_generation.industry,
+                status=str(result.get("status") or "success"),
+                steps=["subtitle_review", "corrected_caption", "voiceover", "render"],
+                failed_step=result.get("failed_step"),
+                warnings=result.get("warnings") or [],
+                errors=result.get("errors") or [],
+                paths=result,
+            ),
+        )
         return result
 
     def _try_ocr_translate(
@@ -663,6 +734,34 @@ def _dedupe(values: list[str]) -> list[str]:
             cleaned.append(text)
             seen.add(text)
     return cleaned
+
+
+def _standard_silent_log(
+    *,
+    settings: DouyinReupSettings,
+    industry: str,
+    status: str,
+    steps: list[str],
+    failed_step: str | None = None,
+    warnings: list[str] | None = None,
+    errors: list[str] | None = None,
+    durations: dict | None = None,
+    paths: dict | None = None,
+) -> dict:
+    return {
+        "version": APP_VERSION,
+        "mode": "silent_immersive",
+        "preset_id": settings.preset_id,
+        "strategy": settings.silent_mode_strategy,
+        "industry": industry,
+        "status": status,
+        "steps": steps,
+        "failed_step": failed_step,
+        "warnings": _dedupe(warnings or []),
+        "errors": _dedupe(errors or []),
+        "durations": durations or {},
+        "paths": paths or {},
+    }
 
 
 def _review_caption_source(source_type: str | None) -> str:

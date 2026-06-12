@@ -68,6 +68,16 @@ try {
   if (Test-Path $ExampleConfig) {
     Copy-Item -Path $ExampleConfig -Destination $DistExamples -Force
   }
+
+  $DistConfig = Join-Path $DistRoot "config"
+  $DistPackaging = Join-Path $DistRoot "packaging"
+  New-Item -ItemType Directory -Force -Path $DistConfig | Out-Null
+  New-Item -ItemType Directory -Force -Path $DistPackaging | Out-Null
+  Copy-Item -Path (Join-Path $Root "packaging\local_app_config.example.json") -Destination $DistPackaging -Force
+  Copy-Item -Path (Join-Path $Root "packaging\README_LOCAL_APP.md") -Destination $DistPackaging -Force
+  if (-not (Test-Path (Join-Path $DistConfig "local_app_config.json"))) {
+    Copy-Item -Path (Join-Path $Root "packaging\local_app_config.example.json") -Destination (Join-Path $DistConfig "local_app_config.json") -Force
+  }
 }
 finally {
   Pop-Location

@@ -1,0 +1,7 @@
+{
+  "project_name": "silent-v1-desk-setup",
+  "source_folder": "../../../sample_videos/silent_mode_v1_rc",
+  "output_folder": "../../../examples/outputs/silent_mode_v1_rc/desk_setup",
+  "product_context": {"industry": "desk_setup", "features": ["góc làm việc ngăn nắp"], "cta": "Tham khảo cho góc làm việc của bạn"},
+  "settings": {"enabled": true, "preset_id": "silent_chill_immersive", "silent_mode_strategy": "chill_immersive", "silent_caption_tone": "chill", "silent_review_before_render": true}
+}

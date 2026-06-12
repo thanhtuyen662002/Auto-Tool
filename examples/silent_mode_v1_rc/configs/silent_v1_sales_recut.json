@@ -1,0 +1,7 @@
+{
+  "project_name": "silent-v1-sales-recut",
+  "source_folder": "../../../sample_videos/silent_mode_v1_rc",
+  "output_folder": "../../../examples/outputs/silent_mode_v1_rc/sales_recut",
+  "product_context": {"industry": "general_product", "features": ["thao tác nhanh", "dễ quan sát"], "cta": "Xem chi tiết nếu bạn đang cần"},
+  "settings": {"enabled": true, "preset_id": "silent_sales_recut", "silent_mode_strategy": "sales_recut", "silent_caption_tone": "sales_light", "silent_review_before_render": true}
+}

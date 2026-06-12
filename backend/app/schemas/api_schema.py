@@ -659,6 +659,7 @@ class UpdateProjectProductInfoResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     version: str = "unknown"
+    capabilities: dict[str, bool] = Field(default_factory=dict)
 
 
 class ErrorResponse(BaseModel):

@@ -1,0 +1,4 @@
+import GlassModal from '../glass/GlassModal';
+
+const shortcuts = [['Ctrl + S', 'Lưu tất cả thay đổi'], ['Alt + ↓', 'Dòng tiếp theo'], ['Alt + ↑', 'Dòng trước'], ['Alt + N', 'Dòng lỗi tiếp theo'], ['Alt + R', 'Gợi ý rút gọn dòng hiện tại'], ['Space', 'Phát hoặc tạm dừng video'], ['Esc', 'Đóng panel hoặc modal']];
+export default function SubtitleShortcutHint({ open, onClose }: { open: boolean; onClose: () => void }) { return <GlassModal open={open} title="Phím tắt editor" onClose={onClose}><div className="grid gap-2">{shortcuts.map(([key, label]) => <div className="flex items-center justify-between gap-4 rounded-md bg-black/15 px-3 py-2 text-sm" key={key}><kbd className="rounded border border-white/12 bg-white/7 px-2 py-1 font-mono text-xs text-cyan-100">{key}</kbd><span className="text-right text-slate-300">{label}</span></div>)}</div></GlassModal>; }

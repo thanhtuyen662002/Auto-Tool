@@ -13,6 +13,10 @@ def test_health_reports_douyin_reup_v1_rc_version() -> None:
 
     assert response.status_code == 200
     assert response.json()["version"] == "1.0.0-rc1"
+    assert response.json()["capabilities"] == {
+        "douyin_reup": True,
+        "silent_immersive_mode": True,
+    }
 
 
 def test_browse_path_endpoint_returns_selected_path(monkeypatch) -> None:

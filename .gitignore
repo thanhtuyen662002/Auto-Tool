@@ -10,3 +10,5 @@ vite.config.d.ts
 __pycache__/
 *.py[cod]
 backend/data/*.db
+logs/launcher/*.log
+!logs/launcher/.gitkeep

@@ -1,0 +1,7 @@
+{
+  "project_name": "silent-v1-product-voiceover",
+  "source_folder": "../../../sample_videos/silent_mode_v1_rc",
+  "output_folder": "../../../examples/outputs/silent_mode_v1_rc/product_voiceover",
+  "product_context": {"industry": "home_goods", "features": ["dễ dùng", "tiện cho sinh hoạt"], "cta": "Xem thêm thông tin sản phẩm"},
+  "settings": {"enabled": true, "preset_id": "silent_product_voiceover", "silent_mode_strategy": "product_review_voiceover", "silent_caption_tone": "clean_review", "generate_voiceover_for_silent_video": true, "silent_review_before_render": true}
+}

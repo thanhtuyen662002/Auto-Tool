@@ -1,139 +1,138 @@
+import { AlertTriangle, CheckCircle2, Clipboard, FileText, FolderOpen, XCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { videoFileUrl } from '../api/client';
 import type { JobOutput } from '../types/project';
-import WarningBox from './WarningBox';
+import GlassBadge, { type GlassBadgeVariant } from './glass/GlassBadge';
+import GlassButton from './glass/GlassButton';
+import GlassCard from './glass/GlassCard';
+import GlassEmptyState from './glass/GlassEmptyState';
 
 interface ResultListProps {
   outputs: JobOutput[];
 }
 
-function copy(value?: string | null) {
-  if (value) void navigator.clipboard.writeText(value);
-}
+type Filter = 'all' | 'rendered' | 'warnings' | 'failed';
+
+const filters: Array<{ value: Filter; label: string }> = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'rendered', label: 'Đã render' },
+  { value: 'warnings', label: 'Cảnh báo' },
+  { value: 'failed', label: 'Thất bại' },
+];
 
 export default function ResultList({ outputs }: ResultListProps) {
+  const [filter, setFilter] = useState<Filter>('all');
+  const visible = useMemo(() => outputs.filter((output) => matchesFilter(output, filter)), [filter, outputs]);
+
   if (!outputs.length) {
-    return <div className="rounded-md border border-line bg-white p-5 text-sm text-muted">Chưa có video đầu ra.</div>;
+    return <GlassEmptyState title="Chưa có video đầu ra" message="Video hoàn tất sẽ xuất hiện tại đây cùng trạng thái render, cảnh báo và tệp liên quan." />;
   }
 
   return (
-    <div className="space-y-4">
-      {outputs.map((output) => {
-        const errorText = shortText(output.error || output.errors?.[0] || '');
-        const warnings = output.warnings ?? [];
-        const captionText = captionWithHashtags(output);
-        return (
-          <article key={output.index} className="rounded-lg border border-line bg-white p-5 shadow-panel">
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-lg font-semibold text-ink">Video {String(output.index).padStart(3, '0')}</h2>
-                  <StatusBadge status={output.status} warnings={warnings.length} />
-                </div>
-                {errorText ? <p className="mt-1 max-w-3xl text-sm text-red-700">{errorText}</p> : null}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {errorText ? (
-                  <button
-                    className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:border-red-400"
-                    type="button"
-                    onClick={() => copy(output.errors?.join('\n') || output.error)}
-                  >
-                    Sao chép lỗi
-                  </button>
-                ) : null}
-                <button
-                  className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                  type="button"
-                  onClick={() => copy(output.path)}
-                >
-                  Sao chép đường dẫn video
-                </button>
-                {captionText ? (
-                  <button
-                    className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
-                    type="button"
-                    onClick={() => copy(captionText)}
-                  >
-                    Sao chép mô tả và hashtag
-                  </button>
-                ) : null}
-                <button
-                  className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
-                  type="button"
-                  disabled={!output.log_file}
-                  onClick={() => openLocalPath(output.log_file)}
-                >
-                  Mở nhật ký
-                </button>
-              </div>
+    <div className="grid gap-4">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Lọc kết quả">
+        {filters.map((item) => (
+          <button
+            key={item.value}
+            className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${filter === item.value ? 'border-cyan-300/45 bg-cyan-300/12 text-cyan-100' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+            type="button"
+            onClick={() => setFilter(item.value)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {visible.length ? (
+        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+          {visible.map((output) => <ResultCard key={output.index} output={output} />)}
+        </div>
+      ) : (
+        <GlassEmptyState title="Không có kết quả phù hợp" message="Đổi bộ lọc để xem các video ở trạng thái khác." />
+      )}
+    </div>
+  );
+}
+
+function ResultCard({ output }: { output: JobOutput }) {
+  const warnings = output.warnings ?? [];
+  const errorText = shortText(output.error || output.errors?.[0] || '');
+  const success = !errorText && !['failed', 'error'].includes(output.status.toLowerCase());
+  const filename = output.path.split(/[\\/]/).pop() || `video-${output.index}.mp4`;
+  const caption = captionWithHashtags(output);
+
+  return (
+    <GlassCard className="overflow-hidden" hover>
+      <div className="relative aspect-video bg-black/45">
+        {success && output.path ? (
+          <video className="h-full w-full object-contain" controls preload="metadata" src={videoFileUrl(output.path)} />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-5 text-center text-rose-200">
+            <XCircle size={30} />
+            <span className="text-sm font-semibold">Không thể tạo bản xem trước</span>
+          </div>
+        )}
+        <div className="pointer-events-none absolute left-3 top-3"><StatusBadge output={output} /></div>
+      </div>
+
+      <div className="grid gap-4 p-4">
+        <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="truncate text-sm font-semibold text-white" title={filename}>{filename}</h2>
+              <p className="mt-1 text-xs text-slate-400">Video {String(output.index).padStart(3, '0')} {output.duration ? `· ${output.duration.toFixed(1)}s` : ''}</p>
             </div>
+            {success ? <CheckCircle2 className="shrink-0 text-emerald-300" size={18} /> : <AlertTriangle className="shrink-0 text-rose-300" size={18} />}
+          </div>
+          {errorText ? <p className="mt-3 rounded-md border border-rose-300/20 bg-rose-400/10 p-3 text-xs leading-5 text-rose-100">{errorText}</p> : null}
+          {warnings.length ? <p className="mt-3 text-xs leading-5 text-amber-200">{warnings.length} cảnh báo. {shortText(warnings[0], 120)}</p> : null}
+        </div>
 
-            <dl className="grid gap-3 text-sm md:grid-cols-2">
-              <InfoRow label="Trạng thái" value={formatStatus(output.status)} />
-              <InfoRow label="Thời lượng" value={output.duration ? `${output.duration.toFixed(1)}s` : '-'} />
-              <InfoRow label="Dòng thời gian" value={formatId(output.timeline_template)} />
-              <InfoRow label="Kiểu kịch bản" value={formatId(output.script_variant_id)} />
-              <InfoRow label="Tạo giọng đọc" value={formatId(output.tts_provider)} />
-              <InfoRow label="Cảnh báo" value={String(warnings.length)} />
-            </dl>
+        <div className="flex flex-wrap gap-2">
+          <GlassButton className="px-3" variant="secondary" title="Sao chép đường dẫn video" onClick={() => copy(output.path)}><Clipboard size={15} /> Copy path</GlassButton>
+          {caption ? <GlassButton className="px-3" variant="ghost" title="Sao chép caption và hashtag" onClick={() => copy(caption)}><FileText size={15} /> Caption</GlassButton> : null}
+          <GlassButton className="px-3" variant="ghost" disabled={!output.log_file} title="Mở log kỹ thuật" onClick={() => openLocalPath(output.log_file)}><FolderOpen size={15} /> Log</GlassButton>
+        </div>
 
-            <WarningBox warnings={warnings} />
-
-            <dl className="mt-4 grid gap-3 text-sm">
-              <PathRow label="Đường dẫn" value={output.path} />
-              <PathRow label="Kịch bản" value={output.script_file} />
-              <PathRow label="Phụ đề" value={output.subtitle_ass_file ?? output.subtitle_file} />
-              <PathRow label="Giọng đọc" value={output.voice_file} />
-              <PathRow label="Giọng WAV" value={output.normalized_voice_file} />
-              <PathRow label="Nhật ký" value={output.log_file} />
-            </dl>
-          </article>
-        );
-      })}
-    </div>
+        <details className="border-t border-white/10 pt-3 text-xs text-slate-400">
+          <summary className="cursor-pointer font-semibold text-slate-300">Chi tiết tệp</summary>
+          <div className="mt-3 grid gap-2">
+            <PathLine label="Video" value={output.path} />
+            <PathLine label="Phụ đề" value={output.subtitle_ass_file ?? output.subtitle_file} />
+            <PathLine label="Giọng đọc" value={output.voice_file} />
+          </div>
+        </details>
+      </div>
+    </GlassCard>
   );
 }
 
-function StatusBadge({ status, warnings }: { status: string; warnings: number }) {
-  const normalized = status.toLowerCase();
-  const classes =
-    normalized === 'failed'
-      ? 'border-red-200 bg-red-50 text-red-700'
-      : normalized === 'warning'
-        ? 'border-amber-200 bg-amber-50 text-amber-700'
-        : 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  const label = normalized === 'warning' ? `Cảnh báo${warnings ? ` (${warnings})` : ''}` : formatStatus(normalized);
-
-  return (
-    <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${classes}`}>
-      {label}
-    </span>
-  );
+function StatusBadge({ output }: { output: JobOutput }) {
+  const normalized = output.status.toLowerCase();
+  const warnings = output.warnings?.length ?? 0;
+  let variant: GlassBadgeVariant = 'rendered';
+  let label = 'Rendered';
+  if (['failed', 'error'].includes(normalized)) { variant = 'failed'; label = 'Failed'; }
+  else if (warnings || normalized === 'warning') { variant = 'warning'; label = 'Warning'; }
+  else if (normalized === 'needs_review') { variant = 'needs_review'; label = 'Needs review'; }
+  return <GlassBadge variant={variant}>{label}</GlassBadge>;
 }
 
-function InfoRow({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div className="rounded-md bg-surface p-3">
-      <dt className="text-xs font-medium text-muted">{label}</dt>
-      <dd className="mt-1 font-semibold text-ink">{value || '-'}</dd>
-    </div>
-  );
+function PathLine({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return <div className="grid grid-cols-[68px_minmax(0,1fr)] gap-2"><span>{label}</span><span className="truncate text-slate-300" title={value}>{value}</span></div>;
 }
 
-function PathRow({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div className="grid gap-1 rounded-md bg-surface p-3 md:grid-cols-[120px_1fr_auto] md:items-center">
-      <dt className="font-medium text-ink">{label}</dt>
-      <dd className="break-all text-muted">{value || '-'}</dd>
-      <button
-        className="w-fit rounded border border-line bg-white px-3 py-1 text-xs font-semibold text-ink hover:border-brand"
-        type="button"
-        disabled={!value}
-        onClick={() => copy(value)}
-      >
-        Sao chép
-      </button>
-    </div>
-  );
+function matchesFilter(output: JobOutput, filter: Filter) {
+  if (filter === 'all') return true;
+  const status = output.status.toLowerCase();
+  if (filter === 'failed') return ['failed', 'error'].includes(status);
+  if (filter === 'warnings') return status === 'warning' || Boolean(output.warnings?.length);
+  return !['failed', 'error', 'needs_review'].includes(status);
+}
+
+function copy(value?: string | null) {
+  if (value) void navigator.clipboard.writeText(value);
 }
 
 function captionWithHashtags(output: JobOutput): string {
@@ -144,32 +143,10 @@ function captionWithHashtags(output: JobOutput): string {
 
 function openLocalPath(path?: string | null) {
   if (!path) return;
-  const normalized = path.replace(/\\/g, '/');
-  window.open(`file:///${encodeURI(normalized)}`, '_blank');
-}
-
-function formatId(value?: string | null) {
-  if (!value) return '-';
-  return value
-    .split(/[_-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+  window.open(`file:///${encodeURI(path.replace(/\\/g, '/'))}`, '_blank');
 }
 
 function shortText(value: string, limit = 220) {
   const cleaned = value.replace(/\s+/g, ' ').trim();
-  if (cleaned.length <= limit) return cleaned;
-  return `${cleaned.slice(0, limit - 3)}...`;
-}
-
-function formatStatus(value: string) {
-  const labels: Record<string, string> = {
-    success: 'Thành công',
-    warning: 'Có cảnh báo',
-    failed: 'Thất bại',
-    completed: 'Hoàn thành',
-    completed_with_errors: 'Hoàn thành nhưng có lỗi',
-  };
-  return labels[value.toLowerCase()] ?? formatId(value);
+  return cleaned.length <= limit ? cleaned : `${cleaned.slice(0, limit - 3)}...`;
 }

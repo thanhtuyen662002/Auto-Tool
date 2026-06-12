@@ -1,0 +1,25 @@
+# Single Port Local Server QA Checklist
+
+- [ ] `npm run build` tạo `frontend/dist`.
+- [ ] `frontend/dist/index.html` tồn tại.
+- [ ] `frontend/dist/assets` tồn tại.
+- [ ] Backend phục vụ `http://127.0.0.1:8000`.
+- [ ] Root `/` mở được React app.
+- [ ] Reload `/dashboard` không 404.
+- [ ] Reload `/douyin-reup` không 404.
+- [ ] Reload `/silent-mode` không 404.
+- [ ] Reload `/subtitle-review` không 404.
+- [ ] Reload `/results` không 404.
+- [ ] Reload `/settings` không 404.
+- [ ] `/api/health` trả JSON.
+- [ ] `/api/local-app/config` trả JSON.
+- [ ] `/api/local-app/frontend-status` trả trạng thái production build.
+- [ ] `/api/not-found` trả JSON 404, không trả `index.html`.
+- [ ] `/docs` và `/openapi.json` vẫn hoạt động.
+- [ ] Static assets load được.
+- [ ] Dev mode cổng `5173` vẫn gọi API qua Vite proxy.
+- [ ] `start_local_prod.bat` hoặc `.sh` chạy được trên platform hiện tại.
+- [ ] Khi frontend build thiếu, script tự build hoặc báo hướng dẫn rõ ràng.
+- [ ] Browser tự mở production URL khi config bật.
+- [ ] Backend production chỉ bind `127.0.0.1` mặc định.
+- [ ] README phân biệt rõ dev mode và production mode.

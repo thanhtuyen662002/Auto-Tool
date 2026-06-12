@@ -1,5 +1,38 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## Silent / Immersive Product Reup v1.0.0-rc1
+
+### Highlights
+
+- Silent detection, visual segmentation and hard-sub OCR integration
+- Industry caption templates and lightweight visual tagging
+- Segment tag editor and caption regeneration without re-analysis
+- Subtitle review, corrected SRT/ASS and optional Vietnamese voiceover
+- Overlay/subtitle rendering, BGM mixing and original-audio retention
+- Final Output QA, Export Pack and per-video failure isolation
+- Standardized RC job, video, caption and visual-tag logs
+
+### What This Version Does Not Do
+
+- Does not download videos, remove watermark/hardcoded text, auto login or auto post
+- Does not use heavy AI vision/object detection by default
+
+### Recommended Workflow
+
+Start with Silent Chill Immersive and 3-5 authorized local videos. Review tags/captions, render one video, inspect Final QA, then scale the batch.
+
+### Known Limitations
+
+- Visual tagging is rule-based and captions are more generic without product context.
+- OCR accuracy drops for small, blurry, animated text or complex backgrounds.
+- Users must review captions and ensure rights to source videos, music and assets.
+
+### QA Status
+
+Automated backend/API/build QA is included. Final release still requires the real-video checklist and no open release blocker.
+
+---
+
 ## Highlights
 
 - Folder-based Douyin video processing

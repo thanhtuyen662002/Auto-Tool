@@ -76,9 +76,11 @@ Open Auto Tool
 - `Không thoại - Tạo voice review Việt`: for silent product visuals where you want a new Vietnamese review voiceover.
 - `Không thoại - Recut bán hàng nhanh`: for short home-good/product utility clips that need faster sales-style captions without inventing claims.
 
-## Silent / Immersive Product Reup Mode
+## Silent / Immersive Product Reup v1 Overview
 
 Use Silent Mode when the Douyin source video has no clear spoken dialogue, for example unboxing, home-good recommendations, immersive storage/demo clips, or videos that only contain background music and operation sounds.
+
+Version: `Silent Mode v1.0.0-rc1`. Recommended presets are Chill Immersive for first tests, Product Voiceover for Vietnamese narration, and Sales Recut for faster captions with a light CTA.
 
 Flow:
 
@@ -117,6 +119,22 @@ silent_reup_log.json
 silent_voiceover.mp3
 video_001_final_qa.json
 ```
+
+Recommended first run:
+
+1. Select the Chill Immersive preset and test 3-5 authorized local videos.
+2. Choose the correct industry and add product context when available.
+3. Generate plans, visual tags and captions, then review or edit them.
+4. Approve one Subtitle Review document and render one video first.
+5. Inspect Final QA, create an Export Pack, then run a larger batch.
+
+Run Silent Mode RC QA from `backend`:
+
+```powershell
+python -m app.tools.silent_mode_v1_rc_test --config ../examples/silent_mode_v1_rc/configs/silent_v1_chill_immersive.json
+```
+
+Use `--mock-ocr --mock-tts` for dependency-light QA. Add `--auto-render --final-qa --export-pack` for the complete technical pipeline. The runner isolates failures per video and always writes job/summary artifacts when an output folder is available.
 
 Important settings live inside `douyin_reup`:
 
@@ -2317,12 +2335,76 @@ Regenerate ho tro `industry: "auto"`, `use_visual_tags` va `respect_user_tag_ove
 
 Visual tagging la heuristic nhe, khong hieu sau hinh anh nhu AI vision va khong nhan dien chinh xac tung do vat. Ket qua co the kem chinh xac khi thieu OCR/product context; user nen sua tag va review caption truoc khi render.
 
+## Silent Mode v1 Troubleshooting
+
+- `FFmpeg/ffprobe not found`: open the app once for runtime setup or install a complete FFmpeg package.
+- `OCR provider missing`: wait for dependency setup or run RC QA with `--mock-ocr`.
+- `TTS provider failed`: retry with Piper/silent fallback or run RC QA with `--mock-tts`.
+- Empty source folder: verify it contains supported local video files.
+- No captions: inspect visual segments and `caption_generation_log.json`, then add product context if needed.
+- Wrong industry/tag: edit segment tags and regenerate captions without repeating video analysis.
+- Render/export failure: inspect `failed_step`, `silent_reup_log.json`, `job_log.json` and Final QA.
+
+RC assets live in `examples/silent_mode_v1_rc/`. Manual gates are in `docs/SILENT_MODE_V1_RC_QA_CHECKLIST.md` and `docs/SILENT_MODE_V1_RELEASE_BLOCKERS.md`; timing results go in `docs/SILENT_MODE_V1_PERFORMANCE_BASELINE.md`.
+
 ### Silent Mode Known Limitations
 
 - Caption template là mô tả hoặc gợi ý chung, không hiểu sâu toàn bộ nội dung video.
 - Nếu không có product context, caption sẽ ít cụ thể hơn.
 - Người dùng vẫn nên review caption trước khi đăng.
 - Tool không xóa chữ Trung hoặc watermark có sẵn trong video.
+
+---
+
+## Local Production Mode
+
+Auto Tool Studio có thể chạy frontend production và FastAPI trên một cổng duy nhất:
+
+```txt
+http://127.0.0.1:8000
+```
+
+### Build toàn bộ
+
+Windows:
+
+```bat
+scripts\build_all.bat
+```
+
+macOS/Linux:
+
+```bash
+./scripts/build_all.sh
+```
+
+### Start Local Production App
+
+Windows:
+
+```bat
+scripts\start_local_prod.bat
+```
+
+macOS/Linux:
+
+```bash
+./scripts/start_local_prod.sh
+```
+
+Production mode phục vụ React từ `frontend/dist`, API tại `/api`, và hỗ trợ reload trực tiếp các route như `/dashboard`, `/douyin-reup`, `/silent-mode`, `/subtitle-review`, `/results`, `/settings`.
+
+Dev mode vẫn dùng Vite tại `http://127.0.0.1:5173`; Vite proxy `/api` về backend cổng `8000`.
+
+### Single Port Troubleshooting
+
+- Màn hình trắng tại cổng `8000`: chạy `scripts/check_production_build.bat`, sau đó build lại frontend.
+- `/api/health` không trả JSON: kiểm tra backend có chạy và cổng `8000` có bị tiến trình khác chiếm không.
+- Reload `/dashboard` bị 404: kiểm tra `frontend/dist/index.html` và khởi động lại backend sau khi build.
+- `frontend/dist` bị thiếu: chạy `scripts/build_frontend.bat` hoặc `scripts/build_all.bat`.
+- `npm run build` lỗi: kiểm tra Node.js/npm bằng `scripts/check_system.bat`, xóa lỗi TypeScript được báo rồi build lại.
+
+Backend production mặc định chỉ bind `127.0.0.1`, không mở API ra mạng LAN.
 
 ---
 

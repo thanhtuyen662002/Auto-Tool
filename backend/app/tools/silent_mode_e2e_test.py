@@ -121,12 +121,12 @@ def run_e2e(args: argparse.Namespace) -> dict[str, Any]:
                             report_path=str(video_dir / f"video_{index:03d}_final_qa.json"),
                         )
                         row["final_output_qa"] = {
-                            "status": report.status.value,
+                            "status": str(getattr(report.status, "value", report.status)),
                             "score": report.score,
                             "report_path": report.report_path,
                             "issues": [issue.model_dump(mode="json") for issue in report.issues],
                         }
-                        if report.status.value == "passed":
+                        if str(getattr(report.status, "value", report.status)) == "passed":
                             result["final_qa_passed"] += 1
                 output_rows.append(row)
             except Exception as exc:

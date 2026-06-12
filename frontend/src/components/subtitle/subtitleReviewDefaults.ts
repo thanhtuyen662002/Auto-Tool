@@ -1,0 +1,26 @@
+import type { DouyinReupSettings } from '../../types/project';
+
+export const DEFAULT_REVIEW_RENDER_SETTINGS: DouyinReupSettings = {
+  enabled: true, preset_id: 'safe_review', preset_name: 'Safe Review', source_language: 'zh', target_language: 'vi',
+  translation_style: 'sat_nghia_troi_chay', subtitle_position: 'bottom_overlay', translation_provider: 'gemini',
+  subtitle_source_priority: ['sidecar_srt', 'embedded_subtitle', 'asr', 'ocr_hardsub'], use_sidecar_srt: true,
+  use_embedded_subtitle: true, use_asr_if_no_subtitle: true, asr_provider: 'faster_whisper', asr_model_size: 'medium',
+  asr_device: 'auto', asr_vad_filter: false, asr_subtitle_offset_seconds: -0.25, use_ocr_if_asr_failed: true,
+  use_ocr_if_no_subtitle: true, ocr_provider: 'easyocr', ocr_language: 'ch', ocr_sample_fps: 2,
+  ocr_region_mode: 'bottom_auto', ocr_manual_region: null, ocr_min_confidence: 0.55, ocr_dedupe_similarity: 0.86,
+  ocr_min_text_length: 2, ocr_merge_gap_ms: 600, ocr_min_duration_ms: 500, ocr_max_duration_ms: 6000,
+  prefer_ocr_over_asr_when_text_visible: false, visual_style_preset_id: 'clean_review_light', burn_subtitle: true,
+  add_overlay: true, keep_original_audio: true, add_bgm: true, music_folder: '', bgm_volume: 0.16,
+  original_audio_volume: 0.85, duck_bgm_when_voice: false, resolution: '1080x1920', fps: 30,
+  process_mode: 'all', max_videos: null, selected_video_paths: [], keep_temp: false, review_subtitles_before_render: false,
+  auto_render_after_translation: true, auto_mark_low_quality_lines: true, enable_subtitle_rewrite_suggestions: true,
+  auto_generate_rewrite_for_flagged_lines: false, auto_apply_safe_rewrites: false, default_rewrite_style: 'short_natural',
+  enable_silent_immersive_mode: true, silent_mode_detection: true, silent_mode_strategy: 'chill_immersive',
+  detect_speech_presence: true, speech_detection_threshold: 0.35, use_visual_segments_for_silent_video: true,
+  silent_segment_duration_min: 1.2, silent_segment_duration_max: 4, generate_visual_captions: true,
+  visual_caption_language: 'vi', visual_caption_style: 'natural_short', silent_caption_tone: 'natural',
+  generate_voiceover_for_silent_video: false, silent_voiceover_provider: 'edge_tts',
+  silent_voiceover_voice: 'vi-VN-HoaiMyNeural', keep_immersive_original_audio: true,
+  immersive_original_audio_volume: 0.75, add_bgm_for_silent_video: true, immersive_bgm_volume: 0.18,
+  silent_review_before_render: true,
+};

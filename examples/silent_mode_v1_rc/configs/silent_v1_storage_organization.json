@@ -1,0 +1,7 @@
+{
+  "project_name": "silent-v1-storage-organization",
+  "source_folder": "../../../sample_videos/silent_mode_v1_rc",
+  "output_folder": "../../../examples/outputs/silent_mode_v1_rc/storage_organization",
+  "product_context": {"industry": "storage_organization", "features": ["phân loại gọn gàng", "tận dụng không gian"], "cta": "Lưu ý tưởng sắp xếp này"},
+  "settings": {"enabled": true, "preset_id": "silent_chill_immersive", "silent_mode_strategy": "chill_immersive", "silent_caption_tone": "clean_review", "silent_review_before_render": true}
+}

@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -127,6 +127,19 @@ from app.modules.tts.providers.google_cloud_tts_provider import list_google_clou
 from app.modules.tts.providers.base import TTSProviderError
 from app.modules.visual_style.style_registry import get_visual_style_preset, list_visual_style_presets
 from app.modules.visual_style.visual_style_service import VisualStyleService
+from app.local_app import (
+    LocalAppConfig,
+    LocalConfigService,
+    LocalDesktopActionResponse,
+    LocalDesktopService,
+    LocalFrontendStatusResponse,
+    LocalPathRequest,
+    LocalPathsService,
+    LocalRecentPaths,
+    LocalSystemCheckResponse,
+    LocalSystemService,
+    StaticFrontendService,
+)
 from app.presets import get_default_presets
 from app.schemas.api_schema import (
     AppSettings,
@@ -236,7 +249,7 @@ from app.schemas.api_schema import (
 )
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir, write_json
-from app.utils.app_paths import app_data_dir, frontend_dist_dir
+from app.utils.app_paths import app_data_dir
 from app.utils.dependency_manager import (
     DEFAULT_OCR_PROVIDER,
     ensure_runtime_dependencies,
@@ -244,29 +257,14 @@ from app.utils.dependency_manager import (
 )
 from app.utils.local_dialog import LocalDialogError, browse_local_path
 from app.utils.path_utils import resolve_path
+from app.version import APP_VERSION
 
 
 logger = logging.getLogger(__name__)
 _SILENT_PLAN_STORE: dict[str, dict[str, Any]] = {}
 
 
-def _read_version() -> str:
-    """Read app version from VERSION file at project root."""
-    try:
-        candidates = [
-            Path(__file__).resolve().parents[2] / "VERSION",
-            Path(__file__).resolve().parents[3] / "VERSION",
-            Path.cwd() / "VERSION",
-        ]
-        for path in candidates:
-            if path.exists():
-                return path.read_text(encoding="utf-8").strip()
-    except Exception:
-        pass
-    return "unknown"
-
-
-_APP_VERSION = _read_version()
+_APP_VERSION = APP_VERSION
 
 
 def _allowed_cors_origins() -> list[str]:
@@ -287,6 +285,11 @@ def _allowed_cors_origins() -> list[str]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Auto Tool API", version=_APP_VERSION)
+    local_config_service = LocalConfigService()
+    local_paths_service = LocalPathsService(local_config_service)
+    local_system_service = LocalSystemService(local_config_service, local_paths_service)
+    local_desktop_service = LocalDesktopService(local_config_service, local_paths_service)
+    static_frontend_service = StaticFrontendService(local_config_service)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_allowed_cors_origins(),
@@ -299,6 +302,8 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def _startup() -> None:
         database.init_db()
+        local_config = local_config_service.load_config()
+        local_paths_service.ensure_folder(local_config.default_output_folder)
         start_background_dependency_warmup(
             include_piper=True,
             include_ocr=True,
@@ -308,7 +313,11 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
-        return HealthResponse(status="ok", version=_APP_VERSION)
+        return HealthResponse(
+            status="ok",
+            version=_APP_VERSION,
+            capabilities={"douyin_reup": True, "silent_immersive_mode": True},
+        )
 
     @app.get("/api/system/dependencies", response_model=SystemDependencyStatusResponse)
     def system_dependencies() -> SystemDependencyStatusResponse:
@@ -330,6 +339,66 @@ def create_app() -> FastAPI:
             ocr_message=report.ocr_message,
             warnings=list(report.warnings),
         )
+
+    @app.get("/api/local-app/config", response_model=LocalAppConfig)
+    def get_local_app_config() -> LocalAppConfig:
+        return local_config_service.load_config()
+
+    @app.put("/api/local-app/config", response_model=LocalAppConfig)
+    def save_local_app_config(config: LocalAppConfig) -> LocalAppConfig:
+        try:
+            local_paths_service.ensure_folder(config.default_output_folder)
+            return local_config_service.save_config(config)
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"Cannot prepare local app folders: {exc}") from exc
+
+    @app.get("/api/local-app/system-check", response_model=LocalSystemCheckResponse)
+    def local_app_system_check() -> LocalSystemCheckResponse:
+        return local_system_service.check_system()
+
+    @app.get("/api/local-app/frontend-status", response_model=LocalFrontendStatusResponse)
+    def local_app_frontend_status() -> LocalFrontendStatusResponse:
+        return static_frontend_service.build_api_response()
+
+    @app.get("/api/local-app/recent-paths", response_model=LocalRecentPaths)
+    def get_local_app_recent_paths() -> LocalRecentPaths:
+        return local_paths_service.get_recent_paths()
+
+    @app.post("/api/local-app/recent-paths/source", response_model=LocalRecentPaths)
+    def add_local_app_source_path(request: LocalPathRequest) -> LocalRecentPaths:
+        return local_paths_service.add_recent_path("source", request.path)
+
+    @app.post("/api/local-app/recent-paths/output", response_model=LocalRecentPaths)
+    def add_local_app_output_path(request: LocalPathRequest) -> LocalRecentPaths:
+        return local_paths_service.add_recent_path("output", request.path)
+
+    @app.post("/api/local-app/recent-paths/music", response_model=LocalRecentPaths)
+    def add_local_app_music_path(request: LocalPathRequest) -> LocalRecentPaths:
+        return local_paths_service.add_recent_path("music", request.path)
+
+    @app.post("/api/local-app/open-folder", response_model=LocalDesktopActionResponse)
+    def open_local_app_folder(request: LocalPathRequest) -> LocalDesktopActionResponse:
+        try:
+            path = local_desktop_service.open_folder(request.path)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Cannot open folder: {exc}") from exc
+        return LocalDesktopActionResponse(success=True, path=str(path), message="Folder opened.")
+
+    @app.post("/api/local-app/reveal-file", response_model=LocalDesktopActionResponse)
+    def reveal_local_app_file(request: LocalPathRequest) -> LocalDesktopActionResponse:
+        try:
+            path = local_desktop_service.reveal_file(request.path)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Cannot reveal file: {exc}") from exc
+        return LocalDesktopActionResponse(success=True, path=str(path), message="File revealed.")
 
     @app.post("/api/douyin-reup/scan", response_model=DouyinReupScanResponse)
     def scan_douyin_reup_folder(request: DouyinReupScanRequest) -> DouyinReupScanResponse:
@@ -2087,7 +2156,7 @@ def create_app() -> FastAPI:
         ]
         return TimelineTemplatesResponse(templates=templates)
 
-    _mount_frontend(app)
+    _mount_frontend(app, static_frontend_service)
     return app
 
 
@@ -3326,10 +3395,15 @@ def _latest_crop_safety_report_path(project_id: str) -> Path | None:
     return None
 
 
-def _mount_frontend(app: FastAPI) -> None:
-    dist_dir = frontend_dist_dir()
+def _mount_frontend(app: FastAPI, service: StaticFrontendService | None = None) -> None:
+    frontend_service = service or StaticFrontendService()
+    status = frontend_service.get_status()
+    if not status["enabled"]:
+        return
+
+    dist_dir = frontend_service.get_frontend_dist_path()
     index_file = dist_dir / "index.html"
-    assets_dir = dist_dir / "assets"
+    assets_dir = frontend_service.get_static_assets_path()
     if not index_file.exists():
         return
 
@@ -3338,12 +3412,15 @@ def _mount_frontend(app: FastAPI) -> None:
 
     @app.get("/{full_path:path}", include_in_schema=False, response_model=None)
     def serve_frontend(full_path: str):
+        if full_path == "api" or full_path.startswith("api/"):
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+
         requested = (dist_dir / full_path).resolve()
         try:
             requested.relative_to(dist_dir)
         except ValueError:
             requested = index_file
 
-        if requested.is_file() and requested.name != "index.html":
+        if requested.is_file() and requested != index_file:
             return FileResponse(requested)
-        return HTMLResponse(index_file.read_text(encoding="utf-8"))
+        return FileResponse(index_file, headers={"Cache-Control": "no-cache"})

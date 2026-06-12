@@ -1,0 +1,60 @@
+{
+  "document_id": "d78dd199-26d4-4af4-b227-c6ab940601fa",
+  "video_id": "silent_plan_d3ae78e8",
+  "project_id": null,
+  "average_score": 0.825,
+  "total_lines": 2,
+  "needs_review_count": 1,
+  "critical_count": 1,
+  "warning_count": 0,
+  "lines": [
+    {
+      "line_index": 1,
+      "score": 1.0,
+      "severity": "info",
+      "needs_review": false,
+      "source_text": null,
+      "translated_text": "Sắp lên bàn chỉ mất vài thao tác",
+      "edited_text": "Sắp lên bàn chỉ mất vài thao tác",
+      "duration_ms": 4000,
+      "char_count": 32,
+      "line_count": 1,
+      "chars_per_second": 8.0,
+      "ocr_confidence": null,
+      "asr_confidence": null,
+      "issues": []
+    },
+    {
+      "line_index": 2,
+      "score": 0.65,
+      "severity": "critical",
+      "needs_review": true,
+      "source_text": null,
+      "translated_text": "Lưu lại để tham khảo khi cần nha",
+      "edited_text": "Lưu lại để tham khảo khi cần nha",
+      "duration_ms": 1000,
+      "char_count": 32,
+      "line_count": 1,
+      "chars_per_second": 32.0,
+      "ocr_confidence": null,
+      "asr_confidence": null,
+      "issues": [
+        {
+          "issue_type": "reading_speed_too_high",
+          "severity": "critical",
+          "message": "Tốc độ đọc quá cao.",
+          "suggestion": "Rút ngắn câu hoặc kéo dài thời lượng subtitle."
+        }
+      ]
+    }
+  ],
+  "summary_warnings": [
+    "Có 1 dòng phụ đề lỗi nghiêm trọng. Nên sửa trước khi approve.",
+    "Có 1 dòng cần kiểm tra kỹ."
+  ],
+  "issues_breakdown": {
+    "reading_speed_too_high": 1
+  },
+  "report_file": "D:\\Data\\Auto-Tool\\examples\\sample_project\\sample_videos\\sample_product\\_silent_reup_plans\\sample_001-d3ae78e8\\subtitle_quality_report.json",
+  "created_at": "2026-06-12T10:56:02"
+}

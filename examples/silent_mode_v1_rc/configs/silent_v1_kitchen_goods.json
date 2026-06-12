@@ -1,0 +1,7 @@
+{
+  "project_name": "silent-v1-kitchen-goods",
+  "source_folder": "../../../sample_videos/silent_mode_v1_rc",
+  "output_folder": "../../../examples/outputs/silent_mode_v1_rc/kitchen_goods",
+  "product_context": {"industry": "kitchen_goods", "features": ["giúp góc bếp gọn hơn"], "cta": "Lưu lại cho căn bếp của bạn"},
+  "settings": {"enabled": true, "preset_id": "silent_chill_immersive", "silent_mode_strategy": "chill_immersive", "silent_caption_tone": "natural", "silent_review_before_render": true}
+}

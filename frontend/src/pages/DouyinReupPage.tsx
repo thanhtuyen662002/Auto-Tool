@@ -9,11 +9,9 @@ import {
   getDouyinExportPack,
   getDouyinReupJobResults,
   getJobStatus,
-  getSystemDependencies,
   getSilentVisualTagVocabulary,
   getVisualStyles,
   listSilentCaptionIndustries,
-  listDouyinReupPresets,
   openDouyinExportPack,
   recommendDouyinReupPreset,
   regenerateSilentReupCaptions,
@@ -22,15 +20,46 @@ import {
   retryDouyinReupJobWithPreset,
   retryFailedDouyinReupJob,
   runFinalOutputQAForJob,
-  scanDouyinReupFolder,
-  startDouyinOneClickBatch,
   startDouyinReupProcess,
   videoFileUrl,
 } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
-import PathInput from '../components/PathInput';
 import SliderInput from '../components/SliderInput';
+import GlassButton from '../components/glass/GlassButton';
+import GlassCard from '../components/glass/GlassCard';
+import GlassModal from '../components/glass/GlassModal';
+import JobProgressPanel from '../components/jobs/JobProgressPanel';
 import SegmentTagEditor from '../components/silent/SegmentTagEditor';
+import SilentPlanPreview from '../components/silent/SilentPlanPreview';
+import MusicFolderCard from '../components/start-workflow/MusicFolderCard';
+import OutputFolderCard from '../components/start-workflow/OutputFolderCard';
+import ProductContextCard from '../components/start-workflow/ProductContextCard';
+import SourceFolderCard from '../components/start-workflow/SourceFolderCard';
+import StartAdvancedSettingsDrawer from '../components/start-workflow/StartAdvancedSettingsDrawer';
+import StartBatchButton from '../components/start-workflow/StartBatchButton';
+import StartChecklistCard from '../components/start-workflow/StartChecklistCard';
+import StartPresetSelector from '../components/start-workflow/StartPresetSelector';
+import StartValidationAlert from '../components/start-workflow/StartValidationAlert';
+import StartWorkflowLayout from '../components/start-workflow/StartWorkflowLayout';
+import WorkflowHero from '../components/start-workflow/WorkflowHero';
+import WorkflowPreviewPanel from '../components/start-workflow/WorkflowPreviewPanel';
+import WorkflowStepper from '../components/workflow/WorkflowStepper';
+import {
+  browseStartFolder,
+  getHealth,
+  getPresets,
+  scanDouyinFolder,
+  startDouyinOneClick,
+  startSilentOneClick,
+} from '../services/startWorkflowApi';
+import {
+  addRecentMusicFolder,
+  addRecentOutputFolder,
+  addRecentSourceFolder,
+  getLocalAppConfig,
+  getRecentPaths,
+  type LocalRecentPaths,
+} from '../services/localAppApi';
 import type {
   DouyinOutputResult,
   DouyinPresetRecommendationResponse,
@@ -46,6 +75,16 @@ import type {
   SilentVisualTagVocabulary,
   VisualStylePreset,
 } from '../types/project';
+import type {
+  JobStartedView,
+  StartChecklistItem,
+  StartPresetViewModel,
+  StartRecentFolder,
+  StartScanSummary,
+  StartValidationMessage,
+  StartWorkflowMode,
+} from '../types/startWorkflow';
+import { summarizeStartScan } from '../types/startWorkflow';
 
 type ExportOptions = {
   copy_videos: boolean;
@@ -157,26 +196,77 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   silent_review_before_render: true,
 };
 
-export default function DouyinReupPage() {
+const RECENT_SOURCE_KEY = 'auto-tool.recentSourceFolders';
+const RECENT_OUTPUT_KEY = 'auto-tool.recentOutputFolders';
+const RECENT_MUSIC_KEY = 'auto-tool.recentMusicFolders';
+const LAST_PRESET_KEY = 'auto-tool.lastSelectedPreset';
+const LAST_INDUSTRY_KEY = 'auto-tool.lastSelectedIndustry';
+const LAST_TONE_KEY = 'auto-tool.lastSelectedTone';
+
+function defaultProjectName(workflow: 'douyin' | 'silent'): string {
+  const date = new Date().toISOString().slice(0, 10).replaceAll('-', '_');
+  return workflow === 'silent' ? `silent_immersive_${date}` : `douyin_reup_${date}`;
+}
+
+function readRecentFolders(key: string): StartRecentFolder[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]') as string[];
+    return parsed.filter(Boolean).slice(0, 5).map((path) => ({ id: path, path }));
+  } catch {
+    return [];
+  }
+}
+
+function writeRecentFolders(key: string, folders: StartRecentFolder[]) {
+  localStorage.setItem(key, JSON.stringify(folders.map((folder) => folder.path).slice(0, 5)));
+}
+
+function addRecentFolder(key: string, folders: StartRecentFolder[], path: string): StartRecentFolder[] {
+  const trimmed = path.trim();
+  if (!trimmed) return folders;
+  const next = [{ id: trimmed, path: trimmed }, ...folders.filter((folder) => folder.path !== trimmed)].slice(0, 5);
+  writeRecentFolders(key, next);
+  return next;
+}
+
+function removeRecentFolder(key: string, folders: StartRecentFolder[], path: string): StartRecentFolder[] {
+  const next = folders.filter((folder) => folder.path !== path);
+  writeRecentFolders(key, next);
+  return next;
+}
+
+function toRecentFolders(paths: string[]): StartRecentFolder[] {
+  return paths.filter(Boolean).map((path) => ({ id: path, path }));
+}
+
+export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initialWorkflow?: 'douyin' | 'silent' }) {
   const navigate = useNavigate();
+  const workflowMode: StartWorkflowMode = initialWorkflow === 'silent' ? 'silent_immersive' : 'douyin_voice';
   const [mode, setMode] = useState<'simple' | 'advanced'>('simple');
-  const [projectName, setProjectName] = useState('douyin-reup');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [riskyConfirmOpen, setRiskyConfirmOpen] = useState(false);
+  const [projectName, setProjectName] = useState(() => defaultProjectName(initialWorkflow));
   const [sourceFolder, setSourceFolder] = useState('');
-  const [outputFolder, setOutputFolder] = useState('./examples/outputs');
-  const [settings, setSettings] = useState<DouyinReupSettings>(DEFAULT_SETTINGS);
+  const [outputFolder, setOutputFolder] = useState(() => localStorage.getItem('auto-tool.default-output-folder') || './examples/outputs');
+  const [settings, setSettings] = useState<DouyinReupSettings>(() => ({
+    ...DEFAULT_SETTINGS,
+    music_folder: localStorage.getItem('auto-tool.default-bgm-folder') || DEFAULT_SETTINGS.music_folder,
+    silent_caption_tone: localStorage.getItem(LAST_TONE_KEY) || DEFAULT_SETTINGS.silent_caption_tone,
+  }));
   const [silentProductContext, setSilentProductContext] = useState<SilentProductContext>({
     product_name: '',
-    industry: 'general_product',
+    industry: localStorage.getItem(LAST_INDUSTRY_KEY) || 'general_product',
     features: '',
     cta: '',
   });
   const [presets, setPresets] = useState<DouyinReupPreset[]>([]);
-  const [selectedPresetId, setSelectedPresetId] = useState('safe_review');
+  const [selectedPresetId, setSelectedPresetId] = useState(() => localStorage.getItem(LAST_PRESET_KEY) || (initialWorkflow === 'silent' ? 'silent_chill_immersive' : 'safe_review'));
   const [recommendation, setRecommendation] = useState<DouyinPresetRecommendationResponse | null>(null);
   const [visualStyles, setVisualStyles] = useState<VisualStylePreset[]>([]);
   const [videos, setVideos] = useState<DouyinVideoItem[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
-  const [scanSummary, setScanSummary] = useState<{ total: number; valid: number; invalid: number } | null>(null);
+  const [scanSummary, setScanSummary] = useState<StartScanSummary | null>(null);
+  const [scanErrors, setScanErrors] = useState<string[]>([]);
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [results, setResults] = useState<DouyinOutputResult[]>([]);
@@ -201,6 +291,9 @@ export default function DouyinReupPage() {
   const [captionPreview, setCaptionPreview] = useState<SilentReupPlanResponse | null>(null);
   const [visualTagVocabulary, setVisualTagVocabulary] = useState<SilentVisualTagVocabulary>(DEFAULT_VISUAL_TAG_VOCABULARY);
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
+  const [recentSourceFolders, setRecentSourceFolders] = useState(() => readRecentFolders(RECENT_SOURCE_KEY));
+  const [recentOutputFolders, setRecentOutputFolders] = useState(() => readRecentFolders(RECENT_OUTPUT_KEY));
+  const [recentMusicFolders, setRecentMusicFolders] = useState(() => readRecentFolders(RECENT_MUSIC_KEY));
 
   const done = jobStatus?.status === 'completed' || jobStatus?.status === 'completed_with_errors' || jobStatus?.status === 'failed';
   const canStart = sourceFolder.trim() && outputFolder.trim() && !busy && (!jobStatus || done);
@@ -225,22 +318,85 @@ export default function DouyinReupPage() {
     selectedPresetId.startsWith('silent_') || Boolean(settings.enable_silent_immersive_mode && settings.preset_id?.startsWith('silent_'));
   const normalPresets = useMemo(() => presets.filter((preset) => !preset.id.startsWith('silent_')), [presets]);
   const silentPresets = useMemo(() => presets.filter((preset) => preset.id.startsWith('silent_')), [presets]);
+  const selectedPreset = useMemo(() => presets.find((preset) => preset.id === selectedPresetId), [presets, selectedPresetId]);
+  const recommendedPresetId = useMemo(
+    () => pickRecommendedPresetId(workflowMode, sourceFolder, recommendation, presets),
+    [workflowMode, sourceFolder, recommendation, presets],
+  );
+  const startPresetCards = useMemo(
+    () => (workflowMode === 'silent_immersive' ? silentPresets : normalPresets).map((preset) => toStartPresetViewModel(preset, workflowMode, preset.id === recommendedPresetId)),
+    [normalPresets, recommendedPresetId, silentPresets, workflowMode],
+  );
+  const selectedPresetCard = useMemo(
+    () => startPresetCards.find((preset) => preset.id === selectedPresetId),
+    [selectedPresetId, startPresetCards],
+  );
+  const recommendedPresetCard = useMemo(
+    () => startPresetCards.find((preset) => preset.id === recommendedPresetId),
+    [recommendedPresetId, startPresetCards],
+  );
+  const checklist = useMemo(
+    () => buildChecklist({
+      sourceFolder,
+      outputFolder,
+      selectedPreset: selectedPresetCard,
+      scanSummary,
+      scanErrors,
+      musicFolder: settings.music_folder || '',
+      backendReady: dependencyStatus !== null,
+      autoRender: Boolean(selectedPresetCard?.autoRender),
+    }),
+    [dependencyStatus, outputFolder, scanErrors, scanSummary, selectedPresetCard, settings.music_folder, sourceFolder],
+  );
+  const validationMessages = useMemo(
+    () => buildValidationMessages(checklist, selectedPresetCard, dependencyStatus, scanSummary),
+    [checklist, dependencyStatus, scanSummary, selectedPresetCard],
+  );
+  const startDisabled = busy || checklist.some((item) => item.status === 'missing') || Boolean(jobStatus && !done);
+  const riskyPreset = Boolean(selectedPresetCard?.autoRender && selectedPresetCard.id !== 'silent_chill_immersive');
+  const jobStartedView: JobStartedView | null = jobId ? { jobId, projectName: projectName.trim() || defaultProjectName(initialWorkflow), jobStatus } : null;
 
   useEffect(() => {
-    listDouyinReupPresets()
-      .then((response) => {
-        setPresets(response.presets);
-        const defaultPreset = response.presets.find((preset) => preset.is_default) ?? response.presets[0];
-        if (defaultPreset) {
-          setSelectedPresetId(defaultPreset.id);
-          setSettings({ ...defaultPreset.settings, music_folder: DEFAULT_SETTINGS.music_folder });
+    getLocalAppConfig()
+      .then((config) => {
+        if (!localStorage.getItem('auto-tool.default-output-folder')) setOutputFolder(config.default_output_folder);
+        if (!localStorage.getItem('auto-tool.default-bgm-folder') && config.default_music_folder) {
+          setSettings((current) => ({ ...current, music_folder: config.default_music_folder }));
+        }
+        setSourceFolder((current) => current || config.default_source_folder);
+      })
+      .catch(() => undefined);
+    getRecentPaths()
+      .then((recent) => {
+        const hasBackendRecents = recent.source_folders.length || recent.output_folders.length || recent.music_folders.length;
+        if (hasBackendRecents) applyBackendRecentPaths(recent);
+      })
+      .catch(() => undefined);
+    getPresets()
+      .then((loadedPresets) => {
+        setPresets(loadedPresets);
+        const savedPresetId = localStorage.getItem(LAST_PRESET_KEY);
+        const savedPreset = savedPresetId
+          ? loadedPresets.find((preset) => preset.id === savedPresetId && (initialWorkflow === 'silent' ? preset.id.startsWith('silent_') : !preset.id.startsWith('silent_')))
+          : null;
+        const defaultPreset = initialWorkflow === 'silent'
+          ? loadedPresets.find((preset) => preset.id === 'silent_chill_immersive')
+          : loadedPresets.find((preset) => preset.is_default) ?? loadedPresets[0];
+        const selectedPreset = savedPreset ?? defaultPreset;
+        if (selectedPreset) {
+          setSelectedPresetId(selectedPreset.id);
+          setSettings({
+            ...selectedPreset.settings,
+            music_folder: localStorage.getItem('auto-tool.default-bgm-folder') || DEFAULT_SETTINGS.music_folder,
+            silent_caption_tone: localStorage.getItem(LAST_TONE_KEY) || selectedPreset.settings.silent_caption_tone,
+          });
         }
       })
       .catch(() => setPresets([]));
     getVisualStyles()
       .then((response) => setVisualStyles(response.presets))
       .catch(() => setVisualStyles([]));
-    getSystemDependencies()
+    getHealth()
       .then(setDependencyStatus)
       .catch(() => setDependencyStatus(null));
     listSilentCaptionIndustries()
@@ -249,7 +405,28 @@ export default function DouyinReupPage() {
     getSilentVisualTagVocabulary()
       .then(setVisualTagVocabulary)
       .catch(() => setVisualTagVocabulary(DEFAULT_VISUAL_TAG_VOCABULARY));
-  }, []);
+  }, [initialWorkflow]);
+
+  function applyBackendRecentPaths(recent: LocalRecentPaths) {
+    const source = toRecentFolders(recent.source_folders);
+    const output = toRecentFolders(recent.output_folders);
+    const music = toRecentFolders(recent.music_folders);
+    setRecentSourceFolders(source);
+    setRecentOutputFolders(output);
+    setRecentMusicFolders(music);
+    writeRecentFolders(RECENT_SOURCE_KEY, source);
+    writeRecentFolders(RECENT_OUTPUT_KEY, output);
+    writeRecentFolders(RECENT_MUSIC_KEY, music);
+  }
+
+  function syncRecentPath(kind: 'source' | 'output' | 'music', path: string) {
+    const action = kind === 'source'
+      ? addRecentSourceFolder(path)
+      : kind === 'output'
+        ? addRecentOutputFolder(path)
+        : addRecentMusicFolder(path);
+    action.then(applyBackendRecentPaths).catch(() => undefined);
+  }
 
   useEffect(() => {
     if (!jobId || done) return;
@@ -269,25 +446,25 @@ export default function DouyinReupPage() {
   async function handleScan() {
     setBusy(true);
     setError(null);
+    setScanErrors([]);
     setResults([]);
     setSummary(null);
     try {
-      const response = await scanDouyinReupFolder(sourceFolder);
+      const response = await scanDouyinFolder(sourceFolder);
       setVideos(response.media);
       setSelectedPaths([]);
-      setScanSummary({
-        total: response.total_files,
-        valid: response.valid_videos,
-        invalid: response.invalid_files,
-      });
+      setScanSummary(summarizeStartScan(response.media, response.total_files, response.valid_videos, response.invalid_files));
+      setRecentSourceFolders((current) => addRecentFolder(RECENT_SOURCE_KEY, current, sourceFolder));
+      syncRecentPath('source', sourceFolder);
       recommendDouyinReupPreset(sourceFolder)
         .then(setRecommendation)
         .catch(() => setRecommendation(null));
       if (response.errors.length) {
-        setError(response.errors.slice(0, 3).join('\n'));
+        setScanErrors(['Không thể scan folder này. Vui lòng kiểm tra đường dẫn hoặc quyền truy cập.', ...response.errors.slice(0, 2)]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể scan thư mục Douyin.');
+      setScanErrors(['Không thể scan folder này. Vui lòng kiểm tra đường dẫn hoặc quyền truy cập.']);
     } finally {
       setBusy(false);
     }
@@ -295,6 +472,7 @@ export default function DouyinReupPage() {
 
   async function handlePresetSelect(presetId: string) {
     setSelectedPresetId(presetId);
+    localStorage.setItem(LAST_PRESET_KEY, presetId);
     setError(null);
     try {
       const response = await applyDouyinReupPreset({
@@ -313,8 +491,16 @@ export default function DouyinReupPage() {
     setResults([]);
     setSummary(null);
     try {
-      const processMode = selectedPaths.length ? 'selected' : settings.max_videos ? 'first_n' : 'all_videos';
-      const response = await startDouyinOneClickBatch({
+      const processMode: 'selected' | 'first_n' | 'all_videos' = selectedPaths.length ? 'selected' : settings.max_videos ? 'first_n' : 'all_videos';
+      setRecentSourceFolders((current) => addRecentFolder(RECENT_SOURCE_KEY, current, sourceFolder));
+      setRecentOutputFolders((current) => addRecentFolder(RECENT_OUTPUT_KEY, current, outputFolder));
+      syncRecentPath('source', sourceFolder);
+      syncRecentPath('output', outputFolder);
+      if (settings.music_folder?.trim()) {
+        setRecentMusicFolders((current) => addRecentFolder(RECENT_MUSIC_KEY, current, settings.music_folder || ''));
+        syncRecentPath('music', settings.music_folder || '');
+      }
+      const request = {
         project_name: projectName.trim() || 'douyin-reup',
         source_folder: sourceFolder,
         output_folder: outputFolder,
@@ -331,7 +517,8 @@ export default function DouyinReupPage() {
           ...(mode === 'advanced' ? settings : {}),
           silent_caption_tone: settings.silent_caption_tone,
         },
-      });
+      };
+      const response = initialWorkflow === 'silent' ? await startSilentOneClick(request) : await startDouyinOneClick(request);
       setJobId(response.job_id);
       setJobStatus({
         job_id: response.job_id,
@@ -343,6 +530,7 @@ export default function DouyinReupPage() {
         failed_outputs: 0,
         logs: [],
       });
+      setActionMessage('Batch đã bắt đầu. Bạn có thể xem tiến trình hoặc mở kết quả khi job hoàn tất.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể bắt đầu one-click batch.');
     } finally {
@@ -363,6 +551,14 @@ export default function DouyinReupPage() {
         process_mode: selectedPaths.length ? 'selected' : settings.max_videos ? 'first_n' : 'all',
         selected_video_paths: selectedPaths,
       };
+      setRecentSourceFolders((current) => addRecentFolder(RECENT_SOURCE_KEY, current, sourceFolder));
+      setRecentOutputFolders((current) => addRecentFolder(RECENT_OUTPUT_KEY, current, outputFolder));
+      syncRecentPath('source', sourceFolder);
+      syncRecentPath('output', outputFolder);
+      if (settings.music_folder?.trim()) {
+        setRecentMusicFolders((current) => addRecentFolder(RECENT_MUSIC_KEY, current, settings.music_folder || ''));
+        syncRecentPath('music', settings.music_folder || '');
+      }
       const response = await startDouyinReupProcess({
         project_name: projectName.trim() || 'douyin-reup',
         source_folder: sourceFolder,
@@ -380,6 +576,7 @@ export default function DouyinReupPage() {
         failed_outputs: 0,
         logs: [],
       });
+      setActionMessage('Batch đã bắt đầu. Bạn có thể xem tiến trình hoặc mở kết quả khi job hoàn tất.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể bắt đầu xử lý Douyin Reup.');
     } finally {
@@ -406,11 +603,53 @@ export default function DouyinReupPage() {
   }
 
   function updateSettings(updates: Partial<DouyinReupSettings>) {
+    if (typeof updates.silent_caption_tone === 'string') {
+      localStorage.setItem(LAST_TONE_KEY, updates.silent_caption_tone);
+    }
     setSettings((current) => ({ ...current, ...updates }));
   }
 
   function updateSilentProductContext(updates: Partial<SilentProductContext>) {
+    if (typeof updates.industry === 'string') {
+      localStorage.setItem(LAST_INDUSTRY_KEY, updates.industry);
+    }
     setSilentProductContext((current) => ({ ...current, ...updates }));
+  }
+
+  async function browseSourceFolder() {
+    const path = await browseStartFolder('Chọn folder video', sourceFolder);
+    if (path) setSourceFolder(path);
+  }
+
+  async function browseOutputFolder() {
+    const path = await browseStartFolder('Chọn output folder', outputFolder);
+    if (path) {
+      setOutputFolder(path);
+      setRecentOutputFolders((current) => addRecentFolder(RECENT_OUTPUT_KEY, current, path));
+      syncRecentPath('output', path);
+    }
+  }
+
+  async function browseMusicFolder() {
+    const path = await browseStartFolder('Chọn music folder', settings.music_folder || '');
+    if (path) {
+      updateSettings({ music_folder: path });
+      setRecentMusicFolders((current) => addRecentFolder(RECENT_MUSIC_KEY, current, path));
+      syncRecentPath('music', path);
+    }
+  }
+
+  function requestStart() {
+    if (riskyPreset) {
+      setRiskyConfirmOpen(true);
+      return;
+    }
+    void startCurrentWorkflow();
+  }
+
+  async function startCurrentWorkflow() {
+    setRiskyConfirmOpen(false);
+    await (mode === 'simple' ? handleOneClickStart() : handleStart());
   }
 
   async function handleGenerateCaptionPreview() {
@@ -618,529 +857,239 @@ export default function DouyinReupPage() {
     }
   }
 
-  function renderPresetCard(preset: DouyinReupPreset) {
+  function updateAdvancedSettings(updates: Partial<DouyinReupSettings>) {
+    setMode('advanced');
+    updateSettings(updates);
+  }
+
+  function renderAdvancedSettings() {
     return (
-      <button
-        key={preset.id}
-        className={`rounded-md border p-3 text-left transition ${
-          selectedPresetId === preset.id ? 'border-brand bg-blue-50' : 'border-line bg-surface hover:border-brand'
-        }`}
-        type="button"
-        onClick={() => void handlePresetSelect(preset.id)}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div className="font-semibold text-ink">{preset.name}</div>
-          <span className="rounded bg-white px-2 py-0.5 text-xs font-semibold text-muted">{preset.ui_badge}</span>
-        </div>
-        <div className="mt-1 text-xs text-muted">{preset.description}</div>
-        <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-semibold text-muted">
-          {preset.settings.review_subtitles_before_render ? <span className="rounded bg-white px-2 py-0.5">Review</span> : null}
-          {preset.settings.prefer_ocr_over_asr_when_text_visible || preset.id === 'ocr_priority' ? <span className="rounded bg-white px-2 py-0.5">OCR</span> : null}
-          {preset.settings.add_bgm || preset.settings.add_bgm_for_silent_video ? <span className="rounded bg-white px-2 py-0.5">BGM</span> : null}
-          {preset.id.startsWith('silent_') ? <span className="rounded bg-white px-2 py-0.5">Silent</span> : null}
-        </div>
-      </button>
+      <>
+        <GlassCard className="grid gap-4 p-4" strong>
+          <h3 className="font-semibold text-white">Subtitle</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">Ngôn ngữ nguồn</span>
+              <input className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.source_language} onChange={(event) => updateAdvancedSettings({ source_language: event.target.value })} />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">Ngôn ngữ đích</span>
+              <input className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.target_language} onChange={(event) => updateAdvancedSettings({ target_language: event.target.value })} />
+            </label>
+            <Toggle label="Review subtitle trước render" checked={settings.review_subtitles_before_render} onChange={(value) => updateAdvancedSettings({ review_subtitles_before_render: value })} />
+            <Toggle label="Render ngay sau khi dịch" checked={settings.auto_render_after_translation} onChange={(value) => updateAdvancedSettings({ auto_render_after_translation: value })} />
+            <Toggle label="Burn subtitle vào video" checked={settings.burn_subtitle} onChange={(value) => updateAdvancedSettings({ burn_subtitle: value })} />
+            <Toggle label="Dùng overlay" checked={settings.add_overlay} onChange={(value) => updateAdvancedSettings({ add_overlay: value })} />
+          </div>
+        </GlassCard>
+
+        <GlassCard className="grid gap-4 p-4" strong>
+          <h3 className="font-semibold text-white">Nhận diện giọng nói</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SliderInput label="Dịch thời gian sub" min={-1} max={1} step={0.05} value={settings.asr_subtitle_offset_seconds} onChange={(value) => updateAdvancedSettings({ asr_subtitle_offset_seconds: value })} />
+            <Toggle label="Bật VAD cho giọng nói" checked={settings.asr_vad_filter} onChange={(value) => updateAdvancedSettings({ asr_vad_filter: value })} />
+            <Toggle label="Dùng file .srt đi kèm" checked={settings.use_sidecar_srt} onChange={(value) => updateAdvancedSettings({ use_sidecar_srt: value })} />
+            <Toggle label="Dùng subtitle nhúng" checked={settings.use_embedded_subtitle} onChange={(value) => updateAdvancedSettings({ use_embedded_subtitle: value })} />
+            <Toggle label="Nhận diện giọng nói nếu thiếu subtitle" checked={settings.use_asr_if_no_subtitle} onChange={(value) => updateAdvancedSettings({ use_asr_if_no_subtitle: value })} />
+          </div>
+        </GlassCard>
+
+        <GlassCard className="grid gap-4 p-4" strong>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-white">Nhận diện chữ trên màn hình</h3>
+              <div className={dependencyStatus?.ocr_available ? 'mt-1 text-xs text-emerald-300' : 'mt-1 text-xs text-amber-300'}>{formatOcrDependencyStatus(dependencyStatus)}</div>
+            </div>
+            <Toggle label="Dùng OCR khi cần" checked={settings.use_ocr_if_no_subtitle || settings.use_ocr_if_asr_failed} onChange={(value) => updateAdvancedSettings({ use_ocr_if_no_subtitle: value, use_ocr_if_asr_failed: value })} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">OCR provider</span>
+              <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.ocr_provider} onChange={(event) => updateAdvancedSettings({ ocr_provider: event.target.value })}>
+                <option value="paddleocr">PaddleOCR</option>
+                <option value="easyocr">EasyOCR</option>
+                <option value="mock_ocr">Mock OCR</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">OCR region</span>
+              <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.ocr_region_mode} onChange={(event) => updateAdvancedSettings({ ocr_region_mode: event.target.value })}>
+                <option value="bottom_auto">Bottom auto</option>
+                <option value="middle_lower">Middle lower</option>
+                <option value="full_frame">Full frame</option>
+                <option value="manual">Manual</option>
+              </select>
+            </label>
+            <SliderInput label="Sample FPS" min={0.5} max={5} step={0.5} value={settings.ocr_sample_fps} onChange={(value) => updateAdvancedSettings({ ocr_sample_fps: value })} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SliderInput label="Min OCR confidence" min={0} max={1} step={0.05} value={settings.ocr_min_confidence} onChange={(value) => updateAdvancedSettings({ ocr_min_confidence: value })} />
+            <Toggle label="Ưu tiên chữ trên màn hình" checked={settings.prefer_ocr_over_asr_when_text_visible} onChange={(value) => updateAdvancedSettings({ prefer_ocr_over_asr_when_text_visible: value })} />
+          </div>
+          {settings.ocr_region_mode === 'manual' ? (
+            <div className="grid gap-2 sm:grid-cols-4">
+              {(['x', 'y', 'width', 'height'] as const).map((key) => (
+                <label className="block" key={key}>
+                  <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">{key}</span>
+                  <input
+                    className="h-10 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                    type="number"
+                    min={0}
+                    value={settings.ocr_manual_region?.[key] ?? (key === 'width' ? 1080 : key === 'height' ? 500 : 0)}
+                    onChange={(event) => updateOcrManualRegion(key, Number(event.target.value || 0))}
+                  />
+                </label>
+              ))}
+            </div>
+          ) : null}
+        </GlassCard>
+
+        <GlassCard className="grid gap-4 p-4" strong>
+          <h3 className="font-semibold text-white">Audio và Output</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SliderInput label="Âm lượng nhạc nền" min={0} max={1} step={0.01} value={settings.bgm_volume} onChange={(value) => updateAdvancedSettings({ bgm_volume: value })} />
+            <SliderInput label="Âm lượng audio gốc" min={0} max={1} step={0.01} value={settings.original_audio_volume} onChange={(value) => updateAdvancedSettings({ original_audio_volume: value })} />
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">Visual style</span>
+              <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.visual_style_preset_id} onChange={(event) => updateAdvancedSettings({ visual_style_preset_id: event.target.value })}>
+                {visualStyles.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">Giới hạn số video</span>
+              <input className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" type="number" min={1} value={settings.max_videos ?? ''} onChange={(event) => updateAdvancedSettings({ max_videos: event.target.value ? Number(event.target.value) : null })} />
+            </label>
+          </div>
+        </GlassCard>
+      </>
     );
   }
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-6 px-6 py-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Douyin Reup</h1>
-          <p className="mt-1 text-sm text-muted">
-            Xử lý video Douyin đã tải sẵn trong máy, dịch subtitle sang tiếng Việt và render lại với overlay/nhạc nền.
-          </p>
-        </div>
-        {jobStatus ? (
-          <div className="rounded-md border border-line bg-white px-4 py-3 text-sm">
-            <div className="font-semibold text-ink">{jobStatus.progress}%</div>
-            <div className="text-muted">{jobStatus.current_step}</div>
-          </div>
-        ) : null}
-        <div className="flex rounded-md border border-line bg-white p-1 text-sm">
-          <button
-            className={`rounded px-3 py-1.5 font-semibold ${mode === 'simple' ? 'bg-brand text-white' : 'text-ink'}`}
-            type="button"
-            onClick={() => setMode('simple')}
-          >
-            Simple
-          </button>
-          <button
-            className={`rounded px-3 py-1.5 font-semibold ${mode === 'advanced' ? 'bg-brand text-white' : 'text-ink'}`}
-            type="button"
-            onClick={() => setMode('advanced')}
-          >
-            Advanced
-          </button>
-        </div>
-      </div>
-
-      <ApiErrorBox error={error} />
-      {actionMessage ? <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{actionMessage}</div> : null}
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-        <section className="grid gap-4 rounded-md border border-line bg-white p-5">
-          <h2 className="text-base font-semibold text-ink">Nguồn video</h2>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-ink">Tên project</span>
-            <input
-              className="h-10 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-blue-100"
-              lang="vi"
-              value={projectName}
-              onChange={(event) => setProjectName(event.target.value)}
+    <>
+      <StartWorkflowLayout
+        hero={<WorkflowHero mode={workflowMode} onFocusStart={() => document.getElementById('start-source-folder')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />}
+        main={
+          <>
+            <div id="start-source-folder" />
+            <ApiErrorBox error={error} />
+            {actionMessage ? <div className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">{actionMessage}</div> : null}
+            <WorkflowStepper steps={[
+              { label: 'Source', status: sourceFolder ? 'done' : 'active' },
+              { label: 'Preset', status: selectedPresetCard ? 'done' : 'pending' },
+              { label: 'Output', status: outputFolder ? 'done' : 'pending' },
+              { label: 'Check', status: checklist.some((item) => item.status === 'missing') ? 'pending' : 'done' },
+              { label: 'Start', status: jobStatus && !done ? 'active' : done ? 'done' : 'pending' },
+              { label: 'Export', status: exportPack ? 'done' : 'pending' },
+            ]} />
+            <SourceFolderCard
+              mode={workflowMode}
+              value={sourceFolder}
+              busy={busy && !jobStatus}
+              scanSummary={scanSummary}
+              videos={videos}
+              scanErrors={scanErrors}
+              recentFolders={recentSourceFolders}
+              onBrowse={() => void browseSourceFolder()}
+              onChange={setSourceFolder}
+              onScan={() => void handleScan()}
+              onUseRecent={setSourceFolder}
+              onRemoveRecent={(path) => setRecentSourceFolders((current) => removeRecentFolder(RECENT_SOURCE_KEY, current, path))}
             />
-          </label>
-          <PathInput label="Thư mục video Douyin" value={sourceFolder} onChange={setSourceFolder} required />
-          <PathInput label="Thư mục output" value={outputFolder} onChange={setOutputFolder} required />
-          <PathInput label="Thư mục nhạc nền" value={settings.music_folder || ''} onChange={(value) => updateSettings({ music_folder: value })} />
-
-          <div className="grid gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-ink">Preset</h3>
-              {recommendation ? (
-                <button
-                  className="rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-brand"
-                  type="button"
-                  onClick={() => void handlePresetSelect(recommendation.preset_id)}
-                >
-                  Use recommended: {recommendation.preset_name}
-                </button>
-              ) : null}
-            </div>
-            <div className="grid gap-4">
-              <div>
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Douyin Reup thường</div>
-                <div className="grid gap-3 md:grid-cols-2">{normalPresets.map(renderPresetCard)}</div>
-              </div>
-              {silentPresets.length ? (
-                <div>
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Video không thoại / immersive</div>
-                  <div className="grid gap-3 md:grid-cols-2">{silentPresets.map(renderPresetCard)}</div>
-                </div>
-              ) : null}
-            </div>
-            {recommendation ? (
-              <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
-                Recommended preset: <span className="font-semibold">{recommendation.preset_name}</span>. {recommendation.reason}
-              </div>
+            <StartPresetSelector
+              mode={workflowMode}
+              presets={startPresetCards}
+              selectedPresetId={selectedPresetId}
+              recommendedPreset={recommendedPresetCard}
+              recommendationReason={recommendation?.reason ?? recommendationReason(workflowMode, sourceFolder, recommendedPresetCard)}
+              onSelect={(presetId) => void handlePresetSelect(presetId)}
+            />
+            <OutputFolderCard
+              mode={workflowMode}
+              outputFolder={outputFolder}
+              projectName={projectName}
+              recentFolders={recentOutputFolders}
+              onBrowse={() => void browseOutputFolder()}
+              onOutputFolderChange={setOutputFolder}
+              onProjectNameChange={setProjectName}
+              onUseRecent={setOutputFolder}
+              onRemoveRecent={(path) => setRecentOutputFolders((current) => removeRecentFolder(RECENT_OUTPUT_KEY, current, path))}
+            />
+            <MusicFolderCard
+              musicFolder={settings.music_folder || ''}
+              addMusic={initialWorkflow === 'silent' ? settings.add_bgm_for_silent_video : settings.add_bgm}
+              recentFolders={recentMusicFolders}
+              onAddMusicChange={(value) => updateSettings(initialWorkflow === 'silent' ? { add_bgm_for_silent_video: value, add_bgm: value } : { add_bgm: value })}
+              onBrowse={() => void browseMusicFolder()}
+              onMusicFolderChange={(value) => updateSettings({ music_folder: value })}
+              onUseRecent={(path) => updateSettings({ music_folder: path })}
+              onRemoveRecent={(path) => setRecentMusicFolders((current) => removeRecentFolder(RECENT_MUSIC_KEY, current, path))}
+            />
+            {workflowMode === 'silent_immersive' ? (
+              <ProductContextCard
+                value={silentProductContext}
+                industries={silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES}
+                tone={settings.silent_caption_tone}
+                busy={busy || videos.length === 0}
+                hasPreview={Boolean(captionPreview)}
+                onChange={updateSilentProductContext}
+                onToneChange={(value) => updateSettings({ silent_caption_tone: value })}
+                onPreview={() => void handleGenerateCaptionPreview()}
+                onRegenerate={() => void handleRegenerateCaptionPreview()}
+                onCreateReview={() => void handleCreateCaptionReviewDocument()}
+              />
             ) : null}
-            {isSilentPreset ? (
-              <div className="grid gap-3 rounded-md border border-emerald-100 bg-emerald-50 p-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-ink">Video không thoại / immersive</h3>
-                  <p className="mt-1 text-xs text-emerald-900">
-                    Phù hợp với video chỉ có nhạc hoặc tiếng thao tác. Tool sẽ tạo caption tiếng Việt theo cảnh/OCR thay vì phụ thuộc ASR.
-                  </p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1 block text-sm font-medium text-ink">Tên sản phẩm</span>
-                    <input
-                      className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
-                      lang="vi"
-                      value={silentProductContext.product_name}
-                      onChange={(event) => updateSilentProductContext({ product_name: event.target.value })}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-sm font-medium text-ink">Ngành hàng</span>
-                    <select
-                      className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
-                      lang="vi"
-                      value={silentProductContext.industry}
-                      onChange={(event) => updateSilentProductContext({ industry: event.target.value })}
-                    >
-                      {(silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES).map((industry) => (
-                        <option key={industry.id} value={industry.id}>{industry.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-ink">Caption tone</span>
-                  <select
-                    className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
-                    value={settings.silent_caption_tone}
-                    onChange={(event) => updateSettings({ silent_caption_tone: event.target.value })}
-                  >
-                    <option value="natural">Natural</option>
-                    <option value="cute">Cute</option>
-                    <option value="clean_review">Clean Review</option>
-                    <option value="sales_light">Sales Light</option>
-                    <option value="chill">Chill</option>
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-ink">Điểm nổi bật</span>
-                  <textarea
-                    className="min-h-20 w-full rounded-md border border-line bg-white px-3 py-2 text-sm"
-                    lang="vi"
-                    value={silentProductContext.features}
-                    onChange={(event) => updateSilentProductContext({ features: event.target.value })}
-                    placeholder="Mỗi dòng là một điểm nổi bật"
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-ink">CTA</span>
-                  <input
-                    className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
-                    lang="vi"
-                    value={silentProductContext.cta}
-                    onChange={(event) => updateSilentProductContext({ cta: event.target.value })}
-                  />
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    className="rounded-md border border-emerald-700 px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
-                    type="button"
-                    disabled={busy || videos.length === 0}
-                    onClick={() => void handleGenerateCaptionPreview()}
-                  >
-                    Generate captions preview
-                  </button>
-                  {captionPreview ? (
-                    <>
-                      <button
-                        className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-ink hover:border-brand disabled:opacity-50"
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void handleRegenerateCaptionPreview()}
-                      >
-                        Regenerate captions
-                      </button>
-                      <button
-                        className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void handleCreateCaptionReviewDocument()}
-                      >
-                        Create review document
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-                {captionPreview ? (
-                  <div className="border-t border-emerald-200 pt-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h4 className="text-sm font-semibold text-ink">Generated captions preview</h4>
-                      <span className="text-xs text-muted">
-                        {captionPreview.plan.caption_generation.industry} · {captionPreview.plan.caption_generation.tone} · quality {Math.round(captionPreview.plan.caption_generation.average_quality_score * 100)}%
-                      </span>
-                    </div>
-                    <div className="mt-3 grid gap-2 border-y border-emerald-200 py-3 text-xs text-ink sm:grid-cols-3">
-                      <div><span className="font-semibold">Recommended industry:</span> {formatVisualTag(captionPreview.plan.visual_tagging.recommended_industry)}</div>
-                      <div><span className="font-semibold">Confidence:</span> {Math.round(captionPreview.plan.visual_tagging.average_confidence * 100)}%</div>
-                      <div><span className="font-semibold">Strategy:</span> {formatSilentStrategy(captionPreview.plan.visual_tagging.recommended_strategy)}</div>
-                      <div className="sm:col-span-3 text-muted">
-                        Reason: {formatTagSourceSummary(captionPreview.plan.visual_tagging.tag_sources)}
-                      </div>
-                      <div className="flex flex-wrap items-end gap-2 sm:col-span-3">
-                        <span className="font-semibold">Use another industry:</span>
-                        <select
-                          className="h-9 rounded-md border border-line bg-white px-2 text-xs"
-                          value={silentProductContext.industry}
-                          onChange={(event) => updateSilentProductContext({ industry: event.target.value })}
-                        >
-                          {(silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES).map((industry) => (
-                            <option key={industry.id} value={industry.id}>{industry.name}</option>
-                          ))}
-                        </select>
-                        <button className="rounded-md border border-line bg-white px-3 py-2 font-semibold text-ink disabled:opacity-50" type="button" disabled={busy} onClick={() => void handleRegenerateCaptionPreview()}>
-                          Apply and regenerate captions
-                        </button>
-                      </div>
-                    </div>
-                    <div className="mt-3 grid gap-3">
-                      {captionPreview.plan.visual_segments.map((segment, segmentIndex) => {
-                        const caption = captionPreview.plan.captions.find((item) => item.segment_id === segment.id)
-                          ?? captionPreview.plan.captions[segmentIndex];
-                        return (
-                          <div key={segment.id} className="rounded-md border border-line bg-white p-3 text-xs text-ink">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div>
-                                <div className="font-semibold">Segment {segmentIndex + 1} · {formatCaptionTime(segment.start)} → {formatCaptionTime(segment.end)}</div>
-                                <div className="mt-1 text-muted">Type: {formatVisualTag(segment.segment_type)} · Confidence: {Math.round(segment.visual_tag_confidence * 100)}%</div>
-                              </div>
-                              <button className="rounded-md border border-line px-2 py-1 font-semibold text-ink" type="button" onClick={() => setEditingSegmentId((current) => current === segment.id ? null : segment.id)}>
-                                {editingSegmentId === segment.id ? 'Close editor' : 'Edit tags'}
-                              </button>
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {segment.visual_tags.map((tag) => (
-                                <span key={`${segment.id}-${tag.tag}`} className="rounded bg-slate-100 px-2 py-1" title={`${tag.source}: ${Math.round(tag.confidence * 100)}%`}>
-                                  {tag.tag}
-                                </span>
-                              ))}
-                            </div>
-                            {caption ? (
-                              <div className="mt-3 border-t border-line pt-2">
-                                <div className={caption.quality_needs_review ? 'font-semibold text-amber-800' : 'font-semibold'}>{caption.text}</div>
-                                <div className="mt-1 text-muted">{caption.selection_reason || `Caption picked from: ${caption.selected_industry || 'general_product'} + ${caption.selected_intent || 'hook'}`}</div>
-                              </div>
-                            ) : null}
-                            {editingSegmentId === segment.id ? (
-                              <SegmentTagEditor
-                                segment={segment}
-                                vocabulary={visualTagVocabulary}
-                                disabled={busy}
-                                onSave={(payload) => handleSaveSegmentTags(segment.id, payload)}
-                                onRegenerate={handleRegenerateCaptionPreview}
-                              />
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+            {captionPreview ? (
+              <SilentPlanPreview
+                preview={captionPreview}
+                editingSegmentId={editingSegmentId}
+                onEditSegment={setEditingSegmentId}
+                onRegenerate={() => void handleRegenerateCaptionPreview()}
+                disabled={busy}
+                renderEditor={(segmentId) => {
+                  const segment = captionPreview.plan.visual_segments.find((item) => item.id === segmentId);
+                  return segment ? <SegmentTagEditor segment={segment} vocabulary={visualTagVocabulary} disabled={busy} onSave={(payload) => handleSaveSegmentTags(segment.id, payload)} onRegenerate={handleRegenerateCaptionPreview} /> : null;
+                }}
+              />
             ) : null}
-          </div>
-
-          {mode === 'advanced' ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-ink">Ngôn ngữ nguồn</span>
-              <input
-                className="h-10 w-full rounded-md border border-line px-3 text-sm"
-                value={settings.source_language}
-                onChange={(event) => updateSettings({ source_language: event.target.value })}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-ink">Ngôn ngữ đích</span>
-              <input
-                className="h-10 w-full rounded-md border border-line px-3 text-sm"
-                value={settings.target_language}
-                onChange={(event) => updateSettings({ target_language: event.target.value })}
-              />
-            </label>
-            </div>
-          ) : null}
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-ink">Visual style</span>
-              <select
-                className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
-                value={settings.visual_style_preset_id}
-                onChange={(event) => updateSettings({ visual_style_preset_id: event.target.value })}
-              >
-                {visualStyles.map((preset) => (
-                  <option key={preset.id} value={preset.id}>
-                    {preset.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-ink">Giới hạn số video</span>
-              <input
-                className="h-10 w-full rounded-md border border-line px-3 text-sm"
-                type="number"
-                min={1}
-                value={settings.max_videos ?? ''}
-                onChange={(event) =>
-                  updateSettings({ max_videos: event.target.value ? Number(event.target.value) : null })
-                }
-              />
-            </label>
-          </div>
-
-          {mode === 'advanced' ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SliderInput
-              label="Âm lượng nhạc nền"
-              min={0}
-              max={1}
-              step={0.01}
-              value={settings.bgm_volume}
-              onChange={(value) => updateSettings({ bgm_volume: value })}
+          </>
+        }
+        side={
+          <>
+            <WorkflowPreviewPanel mode={workflowMode} preset={selectedPresetCard} scanSummary={scanSummary} jobStatus={jobStatus} />
+            <StartChecklistCard items={checklist} />
+            <StartValidationAlert messages={validationMessages} />
+            <StartBatchButton
+              disabled={startDisabled}
+              loading={busy && !jobStatus}
+              label={selectedPresetCard?.autoRender ? 'Bắt đầu xử lý nhanh' : 'Bắt đầu xử lý'}
+              job={jobStartedView}
+              onStart={requestStart}
             />
-            <SliderInput
-              label="Âm lượng audio gốc"
-              min={0}
-              max={1}
-              step={0.01}
-              value={settings.original_audio_volume}
-              onChange={(value) => updateSettings({ original_audio_volume: value })}
-            />
-          </div>
-          ) : null}
-
-          {mode === 'advanced' ? (
-            <>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SliderInput
-              label="Dịch thời gian sub ASR"
-              min={-1}
-              max={1}
-              step={0.05}
-              value={settings.asr_subtitle_offset_seconds}
-              onChange={(value) => updateSettings({ asr_subtitle_offset_seconds: value })}
-            />
-            <Toggle
-              label="Bật VAD cho ASR"
-              checked={settings.asr_vad_filter}
-              onChange={(value) => updateSettings({ asr_vad_filter: value })}
-            />
-          </div>
-
-          <div className="grid gap-3 rounded-md border border-line bg-surface p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold text-ink">OCR hard subtitle</h3>
-                <div className={dependencyStatus?.ocr_available ? 'text-xs text-green-700' : 'text-xs text-amber-700'}>
-                  {formatOcrDependencyStatus(dependencyStatus)}
-                </div>
-              </div>
-              <Toggle
-                label="Use OCR if no subtitle / ASR failed"
-                checked={settings.use_ocr_if_no_subtitle || settings.use_ocr_if_asr_failed}
-                onChange={(value) => updateSettings({ use_ocr_if_no_subtitle: value, use_ocr_if_asr_failed: value })}
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-ink">OCR provider</span>
-                <select
-                  className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
-                  value={settings.ocr_provider}
-                  onChange={(event) => updateSettings({ ocr_provider: event.target.value })}
-                >
-                  <option value="paddleocr">PaddleOCR</option>
-                  <option value="easyocr">EasyOCR</option>
-                  <option value="mock_ocr">Mock OCR</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-ink">OCR region</span>
-                <select
-                  className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm"
-                  value={settings.ocr_region_mode}
-                  onChange={(event) => updateSettings({ ocr_region_mode: event.target.value })}
-                >
-                  <option value="bottom_auto">Bottom auto</option>
-                  <option value="middle_lower">Middle lower</option>
-                  <option value="full_frame">Full frame</option>
-                  <option value="manual">Manual</option>
-                </select>
-              </label>
-              <SliderInput
-                label="Sample FPS"
-                min={0.5}
-                max={5}
-                step={0.5}
-                value={settings.ocr_sample_fps}
-                onChange={(value) => updateSettings({ ocr_sample_fps: value })}
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <SliderInput
-                label="Min OCR confidence"
-                min={0}
-                max={1}
-                step={0.05}
-                value={settings.ocr_min_confidence}
-                onChange={(value) => updateSettings({ ocr_min_confidence: value })}
-              />
-              <Toggle
-                label="Prefer OCR over ASR"
-                checked={settings.prefer_ocr_over_asr_when_text_visible}
-                onChange={(value) => updateSettings({ prefer_ocr_over_asr_when_text_visible: value })}
-              />
-            </div>
-            {settings.ocr_region_mode === 'manual' ? (
-              <div className="grid gap-2 sm:grid-cols-4">
-                {(['x', 'y', 'width', 'height'] as const).map((key) => (
-                  <label className="block" key={key}>
-                    <span className="mb-1 block text-xs font-semibold uppercase text-muted">{key}</span>
-                    <input
-                      className="h-10 w-full rounded-md border border-line px-3 text-sm"
-                      type="number"
-                      min={0}
-                      value={settings.ocr_manual_region?.[key] ?? (key === 'width' ? 1080 : key === 'height' ? 500 : 0)}
-                      onChange={(event) => updateOcrManualRegion(key, Number(event.target.value || 0))}
-                    />
-                  </label>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="grid gap-2 text-sm text-ink sm:grid-cols-2">
-            <Toggle label="Dùng file .srt đi kèm" checked={settings.use_sidecar_srt} onChange={(value) => updateSettings({ use_sidecar_srt: value })} />
-            <Toggle label="Dùng subtitle nhúng" checked={settings.use_embedded_subtitle} onChange={(value) => updateSettings({ use_embedded_subtitle: value })} />
-            <Toggle label="ASR nếu không có subtitle" checked={settings.use_asr_if_no_subtitle} onChange={(value) => updateSettings({ use_asr_if_no_subtitle: value })} />
-            <Toggle label="Review subtitle trước render" checked={settings.review_subtitles_before_render} onChange={(value) => updateSettings({ review_subtitles_before_render: value })} />
-            <Toggle label="Render ngay sau khi dịch" checked={settings.auto_render_after_translation} onChange={(value) => updateSettings({ auto_render_after_translation: value })} />
-            <Toggle label="Burn subtitle vào video" checked={settings.burn_subtitle} onChange={(value) => updateSettings({ burn_subtitle: value })} />
-            <Toggle label="Dùng overlay" checked={settings.add_overlay} onChange={(value) => updateSettings({ add_overlay: value })} />
-          </div>
-
-            </>
-          ) : null}
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand disabled:text-muted"
-              type="button"
-              disabled={!sourceFolder.trim() || busy}
-              onClick={() => void handleScan()}
+            <StartAdvancedSettingsDrawer
+              open={advancedOpen}
+              custom={mode === 'advanced'}
+              onOpen={() => setAdvancedOpen(true)}
+              onClose={() => setAdvancedOpen(false)}
+              onReset={() => void handlePresetSelect(selectedPresetId)}
             >
-              {busy ? 'Đang xử lý...' : 'Scan video'}
-            </button>
-            <button
-              className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white disabled:bg-blue-200"
-              type="button"
-              disabled={!canStart}
-              onClick={() => void (mode === 'simple' ? handleOneClickStart() : handleStart())}
-            >
-              {mode === 'simple' ? 'Start One-click Batch' : usesManualSubtitleReview ? 'Dịch và mở review subtitle' : 'Bắt đầu Douyin Reup'}
-            </button>
+              {renderAdvancedSettings()}
+            </StartAdvancedSettingsDrawer>
+          </>
+        }
+      />
+
+      <GlassModal open={riskyConfirmOpen} title="Xác nhận preset xử lý nhanh" onClose={() => setRiskyConfirmOpen(false)}>
+        <div className="grid gap-4 text-sm leading-6 text-slate-300">
+          <p>Preset này sẽ xử lý nhanh và có thể bỏ qua bước review phụ đề. Bạn vẫn có thể kiểm tra video ở Results sau khi render.</p>
+          <div className="flex flex-wrap gap-2">
+            <GlassButton variant="primary" onClick={() => void startCurrentWorkflow()}>Tiếp tục</GlassButton>
+            <GlassButton variant="secondary" onClick={() => { setRiskyConfirmOpen(false); void handlePresetSelect(initialWorkflow === 'silent' ? 'silent_chill_immersive' : 'safe_review'); }}>
+              {initialWorkflow === 'silent' ? 'Đổi sang Chill Immersive' : 'Đổi sang Safe Review'}
+            </GlassButton>
           </div>
-        </section>
-
-        <aside className="grid gap-4">
-          <section className="rounded-md border border-line bg-white p-5">
-            <h2 className="text-base font-semibold text-ink">Tiến trình</h2>
-            {jobStatus ? (
-              <div className="mt-4 grid gap-3">
-                <div className="h-2 overflow-hidden rounded-full bg-surface">
-                  <div className="h-full bg-brand" style={{ width: `${jobStatus.progress}%` }} />
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-sm">
-                  <Stat label="Hoàn thành" value={jobStatus.completed_outputs} />
-                  <Stat label="Lỗi" value={jobStatus.failed_outputs} />
-                  <Stat label="Tổng" value={jobStatus.total_outputs} />
-                </div>
-                <div className="max-h-64 overflow-auto rounded-md bg-surface p-3 text-xs text-muted">
-                  {jobStatus.logs.length ? (
-                    jobStatus.logs.map((log, index) => (
-                      <div key={`${log.created_at}-${index}`} className="border-b border-line py-2 last:border-b-0">
-                        <span className="font-semibold text-ink">{log.level.toUpperCase()}</span> {log.message}
-                      </div>
-                    ))
-                  ) : (
-                    <div>Chưa có log.</div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-muted">Chưa có job nào đang chạy.</p>
-            )}
-          </section>
-
-          <section className="rounded-md border border-line bg-white p-5">
-            <h2 className="text-base font-semibold text-ink">Config JSON</h2>
-            <pre className="mt-3 max-h-[420px] overflow-auto rounded-md bg-surface p-3 text-xs text-muted">
-              {JSON.stringify({ project_name: projectName, source_folder: sourceFolder, output_folder: outputFolder, settings }, null, 2)}
-            </pre>
-          </section>
-        </aside>
-      </div>
-
+        </div>
+      </GlassModal>
       <section className="rounded-md border border-line bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-ink">Video đã scan</h2>
@@ -1396,7 +1345,7 @@ export default function DouyinReupPage() {
           />}
         </section>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -1530,6 +1479,174 @@ function FinalQAPanel({
       </div>
     </div>
   );
+}
+
+function toStartPresetViewModel(
+  preset: DouyinReupPreset,
+  mode: StartWorkflowMode,
+  recommended: boolean,
+): StartPresetViewModel {
+  return {
+    id: preset.id,
+    name: presetDisplayName(preset),
+    description: shortPresetDescription(preset),
+    badge: recommended ? undefined : presetBadge(preset),
+    recommended,
+    reviewRequired: Boolean(preset.settings.review_subtitles_before_render || preset.settings.silent_review_before_render),
+    autoRender: Boolean(preset.settings.auto_render_after_translation || preset.id === 'fast_auto' || preset.id === 'silent_sales_recut'),
+    mode,
+  };
+}
+
+function presetDisplayName(preset: DouyinReupPreset): string {
+  const names: Record<string, string> = {
+    safe_review: 'Safe Review',
+    fast_auto: 'Fast Auto',
+    ocr_priority: 'OCR Priority',
+    voice_priority: 'Voice Priority',
+    clean_subtitle_only: 'Clean Subtitle Only',
+    music_recut: 'Music Recut',
+    silent_chill_immersive: 'Chill Immersive',
+    silent_product_voiceover: 'Product Voiceover',
+    silent_sales_recut: 'Sales Recut',
+  };
+  return names[preset.id] ?? preset.name;
+}
+
+function shortPresetDescription(preset: DouyinReupPreset): string {
+  const descriptions: Record<string, string> = {
+    safe_review: 'Dịch xong cho bạn kiểm tra trước khi render.',
+    fast_auto: 'Tự dịch và render nhanh.',
+    ocr_priority: 'Dành cho video có nhiều chữ Trung trên màn hình.',
+    voice_priority: 'Dành cho video có lời thoại tiếng Trung rõ.',
+    clean_subtitle_only: 'Chỉ tạo phụ đề sạch, ít hiệu ứng.',
+    music_recut: 'Giữ sub, thêm nhạc nền nổi bật hơn.',
+    silent_chill_immersive: 'Giữ vibe gốc, thêm caption Việt nhẹ.',
+    silent_product_voiceover: 'Tạo voice review tiếng Việt từ cảnh quay.',
+    silent_sales_recut: 'Caption ngắn, có hook và CTA.',
+  };
+  return descriptions[preset.id] ?? preset.description;
+}
+
+function presetBadge(preset: DouyinReupPreset): string {
+  const badges: Record<string, string> = {
+    safe_review: 'Recommended',
+    fast_auto: 'Fast',
+    ocr_priority: 'OCR',
+    voice_priority: 'Voice',
+    clean_subtitle_only: 'Clean',
+    music_recut: 'Music',
+    silent_chill_immersive: 'Recommended',
+    silent_product_voiceover: 'Voice',
+    silent_sales_recut: 'Sales',
+  };
+  return badges[preset.id] ?? preset.ui_badge;
+}
+
+function pickRecommendedPresetId(
+  mode: StartWorkflowMode,
+  sourceFolder: string,
+  recommendation: DouyinPresetRecommendationResponse | null,
+  presets: DouyinReupPreset[],
+): string {
+  const presetIds = new Set(presets.map((preset) => preset.id));
+  const lower = sourceFolder.toLowerCase();
+  if (mode === 'silent_immersive') return presetIds.has('silent_chill_immersive') ? 'silent_chill_immersive' : presets.find((preset) => preset.id.startsWith('silent_'))?.id ?? '';
+  if (recommendation?.preset_id && presetIds.has(recommendation.preset_id) && !recommendation.preset_id.startsWith('silent_')) return recommendation.preset_id;
+  if (/(ocr|subtitle|sub|chinese|text|trung|zh)/i.test(lower) && presetIds.has('ocr_priority')) return 'ocr_priority';
+  if (/(fast|quick|nhanh)/i.test(lower) && presetIds.has('fast_auto')) return 'fast_auto';
+  return presetIds.has('safe_review') ? 'safe_review' : presets.find((preset) => !preset.id.startsWith('silent_'))?.id ?? '';
+}
+
+function recommendationReason(
+  mode: StartWorkflowMode,
+  sourceFolder: string,
+  preset?: StartPresetViewModel,
+): string {
+  if (!preset) return '';
+  if (mode === 'silent_immersive') return 'Silent Mode nên bắt đầu bằng preset nhẹ, giữ vibe gốc và cho bạn review caption.';
+  if (preset.id === 'ocr_priority') return 'Tên folder có tín hiệu chữ/subtitle, nên ưu tiên nhận diện chữ trên màn hình.';
+  if (preset.id === 'fast_auto') return 'Tên folder có tín hiệu cần xử lý nhanh, preset này bỏ qua bớt bước review.';
+  if (sourceFolder.trim()) return 'An toàn hơn vì bạn có thể kiểm tra phụ đề trước khi render.';
+  return 'Preset mặc định an toàn cho batch mới.';
+}
+
+function buildChecklist({
+  sourceFolder,
+  outputFolder,
+  selectedPreset,
+  scanSummary,
+  scanErrors,
+  musicFolder,
+  backendReady,
+  autoRender,
+}: {
+  sourceFolder: string;
+  outputFolder: string;
+  selectedPreset?: StartPresetViewModel;
+  scanSummary: StartScanSummary | null;
+  scanErrors: string[];
+  musicFolder: string;
+  backendReady: boolean;
+  autoRender: boolean;
+}): StartChecklistItem[] {
+  return [
+    {
+      id: 'source',
+      label: 'Folder video',
+      status: sourceFolder.trim() ? (scanErrors.length ? 'missing' : scanSummary?.invalid ? 'warning' : 'ok') : 'missing',
+      message: sourceFolder.trim()
+        ? scanErrors.length
+          ? scanErrors[0]
+          : scanSummary
+          ? `${scanSummary.valid} video hợp lệ${scanSummary.invalid ? `, ${scanSummary.invalid} file lỗi` : ''}.`
+          : 'Có folder, hãy scan để kiểm tra nhanh.'
+        : 'Chưa chọn folder video.',
+    },
+    {
+      id: 'preset',
+      label: 'Preset',
+      status: selectedPreset ? (autoRender ? 'warning' : 'ok') : 'missing',
+      message: selectedPreset ? selectedPreset.name : 'Chưa chọn preset.',
+    },
+    {
+      id: 'output',
+      label: 'Output folder',
+      status: outputFolder.trim() ? 'ok' : 'missing',
+      message: outputFolder.trim() ? 'Tool sẽ kiểm tra quyền ghi khi bắt đầu xử lý.' : 'Chưa chọn output folder.',
+    },
+    {
+      id: 'music',
+      label: 'Music',
+      status: musicFolder.trim() ? 'ok' : 'warning',
+      message: musicFolder.trim() ? 'Đã chọn music folder.' : 'Chưa chọn nhạc nền, tool vẫn có thể giữ âm thanh gốc.',
+    },
+    {
+      id: 'backend',
+      label: 'Backend',
+      status: backendReady ? 'ok' : 'warning',
+      message: backendReady ? 'Connected.' : 'Backend sẽ được kiểm tra lại khi start.',
+    },
+  ];
+}
+
+function buildValidationMessages(
+  checklist: StartChecklistItem[],
+  preset: StartPresetViewModel | undefined,
+  dependencyStatus: SystemDependencyStatusResponse | null,
+  scanSummary: StartScanSummary | null,
+): StartValidationMessage[] {
+  const messages: StartValidationMessage[] = [];
+  checklist
+    .filter((item) => item.status === 'missing')
+    .forEach((item) => messages.push({ id: `missing-${item.id}`, tone: 'error', message: item.message || `${item.label} đang thiếu.` }));
+  if (!dependencyStatus) messages.push({ id: 'backend', tone: 'warning', message: 'Backend đang offline hoặc chưa phản hồi. Hãy khởi động backend rồi thử lại.' });
+  if (scanSummary?.invalid) messages.push({ id: 'scan-invalid', tone: 'warning', message: `Folder có ${scanSummary.invalid} file không đọc được. Tool sẽ bỏ qua hoặc bạn có thể kiểm tra lại.` });
+  if (preset?.autoRender) messages.push({ id: 'auto-render', tone: 'warning', message: `${preset.name} có thể bỏ qua bước review phụ đề.` });
+  if (preset?.id === 'ocr_priority' && dependencyStatus && !dependencyStatus.ocr_available) {
+    messages.push({ id: 'ocr', tone: 'warning', message: 'OCR Priority cần OCR provider. Nếu OCR chưa sẵn sàng, tool có thể fallback hoặc báo lỗi.' });
+  }
+  return messages.slice(0, 4);
 }
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {

@@ -755,6 +755,14 @@ Known limitations: QA chi la rule-based; checker chua OCR lai final video; profi
 
 Silent Mode xu ly video khong co loi thoai ro rang theo flow: speech detection -> visual segments -> OCR neu co chu Trung -> caption Viet -> review tuy chon -> voiceover tuy chon -> render -> Final QA -> Export Pack.
 
+Release candidate: `Silent Mode v1.0.0-rc1`.
+
+```powershell
+python -m app.tools.silent_mode_v1_rc_test --config ../examples/silent_mode_v1_rc/configs/silent_v1_chill_immersive.json
+```
+
+Them `--mock-ocr --mock-tts` de test nhe, hoac `--auto-render --final-qa --export-pack` de chay day du. Runner tiep tuc batch khi mot video loi va tao `job_log.json`, `douyin_reup_summary.json`, `silent_mode_summary.json`.
+
 ```txt
 POST /api/silent-reup/detect
 POST /api/silent-reup/plan

@@ -9,6 +9,7 @@ import os
 import uvicorn
 
 from app.api import create_app
+from app.local_app import LocalConfigService
 from app.utils.dependency_manager import (
     DEFAULT_OCR_PROVIDER,
     RuntimeDependencyReport,
@@ -25,6 +26,14 @@ logger = get_logger(__name__)
 def main() -> int:
     load_local_env()
     configure_logging()
+    local_config = LocalConfigService().load_config()
+    host = local_config.backend_host
+    preferred_port = int(os.getenv("AUTO_TOOL_PORT", str(local_config.backend_port)))
+    if _strict_port_enabled() and not _port_available(preferred_port):
+        logger.error("Port %s is already in use. Stop the existing server and try again.", preferred_port)
+        return 1
+    port = _find_available_port(preferred_port)
+
     try:
         report = ensure_runtime_dependencies(auto_install=None, include_piper=True)
     except Exception as exc:
@@ -43,11 +52,8 @@ def main() -> int:
         warmup_ocr_models=True,
     )
 
-    host = "127.0.0.1"
-    preferred_port = int(os.getenv("AUTO_TOOL_PORT", "8000"))
-    port = _find_available_port(preferred_port)
     url = f"http://{host}:{port}"
-    if _open_browser_enabled():
+    if _open_browser_enabled(local_config.auto_open_browser):
         threading.Thread(target=_open_browser, args=(url,), daemon=True).start()
 
     logger.info("Starting Auto Tool at %s", url)
@@ -74,8 +80,13 @@ def _port_available(port: int) -> bool:
         return sock.connect_ex(("127.0.0.1", port)) != 0
 
 
-def _open_browser_enabled() -> bool:
-    value = os.getenv("AUTO_TOOL_OPEN_BROWSER", "1").strip().lower()
+def _open_browser_enabled(default: bool = True) -> bool:
+    value = os.getenv("AUTO_TOOL_OPEN_BROWSER", "1" if default else "0").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def _strict_port_enabled() -> bool:
+    value = os.getenv("AUTO_TOOL_STRICT_PORT", "0").strip().lower()
     return value not in {"0", "false", "no", "off"}
 
 

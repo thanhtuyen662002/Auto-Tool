@@ -1,0 +1,23 @@
+{
+  "document_id": "d78dd199-26d4-4af4-b227-c6ab940601fa",
+  "total_requests": 1,
+  "suggestions_created": 1,
+  "suggestions_applied": 1,
+  "auto_applied": 0,
+  "average_score_before": 0.65,
+  "average_score_after": 1.0,
+  "average_quality_improvement": 0.35,
+  "applied_items": [
+    {
+      "line_index": 2,
+      "suggestion_id": "ec6c2e0e-4138-4fb2-b5bb-31f3d9bb1bd5",
+      "auto_applied": false,
+      "quality_score_before": 0.65,
+      "quality_score_after": 1.0,
+      "applied_at": "2026-06-12T10:40:05"
+    }
+  ],
+  "warnings": [
+    "AI rewrite unavailable, used rule-based fallback."
+  ]
+}

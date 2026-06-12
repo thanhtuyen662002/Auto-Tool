@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
-import { getAppSettings, getGoogleCloudTTSVoices, saveAppSettings } from '../api/client';
+import { CheckCircle2, Cpu, Info, KeyRound } from 'lucide-react';
+import { getAppSettings, getGoogleCloudTTSVoices, getSystemDependencies, saveAppSettings } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
+import GlassBadge from '../components/glass/GlassBadge';
+import GlassCard from '../components/glass/GlassCard';
 import PathInput from '../components/PathInput';
 import TextArea from '../components/TextArea';
 import TextInput from '../components/TextInput';
-import type { AppSettings } from '../types/project';
+import type { AppSettings, SystemDependencyStatusResponse } from '../types/project';
 
 const EMPTY_SETTINGS: AppSettings = {
   gemini_api_keys: [],
@@ -20,6 +23,9 @@ export default function AppSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingVoices, setTestingVoices] = useState(false);
+  const [dependencies, setDependencies] = useState<SystemDependencyStatusResponse | null>(null);
+  const [defaultOutputFolder, setDefaultOutputFolder] = useState(() => localStorage.getItem('auto-tool.default-output-folder') || './examples/outputs');
+  const [defaultBgmFolder, setDefaultBgmFolder] = useState(() => localStorage.getItem('auto-tool.default-bgm-folder') || '');
 
   useEffect(() => {
     getAppSettings()
@@ -29,6 +35,7 @@ export default function AppSettingsPage() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Không thể tải cài đặt chung.'))
       .finally(() => setLoading(false));
+    getSystemDependencies().then(setDependencies).catch(() => setDependencies(null));
   }, []);
 
   function update(patch: Partial<AppSettings>) {
@@ -42,6 +49,8 @@ export default function AppSettingsPage() {
     setMessage(null);
     try {
       const saved = await saveAppSettings(cleanSettings(settings));
+      localStorage.setItem('auto-tool.default-output-folder', defaultOutputFolder.trim());
+      localStorage.setItem('auto-tool.default-bgm-folder', defaultBgmFolder.trim());
       setSettings(normalizeSettings(saved));
       setMessage('Đã lưu cài đặt chung.');
     } catch (err) {
@@ -71,7 +80,7 @@ export default function AppSettingsPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-6">
+      <main className="studio-page">
         <div className="rounded-lg border border-line bg-white p-5 text-sm text-muted shadow-panel">
           Đang tải cài đặt chung...
         </div>
@@ -80,7 +89,7 @@ export default function AppSettingsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-6">
+    <main className="studio-page">
       <div className="mb-5">
         <h1 className="text-2xl font-semibold text-ink">Cài đặt chung</h1>
         <p className="mt-1 text-sm text-muted">
@@ -96,7 +105,15 @@ export default function AppSettingsPage() {
           </div>
         ) : null}
 
-        <section className="rounded-lg border border-line bg-white p-5 shadow-panel">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <GlassCard className="p-5" strong><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Cpu size={18} className="text-cyan-200" /><h2 className="font-semibold text-white">Hệ thống xử lý</h2></div><GlassBadge variant={dependencies?.ffmpeg_path ? 'success' : 'warning'}>{dependencies?.ffmpeg_path ? 'Ready' : 'Check setup'}</GlassBadge></div><div className="mt-4 grid gap-2"><Dependency label="FFmpeg" ready={Boolean(dependencies?.ffmpeg_path)} /><Dependency label="ffprobe" ready={Boolean(dependencies?.ffprobe_path)} /><Dependency label={`OCR ${dependencies?.ocr_provider || ''}`} ready={Boolean(dependencies?.ocr_available)} /><Dependency label="Piper TTS" ready={Boolean(dependencies?.piper_path && dependencies?.piper_model_path)} /></div></GlassCard>
+          <GlassCard className="p-5" strong><div className="flex items-center gap-2"><Info size={18} className="text-violet-200" /><h2 className="font-semibold text-white">Mặc định workflow</h2></div><div className="mt-4 grid gap-4"><PathInput label="Thư mục output mặc định" value={defaultOutputFolder} onChange={setDefaultOutputFolder} /><PathInput label="Thư mục BGM mặc định" value={defaultBgmFolder} onChange={setDefaultBgmFolder} /></div></GlassCard>
+        </div>
+
+        <details className="glass-card-strong p-5">
+          <summary className="flex cursor-pointer items-center gap-2 font-semibold text-white"><KeyRound size={17} className="text-amber-200" /> Cấu hình kỹ thuật nâng cao</summary>
+          <div className="mt-5 grid gap-5">
+          <section className="rounded-md border border-white/10 bg-black/10 p-5">
           <h2 className="mb-3 text-base font-semibold text-ink">Gemini</h2>
           <TextArea
             label="Danh sách Gemini API key"
@@ -114,9 +131,9 @@ export default function AppSettingsPage() {
           <p className="mt-2 text-xs text-muted">
             Mỗi dòng là một key. Khi một key lỗi, backend sẽ xoay sang key tiếp theo.
           </p>
-        </section>
+          </section>
 
-        <section className="rounded-lg border border-line bg-white p-5 shadow-panel">
+        <section className="rounded-md border border-white/10 bg-black/10 p-5">
           <h2 className="mb-3 text-base font-semibold text-ink">Google Cloud TTS</h2>
           <div className="grid gap-4">
             <PathInput
@@ -144,6 +161,8 @@ export default function AppSettingsPage() {
             Có thể dùng Service Account JSON, OAuth access token hoặc API key Google Cloud tuỳ cách bạn cấu hình tài khoản.
           </p>
         </section>
+          </div>
+        </details>
 
         <div className="flex flex-wrap gap-3">
           <button
@@ -166,6 +185,10 @@ export default function AppSettingsPage() {
       </div>
     </main>
   );
+}
+
+function Dependency({ label, ready }: { label: string; ready: boolean }) {
+  return <div className="flex items-center justify-between rounded-md bg-black/15 px-3 py-2 text-sm"><span className="text-slate-300">{label}</span><span className={ready ? 'text-emerald-200' : 'text-amber-200'}><CheckCircle2 size={16} /></span></div>;
 }
 
 function normalizeSettings(settings: AppSettings): AppSettings {
