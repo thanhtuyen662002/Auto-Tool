@@ -28,6 +28,7 @@ export default function App() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="projects/new" element={<CreateProjectPage />} />
         <Route path="settings/:projectId" element={<RenderSettingsPage />} />
+        <Route path="projects/:projectId" element={<RenderSettingsPage />} />
         <Route path="queue/:projectId/:jobId" element={<RenderQueuePage />} />
         <Route path="results" element={<ResultsPage />} />
         <Route path="recovery" element={<RecoveryCenterPage />} />

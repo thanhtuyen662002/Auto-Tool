@@ -1,4 +1,4 @@
-import { Captions, Clapperboard, FolderCheck, Server, Waves } from 'lucide-react';
+import { Captions, Clapperboard, FolderCheck, Server, Waves, FolderPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import GlassModal from '../glass/GlassModal';
 
@@ -20,8 +20,9 @@ export default function StudioCommandCenter({
   onSystemStatus: () => void;
 }) {
   const actions: Action[] = [
-    { label: 'Tạo batch video có thoại', description: 'Dịch thoại Trung sang Việt, review phụ đề rồi render.', to: '/douyin-reup', icon: Clapperboard },
-    { label: 'Tạo batch video không thoại', description: 'Tạo caption Việt cho video mở hộp, thao tác hoặc demo sản phẩm.', to: '/silent-mode', icon: Waves },
+    { label: 'Douyin Reup', description: 'Dịch thoại Trung sang Việt, review phụ đề rồi render.', to: '/douyin-reup', icon: Clapperboard },
+    { label: 'Silent Mode', description: 'Tạo caption Việt cho video mở hộp, thao tác hoặc demo sản phẩm.', to: '/silent-mode', icon: Waves },
+    { label: 'Product Video Builder', description: 'Tạo video quảng cáo sản phẩm hàng loạt từ video tư liệu thô.', to: '/projects/new', icon: FolderPlus },
     { label: 'Mở phụ đề cần review', description: 'Sửa, rút gọn và duyệt phụ đề trước khi render.', to: '/subtitle-review', icon: Captions },
     { label: 'Mở kết quả gần đây', description: 'Xem gallery, Final QA và Export Pack.', to: '/results', icon: FolderCheck },
     {
@@ -36,7 +37,7 @@ export default function StudioCommandCenter({
   ];
 
   return (
-    <GlassModal open={open} title="Tạo batch mới" onClose={onClose}>
+    <GlassModal open={open} title="Quick Start" onClose={onClose}>
       <div className="grid gap-3">
         {actions.map(({ icon: Icon, ...action }) => {
           const content = (
@@ -69,3 +70,4 @@ export default function StudioCommandCenter({
     </GlassModal>
   );
 }
+

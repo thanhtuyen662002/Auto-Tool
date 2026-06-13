@@ -1,13 +1,29 @@
-import { Captions, Clapperboard, FolderCheck, LayoutDashboard, RotateCcw, Settings, Sparkles, Waves, X } from 'lucide-react';
+import { Captions, Clapperboard, FolderCheck, LayoutDashboard, RotateCcw, Settings, Sparkles, Waves, X, Inbox, FolderPlus } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import GlassBadge from '../glass/GlassBadge';
 
-const items = [
+interface SidebarItem {
+  to: string;
+  label: string;
+  helper: string;
+  icon: any;
+  end?: boolean;
+}
+
+const generalItems: SidebarItem[] = [
   { to: '/', label: 'Tổng quan', helper: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/douyin-reup', label: 'Video có thoại', helper: 'Douyin Reup', icon: Clapperboard },
-  { to: '/silent-mode', label: 'Video không thoại', helper: 'Silent Mode', icon: Waves },
+];
+
+const studioItems: SidebarItem[] = [
+  { to: '/douyin-reup', label: 'Douyin Reup', helper: 'Video có thoại', icon: Clapperboard },
+  { to: '/silent-mode', label: 'Silent Mode', helper: 'Video không thoại', icon: Waves },
+  { to: '/projects/new', label: 'Product Video Builder', helper: 'Affiliate Video', icon: FolderPlus },
+  { to: '/import-inbox', label: 'Import Inbox', helper: 'Shopee Inbox', icon: Inbox },
+  { to: '/results', label: 'Projects', helper: 'Results', icon: FolderCheck },
+];
+
+const utilityItems: SidebarItem[] = [
   { to: '/subtitle-review', label: 'Sửa phụ đề', helper: 'Subtitle Review', icon: Captions },
-  { to: '/results', label: 'Kết quả', helper: 'Results', icon: FolderCheck },
   { to: '/recovery', label: 'Khôi phục', helper: 'Recovery', icon: RotateCcw },
   { to: '/settings', label: 'Cài đặt', helper: 'Settings', icon: Settings },
 ];
@@ -45,8 +61,60 @@ export default function StudioSidebar({
         </button>
       </div>
 
-      <nav className="mt-6 grid gap-1.5" aria-label="Studio sections">
-        {items.map(({ to, label, helper, icon: Icon, end }) => (
+      <nav className="mt-6 grid gap-1.5 overflow-y-auto max-h-[calc(100vh-240px)] pr-1" aria-label="Studio sections">
+        {generalItems.map(({ to, label, helper, icon: Icon, end }) => (
+          <NavLink
+            key={to}
+            end={end}
+            to={to}
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex min-h-12 items-center gap-3 rounded-md border px-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-cyan-300/35 ${
+                isActive
+                  ? 'border-cyan-300/35 bg-cyan-300/12 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.12)]'
+                  : 'border-transparent text-slate-300 hover:bg-white/7 hover:text-white'
+              }`
+            }
+          >
+            <Icon size={18} />
+            <span className="min-w-0">
+              <span className="block truncate">{label}</span>
+              <span className="block truncate text-[11px] font-normal text-slate-500">{helper}</span>
+            </span>
+          </NavLink>
+        ))}
+
+        <div className="mt-4 px-3 mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Content Studio
+        </div>
+
+        {studioItems.map(({ to, label, helper, icon: Icon, end }) => (
+          <NavLink
+            key={to}
+            end={end}
+            to={to}
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex min-h-12 items-center gap-3 rounded-md border px-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-cyan-300/35 ${
+                isActive
+                  ? 'border-cyan-300/35 bg-cyan-300/12 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.12)]'
+                  : 'border-transparent text-slate-300 hover:bg-white/7 hover:text-white'
+              }`
+            }
+          >
+            <Icon size={18} />
+            <span className="min-w-0">
+              <span className="block truncate">{label}</span>
+              <span className="block truncate text-[11px] font-normal text-slate-500">{helper}</span>
+            </span>
+          </NavLink>
+        ))}
+
+        <div className="mt-4 px-3 mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Utilities
+        </div>
+
+        {utilityItems.map(({ to, label, helper, icon: Icon, end }) => (
           <NavLink
             key={to}
             end={end}
@@ -84,3 +152,4 @@ export default function StudioSidebar({
     </aside>
   );
 }
+

@@ -1,0 +1,21 @@
+{
+  "segment_id": "1fbd3a355cea",
+  "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7648990047949098248.mp4",
+  "start": 13.726,
+  "end": 16.454,
+  "duration": 2.728,
+  "brightness_score": 1.0,
+  "sharpness_score": 0.736,
+  "motion_score": 1.0,
+  "freeze_score": 1.0,
+  "stability_score": 0.982,
+  "overall_score": 0.932,
+  "is_rejected": false,
+  "reject_reasons": [],
+  "tags": [
+    "high_motion",
+    "bright",
+    "stable"
+  ],
+  "cache_hit": false
+}

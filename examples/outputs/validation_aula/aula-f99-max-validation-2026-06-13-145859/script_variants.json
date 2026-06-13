@@ -1,0 +1,64 @@
+{
+  "project_name": "aula-f99-max-validation",
+  "industry_preset_id": "tech_electronics",
+  "caption_tone": "Rõ ràng, nhấn vào tính năng, trải nghiệm sử dụng và lợi ích thực tế.",
+  "hashtag_suggestions": [
+    "#congnghe",
+    "#reviewcongnghe",
+    "#phukien",
+    "#dientu",
+    "#sanphamhot"
+  ],
+  "total_variants": 1,
+  "variants": [
+    {
+      "output_index": 1,
+      "variant_style_id": "benefit_first",
+      "industry_preset_id": null,
+      "caption_tone": null,
+      "hashtag_suggestions_used": [],
+      "hook": "Gõ phím êm ru, âm thanh cực đã với AULA F99.",
+      "voiceover": [
+        {
+          "time_hint": "0-3s",
+          "text": "Gõ phím êm ru, âm thanh cực đã với AULA F99."
+        },
+        {
+          "time_hint": "3-7s",
+          "text": "Kết cấu Gasket Mount tiêu âm tốt, kết nối không dây 3 chế độ linh hoạt."
+        },
+        {
+          "time_hint": "7-12s",
+          "text": "Hỗ trợ Hot-swap và LED RGB đẹp mắt. Mua ngay AULA F99 ưu đãi hôm nay!"
+        }
+      ],
+      "subtitles": [
+        {
+          "start_hint": 0.0,
+          "end_hint": 3.0,
+          "text": "Gõ phím êm ru, âm thanh cực đã với AULA F99."
+        },
+        {
+          "start_hint": 3.0,
+          "end_hint": 7.0,
+          "text": "Kết cấu Gasket Mount tiêu âm, 3 chế độ kết nối."
+        },
+        {
+          "start_hint": 7.0,
+          "end_hint": 12.0,
+          "text": "Hỗ trợ Hot-swap, LED RGB. Sắm ngay AULA F99!"
+        }
+      ],
+      "cta": "Sắm ngay bàn phím cơ AULA F99 giá ưu đãi ngay hôm nay!",
+      "caption": "Trải nghiệm gõ phím cực đã với AULA F99. Thiết kế 99 phím, Gasket Mount êm ái cùng LED RGB bắt mắt. Kết nối đa dạng, tùy biến switch dễ dàng.",
+      "hashtags": [
+        "#congnghe",
+        "#reviewcongnghe",
+        "#phukien",
+        "#dientu",
+        "#AULAF99",
+        "#banphimco"
+      ]
+    }
+  ]
+}

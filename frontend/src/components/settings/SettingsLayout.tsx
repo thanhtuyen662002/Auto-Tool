@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 import GlassTabs from '../glass/GlassTabs';
 
-export type SettingsTab = 'general' | 'paths' | 'local_app' | 'data_management' | 'providers' | 'appearance' | 'advanced' | 'about';
+export type SettingsTab = 'general' | 'api_keys' | 'paths' | 'local_app' | 'data_management' | 'providers' | 'appearance' | 'advanced' | 'about';
 
 const tabs: Array<{ value: SettingsTab; label: string }> = [
   { value: 'general', label: 'General' },
+  { value: 'api_keys', label: '🔑 API Keys' },
   { value: 'paths', label: 'Paths' },
   { value: 'local_app', label: 'Local App' },
   { value: 'data_management', label: 'Dữ liệu' },

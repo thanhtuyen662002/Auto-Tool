@@ -526,6 +526,7 @@ def _preview_config(config: ProjectConfig) -> ProjectConfig:
         update={
             "output_count": 1,
             "duration": min(config.render.duration, 8.0),
+            "sese_enabled": False,  # Always bypass SESE for preview renders
         }
     )
     return config.model_copy(update={"render": render})

@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import random
 
+from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.crop_safety.crop_schema import CropBox
 from app.schemas.media_schema import VideoSegment
+
+
+class ClipType(str, Enum):
+    NORMAL = "normal"
+    FREEZE = "freeze"
+    FREEZE_ZOOM = "freeze_zoom"
 
 
 class TimelineClip(BaseModel):
@@ -30,6 +37,7 @@ class TimelineClip(BaseModel):
     crop_cache_hit: bool | None = None
     user_review_status: str | None = None
     source_media_review_status: str | None = None
+    clip_type: ClipType = ClipType.NORMAL
 
 
 class Timeline(BaseModel):

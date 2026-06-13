@@ -1,0 +1,64 @@
+{
+  "project_name": "aula-f99-max-validation",
+  "industry_preset_id": "tech_electronics",
+  "caption_tone": "Rõ ràng, nhấn vào tính năng, trải nghiệm sử dụng và lợi ích thực tế.",
+  "hashtag_suggestions": [
+    "#congnghe",
+    "#reviewcongnghe",
+    "#phukien",
+    "#dientu",
+    "#sanphamhot"
+  ],
+  "total_variants": 1,
+  "variants": [
+    {
+      "output_index": 1,
+      "variant_style_id": "benefit_first",
+      "industry_preset_id": null,
+      "caption_tone": null,
+      "hashtag_suggestions_used": [],
+      "hook": "Gõ êm, kết nối linh hoạt với bàn phím cơ AULA F99.",
+      "voiceover": [
+        {
+          "time_hint": "0-3s",
+          "text": "Trải nghiệm gõ êm ái nhờ cấu trúc Gasket Mount tiêu âm tốt."
+        },
+        {
+          "time_hint": "3-6s",
+          "text": "Kết nối đa dạng, tùy chỉnh switch dễ dàng với tính năng Hot-swap."
+        },
+        {
+          "time_hint": "6-8s",
+          "text": "Sở hữu ngay AULA F99 tại giỏ hàng nhé."
+        }
+      ],
+      "subtitles": [
+        {
+          "start_hint": 0.0,
+          "end_hint": 3.0,
+          "text": "Gõ cực êm với cấu trúc Gasket Mount"
+        },
+        {
+          "start_hint": 3.0,
+          "end_hint": 6.0,
+          "text": "Kết nối 3 chế độ, hỗ trợ Hot-swap"
+        },
+        {
+          "start_hint": 6.0,
+          "end_hint": 8.0,
+          "text": "Sắm ngay AULA F99 giá ưu đãi"
+        }
+      ],
+      "cta": "Sắm ngay bàn phím cơ AULA F99 giá ưu đãi ngay hôm nay!",
+      "caption": "Bàn phím cơ AULA F99 với cấu trúc Gasket Mount êm ái, hỗ trợ Hot-swap và 3 chế độ kết nối linh hoạt. Trải nghiệm gõ phím mượt mà với keycap PBT bền bỉ.",
+      "hashtags": [
+        "#AULAF99",
+        "#banphimco",
+        "#congnghe",
+        "#reviewcongnghe",
+        "#phukien",
+        "#dientu"
+      ]
+    }
+  ]
+}

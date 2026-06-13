@@ -1,0 +1,40 @@
+{
+  "cached_path": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\aula-f99-max-validation\\.cache\\tts\\728417b50da17db5c6fceae019c9b0acd1e06b04.mp3",
+  "tts_result": {
+    "provider": "edge_tts",
+    "output_path": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_voice.mp3",
+    "duration": 8.0,
+    "format": "mp3",
+    "success": true,
+    "warnings": [
+      "script_shortened_for_tts: Thời lượng giọng đọc ước tính 13.12s vượt quá mục tiêu 8.00s nên nội dung đã được rút gọn.",
+      "Edge TTS đã tạo giọng đọc thành công sau khi thử lại 2/2.",
+      "voice_longer_than_video: Giọng đọc (9.408s) dài hơn video (8.000s), audio sẽ được cắt theo thời lượng video."
+    ],
+    "error": null,
+    "fallback_used": false
+  },
+  "voice_duration": 8.0,
+  "subtitle_timeline": [
+    {
+      "start_hint": 0.0,
+      "end_hint": 2.474,
+      "text": "Trải nghiệm gõ êm ái nhờ cấu trúc"
+    },
+    {
+      "start_hint": 2.474,
+      "end_hint": 4.408,
+      "text": "Gasket Mount tiêu âm tốt."
+    },
+    {
+      "start_hint": 4.408,
+      "end_hint": 6.794,
+      "text": "Sắm ngay bàn phím cơ AULA F99 giá ưu"
+    },
+    {
+      "start_hint": 6.794,
+      "end_hint": 7.92,
+      "text": "đãi ngay hôm nay!"
+    }
+  ]
+}

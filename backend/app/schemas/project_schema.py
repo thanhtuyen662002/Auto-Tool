@@ -66,6 +66,11 @@ class RenderSettings(BaseModel):
     aspect_ratio: str = Field(min_length=1)
     resolution: str = Field(min_length=3)
     fps: int = Field(gt=0)
+    sese_enabled: bool = False
+    sese_mode: str = "auto"
+    max_auto_extension_seconds: float = 8.0
+    max_auto_extension_ratio: float = 0.4
+    sese_failure_strategy: str = "trim"
 
     @field_validator("resolution")
     @classmethod

@@ -1,0 +1,16 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,54,&H00FFFFFF,&H000000FF,&H000B0B0B,&HA6000000,1,0,0,0,100,100,0,0,1,2,2,5,48,48,229,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.64,Default,,0,0,0,,{\pos(540,1691)}Gõ phím êm ái nhờ cấu\Ntrúc Gasket
+Dialogue: 0,0:00:02.64,0:00:04.46,Default,,0,0,0,,{\pos(540,1691)}Mount tiêu âm cực tốt.
+Dialogue: 0,0:00:04.46,0:00:08.58,Default,,0,0,0,,{\pos(540,1691)}LED RGB đa sắc, keycap\NPBT bền bỉ.
+Dialogue: 0,0:00:08.58,0:00:11.92,Default,,0,0,0,,{\pos(540,1691)}Mua ngay AULA F99 nhé!

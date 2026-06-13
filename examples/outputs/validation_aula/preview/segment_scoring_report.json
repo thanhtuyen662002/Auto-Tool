@@ -1,0 +1,132 @@
+{
+  "total_segments": 107,
+  "usable_segments": 103,
+  "rejected_segments": 4,
+  "average_score": 0.891,
+  "rejection_summary": {
+    "freeze_or_static": 1,
+    "too_blurry": 3
+  },
+  "top_segments": [
+    {
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7587114182856772885.mp4",
+      "start": 39.89,
+      "end": 41.95,
+      "overall_score": 1.0,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ]
+    },
+    {
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7587114182856772885.mp4",
+      "start": 46.735,
+      "end": 49.172,
+      "overall_score": 1.0,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ]
+    },
+    {
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7595230892298095879.mp4",
+      "start": 0.3,
+      "end": 2.768,
+      "overall_score": 1.0,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ]
+    },
+    {
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7595230892298095879.mp4",
+      "start": 2.768,
+      "end": 5.138,
+      "overall_score": 1.0,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ]
+    },
+    {
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7595230892298095879.mp4",
+      "start": 9.847,
+      "end": 12.58,
+      "overall_score": 1.0,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ]
+    },
+    {
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7595230892298095879.mp4",
+      "start": 12.58,
+      "end": 14.344,
+      "overall_score": 1.0,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ]
+    },
+    {
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7595230892298095879.mp4",
+      "start": 20.761,
+      "end": 23.432,
+      "overall_score": 1.0,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ]
+    },
+    {
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7624185141853785364.mp4",
+      "start": 9.925,
+      "end": 11.776,
+      "overall_score": 1.0,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ]
+    },
+    {
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7639553466544737544.mp4",
+      "start": 57.969,
+      "end": 59.979,
+      "overall_score": 1.0,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ]
+    },
+    {
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7587114182856772885.mp4",
+      "start": 41.95,
+      "end": 44.291,
+      "overall_score": 0.999,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ]
+    }
+  ]
+}

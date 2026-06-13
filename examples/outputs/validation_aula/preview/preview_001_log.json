@@ -1,0 +1,245 @@
+{
+  "index": 1,
+  "status": "warning",
+  "started_at": "2026-06-13T14:56:22",
+  "finished_at": "2026-06-13T14:56:47",
+  "duration_seconds": 24.809,
+  "steps": [
+    {
+      "name": "write_timeline_report",
+      "status": "success",
+      "message": "",
+      "duration_seconds": 0.001
+    },
+    {
+      "name": "render_visual",
+      "status": "success",
+      "message": "",
+      "duration_seconds": 5.684
+    },
+    {
+      "name": "generate_script",
+      "status": "success",
+      "message": "",
+      "duration_seconds": 0.002
+    },
+    {
+      "name": "generate_voice",
+      "status": "success",
+      "message": "",
+      "duration_seconds": 12.255
+    },
+    {
+      "name": "normalize_voice",
+      "status": "success",
+      "message": "",
+      "duration_seconds": 0.573
+    },
+    {
+      "name": "generate_subtitle",
+      "status": "success",
+      "message": "",
+      "duration_seconds": 0.004
+    },
+    {
+      "name": "select_music",
+      "status": "success",
+      "message": "",
+      "duration_seconds": 0.145
+    },
+    {
+      "name": "render_final",
+      "status": "success",
+      "message": "",
+      "duration_seconds": 6.007
+    },
+    {
+      "name": "qa_check",
+      "status": "success",
+      "message": "",
+      "duration_seconds": 0.133
+    }
+  ],
+  "visual_video": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_visual.mp4",
+  "final_video": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001.mp4",
+  "script_file": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_script.json",
+  "subtitle_file": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_sub.srt",
+  "subtitle_ass_file": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_sub.ass",
+  "overlay_file": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_overlay.png",
+  "voice_file": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_voice.mp3",
+  "normalized_voice_file": "D:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_voice_normalized.wav",
+  "timeline_file": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_timeline.json",
+  "timeline_template": "product_showcase_clean",
+  "average_segment_score": 0.995,
+  "source_diversity": {
+    "unique_sources": 4,
+    "total_clips": 6
+  },
+  "music_file": "D:\\Projects\\Auto-Tool\\examples\\music\\atlasaudio-soft-509813.mp3",
+  "tts_provider": "edge_tts",
+  "tts_fallback_used": false,
+  "voice_duration": 8.0,
+  "tts_warning": "script_shortened_for_tts: Thời lượng giọng đọc ước tính 13.12s vượt quá mục tiêu 8.00s nên nội dung đã được rút gọn.; Edge TTS đã tạo giọng đọc thành công sau khi thử lại 2/2.; voice_longer_than_video: Giọng đọc (9.408s) dài hơn video (8.000s), audio sẽ được cắt theo thời lượng video.",
+  "tts": {
+    "provider_requested": "edge_tts",
+    "provider_used": "edge_tts",
+    "fallback_used": false,
+    "raw_voice_path": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_voice.mp3",
+    "normalized_voice_path": "D:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_voice_normalized.wav",
+    "voice_duration": 8.0,
+    "target_video_duration": 8.0,
+    "warnings": [
+      "script_shortened_for_tts: Thời lượng giọng đọc ước tính 13.12s vượt quá mục tiêu 8.00s nên nội dung đã được rút gọn.",
+      "Edge TTS đã tạo giọng đọc thành công sau khi thử lại 2/2.",
+      "voice_longer_than_video: Giọng đọc (9.408s) dài hơn video (8.000s), audio sẽ được cắt theo thời lượng video."
+    ]
+  },
+  "subtitle_sync": {
+    "subtitle_active_duration": 7.9,
+    "subtitle_file": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_sub.srt",
+    "warnings": []
+  },
+  "visual_style": {
+    "preset_id": "tech_dark_neon",
+    "overlay_mode": "preset",
+    "overlay_asset": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_overlay.png",
+    "custom_overlay_path": null,
+    "custom_overlay_height_percent": null,
+    "custom_overlay_fit_mode": null,
+    "subtitle_format": "ass",
+    "ass_subtitle_path": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001_sub.ass",
+    "fallback_used": false,
+    "warnings": []
+  },
+  "crop_safety": {
+    "average_score": 0.787,
+    "fallback_to_blur_background": 0,
+    "cache_hits": 0,
+    "warnings": []
+  },
+  "source_media_filter": {
+    "segments_before_filter": 107,
+    "segments_after_filter": 107,
+    "excluded_media_count": 0,
+    "excluded_segment_count": 0,
+    "favorite_segments_available": 0,
+    "favorite_segments_used": 0,
+    "respect_user_exclusions": true,
+    "allow_excluded_fallback": false,
+    "warnings": [],
+    "good_segments_used": 0
+  },
+  "script_safety": {
+    "passed": true,
+    "warnings_count": 1,
+    "errors_count": 0,
+    "issues": [
+      {
+        "severity": "warning",
+        "category": "script_length",
+        "field": "voiceover",
+        "message": "Voiceover có vẻ dài hơn nhiều so với thời lượng video.",
+        "suggestion": "Rút gọn câu hoặc tăng duration video."
+      }
+    ],
+    "fallback_used": false
+  },
+  "cache": {
+    "segment_score_cache_hits": 0,
+    "crop_safety_cache_hits": 0,
+    "tts_cache_hit": false,
+    "overlay_cache_hit": false
+  },
+  "performance": {
+    "timeline_seconds": 0.001,
+    "render_visual_seconds": 5.684,
+    "script_seconds": 0.002,
+    "tts_seconds": 12.255,
+    "normalize_voice_seconds": 0.573,
+    "subtitle_seconds": 0.004,
+    "select_music_seconds": 0.145,
+    "render_final_seconds": 6.007,
+    "qa_seconds": 0.133,
+    "total_seconds": 24.809
+  },
+  "warnings": [
+    "Voiceover có vẻ dài hơn nhiều so với thời lượng video.",
+    "script_shortened_for_tts: Thời lượng giọng đọc ước tính 13.12s vượt quá mục tiêu 8.00s nên nội dung đã được rút gọn.",
+    "Edge TTS đã tạo giọng đọc thành công sau khi thử lại 2/2.",
+    "voice_longer_than_video: Giọng đọc (9.408s) dài hơn video (8.000s), audio sẽ được cắt theo thời lượng video."
+  ],
+  "errors": [],
+  "caption": "Bàn phím cơ AULA F99 với cấu trúc Gasket Mount êm ái, hỗ trợ Hot-swap và 3 chế độ kết nối linh hoạt. Trải nghiệm gõ phím mượt mà với keycap PBT bền bỉ.",
+  "hashtags": [
+    "#AULAF99",
+    "#banphimco",
+    "#congnghe",
+    "#reviewcongnghe",
+    "#phukien",
+    "#dientu"
+  ],
+  "script_variant_id": "benefit_first",
+  "qa": {
+    "path": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\preview\\preview_001.mp4",
+    "passed": true,
+    "checks": {
+      "file_exists": {
+        "status": "success",
+        "message": "Final video exists."
+      },
+      "file_size": {
+        "status": "success",
+        "message": "Final video size is 4581545 bytes."
+      },
+      "ffprobe": {
+        "status": "success",
+        "message": "ffprobe read final video successfully."
+      },
+      "video_stream": {
+        "status": "success",
+        "message": "Video stream exists."
+      },
+      "duration": {
+        "status": "success",
+        "message": "Duration is close to target: 8.200s."
+      },
+      "resolution": {
+        "status": "success",
+        "message": "Resolution is 1080x1920."
+      },
+      "audio_stream": {
+        "status": "success",
+        "message": "Audio stream exists."
+      },
+      "subtitle_file": {
+        "status": "success",
+        "message": "Subtitle file exists."
+      },
+      "subtitle_length": {
+        "status": "success",
+        "message": "Subtitle line lengths look reasonable."
+      },
+      "script_schema": {
+        "status": "success",
+        "message": "Script JSON matches schema."
+      },
+      "script_placeholders": {
+        "status": "success",
+        "message": "Script contains no unresolved placeholders."
+      }
+    },
+    "warnings": [],
+    "errors": [],
+    "exists": true,
+    "size_bytes": 4581545,
+    "probe_ok": true,
+    "duration": 8.2,
+    "width": 1080,
+    "height": 1920,
+    "has_video_stream": true,
+    "has_audio_stream": true,
+    "duration_ok": true,
+    "resolution_ok": true,
+    "error": null
+  }
+}

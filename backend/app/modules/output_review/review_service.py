@@ -128,7 +128,7 @@ class OutputQualityReviewService:
         if output.get("error"):
             errors = _short_unique([str(output["error"]), *errors])
 
-        technical_score = _technical_score(final_video_path, status, qa_payload, warnings, errors, config)
+        technical_score = _technical_score(final_video_path, status, qa_payload, warnings, errors, config, log_payload)
         segment_score = _segment_score(output, log_payload, timeline_payload)
         audio_score = _audio_score(output, log_payload, qa_payload, config)
         subtitle_score = _subtitle_score(output, log_payload, qa_payload, warnings)
@@ -220,6 +220,7 @@ def _technical_score(
     warnings: list[str],
     errors: list[str],
     config: ProjectConfig,
+    log_payload: dict[str, Any] | None = None,
 ) -> float:
     if status == "failed":
         return 0.0
@@ -246,10 +247,17 @@ def _technical_score(
     except Exception:
         return 0.0
     expected_width, expected_height = _resolution(config.render.resolution)
+
+    # When SESE extended the video, adjust the expected duration to avoid false penalties
+    sese = _sese_block(log_payload)
+    expected_duration = config.render.duration
+    if sese.get("applied") and sese.get("added_duration", 0) > 0:
+        expected_duration = config.render.duration + float(sese["added_duration"])
+
     score = 1.0
     if (media.width, media.height) != (expected_width, expected_height):
         score -= 0.25
-    if abs(media.duration - config.render.duration) > 2:
+    if abs(media.duration - expected_duration) > 2:
         score -= 0.2
     if not media.has_audio:
         score -= 0.2
@@ -288,11 +296,17 @@ def _audio_score(output: dict[str, Any], log_payload: dict[str, Any], qa_payload
     elif fallback_used:
         score = 0.8
     if voice_duration > 0:
-        diff = abs(voice_duration - config.render.duration)
-        if diff > 4:
-            score = min(score, 0.55)
-        elif diff > 2:
-            score = min(score, 0.7)
+        # When SESE was applied and voice was trimmed, skip the duration difference penalty:
+        # the trimming was intentional and already handled by the engine.
+        sese = _sese_block(log_payload)
+        sese_applied = sese.get("applied", False)
+        trimmed_voice = sese.get("trimmed_voice", False)
+        if not (sese_applied and trimmed_voice):
+            diff = abs(voice_duration - config.render.duration)
+            if diff > 4:
+                score = min(score, 0.55)
+            elif diff > 2:
+                score = min(score, 0.7)
     if _contains(_as_list(log_payload.get("warnings")) + _as_list(tts.get("warnings")), "voice_"):
         score = min(score, 0.75)
     return _clip(score)
@@ -424,3 +438,11 @@ def _consecutive_repeat_penalty(clips: list[Any]) -> float:
 def _resolution(value: str) -> tuple[int, int]:
     width, height = value.lower().split("x", 1)
     return int(width), int(height)
+
+
+def _sese_block(log_payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Extract the SESE metadata block from a log payload, safely."""
+    if not log_payload or not isinstance(log_payload, dict):
+        return {}
+    sese = log_payload.get("sese")
+    return sese if isinstance(sese, dict) else {}

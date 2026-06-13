@@ -1,0 +1,198 @@
+{
+  "output_index": 1,
+  "template_id": "product_showcase_clean",
+  "target_duration": 8.0,
+  "average_segment_score": 0.995,
+  "source_diversity": {
+    "unique_sources": 4,
+    "total_clips": 6
+  },
+  "clips": [
+    {
+      "segment_id": "85f4c46ff6c5",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7595230892298095879.mp4",
+      "start": 2.768,
+      "end": 3.992,
+      "duration": 1.2,
+      "speed": 1.02,
+      "slot_name": "hook",
+      "text_role": "hook",
+      "segment_score": 1.0,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 357,
+        "y": 0,
+        "width": 324,
+        "height": 576
+      },
+      "crop_mode": "center_crop",
+      "crop_safety_score": 0.578,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "39de8fce64ec",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7587114182856772885.mp4",
+      "start": 34.874,
+      "end": 37.257,
+      "duration": 2.4,
+      "speed": 0.993,
+      "slot_name": "product",
+      "text_role": "product",
+      "segment_score": 0.993,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 0,
+        "y": 0,
+        "width": 576,
+        "height": 1024
+      },
+      "crop_mode": "no_crop_scale",
+      "crop_safety_score": 0.883,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "4f8a857501ab",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7639553466544737544.mp4",
+      "start": 16.56,
+      "end": 18.866,
+      "duration": 2.288,
+      "speed": 1.008,
+      "slot_name": "demo",
+      "text_role": "demo",
+      "segment_score": 0.988,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 0,
+        "y": 0,
+        "width": 576,
+        "height": 1024
+      },
+      "crop_mode": "no_crop_scale",
+      "crop_safety_score": 0.904,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "ab376daffe53",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7595230892298095879.mp4",
+      "start": 20.761,
+      "end": 20.872,
+      "duration": 0.112,
+      "speed": 0.99,
+      "slot_name": "demo",
+      "text_role": "demo",
+      "segment_score": 1.0,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 353,
+        "y": 0,
+        "width": 324,
+        "height": 576
+      },
+      "crop_mode": "center_crop",
+      "crop_safety_score": 0.585,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "f1ee11b5d8fb",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7624185141853785364.mp4",
+      "start": 5.734,
+      "end": 6.967,
+      "duration": 1.2,
+      "speed": 1.027,
+      "slot_name": "benefit",
+      "text_role": "benefit",
+      "segment_score": 0.996,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 0,
+        "y": 0,
+        "width": 576,
+        "height": 1024
+      },
+      "crop_mode": "no_crop_scale",
+      "crop_safety_score": 0.901,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "d0bd9439ff29",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7587114182856772885.mp4",
+      "start": 12.379,
+      "end": 13.186,
+      "duration": 0.8,
+      "speed": 1.008,
+      "slot_name": "cta",
+      "text_role": "cta",
+      "segment_score": 0.991,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 0,
+        "y": 0,
+        "width": 576,
+        "height": 1024
+      },
+      "crop_mode": "no_crop_scale",
+      "crop_safety_score": 0.872,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    }
+  ]
+}

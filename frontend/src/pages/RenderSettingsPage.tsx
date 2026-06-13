@@ -547,7 +547,7 @@ export default function RenderSettingsPage() {
               onChange={updateConfig}
             />
           ) : (
-            <AdvancedSettingsPanel
+          <AdvancedSettingsPanel
               config={config}
               presets={presets}
               visualStylePresets={visualStylePresets}
@@ -593,6 +593,9 @@ export default function RenderSettingsPage() {
                   ...config,
                   crop_safety: { ...(config.crop_safety ?? DEFAULT_CROP_SAFETY_SETTINGS), ...patch },
                 })
+              }
+              onRenderChange={(patch) =>
+                updateConfig({ ...config, render: { ...config.render, ...patch } })
               }
               onMusicChange={(patch) =>
                 updateConfig({ ...config, music: mergeMusicSettings(config.music, patch) })
@@ -1062,6 +1065,7 @@ function AdvancedSettingsPanel({
   onMusicChange,
   onEffectsChange,
   onCropSafetyChange,
+  onRenderChange,
   onScan,
   onBack,
   onRenderPreview,
@@ -1096,6 +1100,7 @@ function AdvancedSettingsPanel({
   onMusicChange: (patch: Partial<ProjectConfig['music']>) => void;
   onEffectsChange: (effects: EffectSettings) => void;
   onCropSafetyChange: (patch: Partial<NonNullable<ProjectConfig['crop_safety']>>) => void;
+  onRenderChange: (patch: Partial<ProjectConfig['render']>) => void;
   onScan: () => void;
   onBack: () => void;
   onRenderPreview: () => void;
@@ -1215,6 +1220,8 @@ function AdvancedSettingsPanel({
       </div>
 
       <CropSafetyPanel config={config} onChange={onCropSafetyChange} />
+
+      <SESEPanel config={config} onChange={onRenderChange} />
 
       {scanResult ? <ScanResult scanResult={scanResult} segmentScoring={segmentScoring} /> : null}
 
@@ -1488,6 +1495,89 @@ function CropSafetyPanel({
           </label>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SESEPanel({
+  config,
+  onChange,
+}: {
+  config: ProjectConfig;
+  onChange: (patch: Partial<ProjectConfig['render']>) => void;
+}) {
+  const sese = config.render;
+  const enabled = sese.sese_enabled ?? false;
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-ink">Smart Ending Sync (SESE)</h2>
+          <p className="mt-1 text-xs text-muted">
+            Tự động kéo dài phần cuối video nếu giọng đọc dài hơn timeline, tránh mất câu thoại cuối.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            id="sese-enabled"
+            className="h-4 w-4 accent-brand"
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => onChange({ sese_enabled: e.target.checked })}
+          />
+          <span className={enabled ? 'font-semibold text-brand' : 'text-muted'}>
+            {enabled ? 'Bật' : 'Tắt'}
+          </span>
+        </label>
+      </div>
+
+      {enabled ? (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <NumberInput
+            label="Giới hạn kéo dài tối đa (giây)"
+            value={sese.max_auto_extension_seconds ?? 8}
+            min={1}
+            max={30}
+            onChange={(v) => onChange({ max_auto_extension_seconds: v })}
+          />
+          <NumberInput
+            label="Giới hạn tỉ lệ kéo dài (%)"
+            value={Math.round((sese.max_auto_extension_ratio ?? 0.4) * 100)}
+            min={5}
+            max={80}
+            onChange={(v) => onChange({ max_auto_extension_ratio: v / 100 })}
+          />
+          <div className="sm:col-span-2">
+            <SelectField
+              label="Chế độ SESE"
+              value={sese.sese_mode ?? 'auto'}
+              onChange={(v) => onChange({ sese_mode: v })}
+              options={[
+                { value: 'auto', label: 'Tự động (auto) — Khuyến nghị' },
+              ]}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <SelectField
+              label="Chiến lược khi vượt giới hạn"
+              value={sese.sese_failure_strategy ?? 'trim'}
+              onChange={(v) => onChange({ sese_failure_strategy: v })}
+              options={[
+                { value: 'trim', label: 'Cắt giọng đọc ở mức tối đa cho phép (trim)' },
+                { value: 'fail', label: 'Báo lỗi và dừng render (fail)' },
+              ]}
+            />
+          </div>
+          <div className="sm:col-span-2 rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-800">
+            <strong>Lưu ý:</strong> SESE chỉ hoạt động ở chế độ Render toàn bộ. Render thử sẽ bỏ qua SESE để tăng tốc độ.
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 rounded-md bg-surface p-3 text-xs text-muted">
+          Mặc định tắt. Bật khi gặp hiện tượng giọng đọc bị cắt ở câu cuối.
+        </div>
+      )}
     </div>
   );
 }

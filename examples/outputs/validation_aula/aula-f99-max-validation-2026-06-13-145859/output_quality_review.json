@@ -1,0 +1,27 @@
+{
+  "project_id": "v02-6d54d4e10791",
+  "project_name": "aula-f99-max-validation",
+  "generated_at": "2026-06-13T15:01:18",
+  "summary": {
+    "total_outputs": 1,
+    "good": 1,
+    "review": 0,
+    "needs_rerender": 0,
+    "failed": 0,
+    "bad": 0,
+    "average_overall_score": 0.916
+  },
+  "outputs": [
+    {
+      "output_index": 1,
+      "final_video_path": "d:\\Projects\\Auto-Tool\\examples\\outputs\\validation_aula\\aula-f99-max-validation-2026-06-13-145859\\video_001.mp4",
+      "overall_score": 0.916,
+      "recommended_action": "good",
+      "warnings": [
+        "script_shortened_for_tts: Thời lượng giọng đọc ước tính 14.88s vượt quá mục tiêu 12.00s nên nội dung đã được rút gọn.",
+        "voice_longer_than_video: Giọng đọc (12.456s) dài hơn video (12.000s), audio sẽ được cắt theo thời lượng video."
+      ],
+      "errors": []
+    }
+  ]
+}

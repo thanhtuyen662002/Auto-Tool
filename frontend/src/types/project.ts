@@ -20,6 +20,11 @@ export interface RenderSettings {
   aspect_ratio: string;
   resolution: string;
   fps: number;
+  sese_enabled?: boolean;
+  sese_mode?: string;
+  max_auto_extension_seconds?: number;
+  max_auto_extension_ratio?: number;
+  sese_failure_strategy?: string;
 }
 
 export interface EffectSettings {

@@ -1,0 +1,25 @@
+{
+  "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7648990047949098248.mp4",
+  "start": 0.3,
+  "end": 2.115,
+  "input_width": 576,
+  "input_height": 1024,
+  "target_width": 1080,
+  "target_height": 1920,
+  "recommended_crop": {
+    "x": 0,
+    "y": 0,
+    "width": 576,
+    "height": 1024
+  },
+  "crop_mode": "no_crop_scale",
+  "visibility_score": 0.96,
+  "overlay_risk_score": 0.146,
+  "edge_risk_score": 0.153,
+  "zoom_risk_score": 0.0,
+  "overall_safety_score": 0.916,
+  "warnings": [],
+  "fallback_used": false,
+  "effective_zoom_motion": 20,
+  "cache_hit": false
+}

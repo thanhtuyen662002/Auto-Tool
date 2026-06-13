@@ -26,7 +26,9 @@ const pageTitles: Array<[string, string]> = [
   ['/douyin-reup', 'Video có thoại'],
   ['/subtitle-review', 'Sửa phụ đề'],
   ['/results', 'Kết quả'],
+  ['/import-inbox', 'Hòm thư sản phẩm'],
   ['/projects/new', 'Tạo dự án'],
+  ['/projects/', 'Cài đặt dự án'],
   ['/dashboard', 'Tổng quan'],
   ['/', 'Tổng quan'],
 ];
@@ -121,5 +123,22 @@ function buildBreadcrumbs(pathname: string, title: string): StudioBreadcrumbItem
   if (pathname.startsWith('/subtitle-review/') && pathname !== '/subtitle-review') return [{ label: 'Sửa phụ đề', to: '/subtitle-review' }, { label: 'Document' }];
   if (pathname.startsWith('/results/') && pathname !== '/results') return [{ label: 'Kết quả', to: '/results' }, { label: 'Batch' }];
   if (pathname.startsWith('/settings/') && pathname !== '/settings') return [{ label: 'Cài đặt', to: '/settings' }, { label: 'Project' }];
+  if (pathname.startsWith('/projects/') && pathname !== '/projects/new') {
+    const parts = pathname.split('/');
+    if (parts.length > 3) {
+      const sub = parts[3];
+      const subLabelMap: Record<string, string> = {
+        'review': 'Review',
+        'source-media': 'Source Media',
+        'assets': 'Assets',
+        'prompt-pack': 'Prompt Pack',
+        'content': 'Content',
+      };
+      const subLabel = subLabelMap[sub] || sub;
+      const projectId = parts[2];
+      return [{ label: 'Dự án', to: `/projects/${projectId}` }, { label: subLabel }];
+    }
+    return [{ label: 'Dự án', to: '/results' }, { label: 'Cài đặt' }];
+  }
   return [{ label: title }];
 }

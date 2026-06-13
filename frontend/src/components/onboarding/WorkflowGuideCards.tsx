@@ -1,4 +1,4 @@
-import { ArrowRight, Captions, Clapperboard, Waves } from 'lucide-react';
+import { ArrowRight, Captions, Clapperboard, Waves, ShoppingBag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import GlassBadge from '../glass/GlassBadge';
 import GlassCard from '../glass/GlassCard';
@@ -25,6 +25,16 @@ const workflows = [
     accent: 'text-pink-200 bg-pink-300/10 border-pink-300/30',
   },
   {
+    title: 'Video Affiliate',
+    subtitle: 'Product Video Builder',
+    description: '1. Import sản phẩm Shopee/TikTok Shop\n2. Tạo project cấu hình\n3. Thêm video nguồn\n4. Chạy render hàng loạt',
+    preset: 'UGC Reviewer Natural',
+    to: '/projects/new',
+    action: 'Create Project',
+    icon: ShoppingBag,
+    accent: 'text-purple-200 bg-purple-300/10 border-purple-300/30',
+  },
+  {
     title: 'Chỉ sửa phụ đề',
     subtitle: 'Subtitle Review',
     description: 'Dùng khi bạn đã có phụ đề hoặc review document và muốn sửa, rút gọn, duyệt rồi render lại.',
@@ -38,7 +48,7 @@ const workflows = [
 
 export default function WorkflowGuideCards() {
   return (
-    <section className="grid gap-4 xl:grid-cols-3" aria-label="Chọn workflow">
+    <section className="grid gap-4 xl:grid-cols-4" aria-label="Chọn workflow">
       {workflows.map(({ icon: Icon, ...workflow }) => (
         <GlassCard hover strong className="flex min-h-[272px] flex-col p-5" key={workflow.title}>
           <div className={`grid h-11 w-11 place-items-center rounded-md border ${workflow.accent}`}>
@@ -48,7 +58,7 @@ export default function WorkflowGuideCards() {
             <h2 className="text-lg font-semibold text-white">{workflow.title}</h2>
             <span className="text-xs text-slate-500">{workflow.subtitle}</span>
           </div>
-          <p className="mt-2 flex-1 text-sm leading-6 text-slate-300">{workflow.description}</p>
+          <p className="mt-2 flex-1 text-sm leading-6 text-slate-300 whitespace-pre-line">{workflow.description}</p>
           <div className="mt-4">
             <GlassBadge variant="neutral">Gợi ý: {workflow.preset}</GlassBadge>
           </div>
@@ -61,3 +71,4 @@ export default function WorkflowGuideCards() {
     </section>
   );
 }
+

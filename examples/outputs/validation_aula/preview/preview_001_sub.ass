@@ -1,0 +1,16 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,54,&H00FFFFFF,&H000000FF,&H000B0B0B,&HA6000000,1,0,0,0,100,100,0,0,1,2,2,5,48,48,229,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.47,Default,,0,0,0,,{\pos(540,1691)}Trải nghiệm gõ êm ái\Nnhờ cấu trúc
+Dialogue: 0,0:00:02.47,0:00:04.41,Default,,0,0,0,,{\pos(540,1691)}Gasket Mount tiêu âm\Ntốt.
+Dialogue: 0,0:00:04.41,0:00:06.79,Default,,0,0,0,,{\pos(540,1691)}Sắm ngay bàn phím cơ\NAULA F99 giá ưu
+Dialogue: 0,0:00:06.79,0:00:07.92,Default,,0,0,0,,{\pos(540,1691)}đãi ngay hôm nay!

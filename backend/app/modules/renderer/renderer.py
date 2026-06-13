@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.adapters.ffmpeg_adapter import FFmpegError, run_ffmpeg
 from app.modules.crop_safety.crop_strategy import build_crop_video_filter
-from app.modules.timeline_builder.timeline_builder import Timeline, TimelineClip
+from app.modules.timeline_builder.timeline_builder import ClipType, Timeline, TimelineClip
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir
 
@@ -59,8 +59,24 @@ class Renderer:
         return str(output_path)
 
     def _render_clip(self, clip: TimelineClip, output_path: Path, config: ProjectConfig) -> None:
+        from app.modules.renderer.special_clip_renderer import SpecialClipRenderer
+
         width, height = self._parse_resolution(config.render.resolution)
         fps = config.render.fps
+
+        # Route SESE special clips (FREEZE / FREEZE_ZOOM) to SpecialClipRenderer
+        if clip.clip_type in (ClipType.FREEZE, ClipType.FREEZE_ZOOM):
+            SpecialClipRenderer.render(
+                clip=clip,
+                output_path=output_path,
+                width=width,
+                height=height,
+                fps=fps,
+                grain=config.effects.grain,
+            )
+            return
+
+        # Normal clip rendering
         raw_duration = max(0.05, clip.end - clip.start)
 
         filtergraph = build_crop_video_filter(

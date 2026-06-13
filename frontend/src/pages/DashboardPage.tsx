@@ -1,4 +1,4 @@
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles, ShoppingBag } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { listProjects } from '../api/client';
@@ -64,6 +64,11 @@ export default function DashboardPage() {
           <Link to="/silent-mode">
             <GlassButton variant="secondary">Bắt đầu với Video không thoại</GlassButton>
           </Link>
+          <Link to="/projects/new">
+            <GlassButton variant="secondary" className="border-purple-500/30 text-purple-200 hover:text-white hover:bg-purple-500/10">
+              Tạo Video Affiliate
+            </GlassButton>
+          </Link>
         </div>
       </section>
 
@@ -88,6 +93,27 @@ export default function DashboardPage() {
           </div>
         </GlassCard>
       ) : null}
+
+      <GlassCard hover strong className="p-5 border-purple-500/30">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-purple-300/25 bg-purple-300/10 text-purple-200">
+              <ShoppingBag size={18} />
+            </div>
+            <div>
+              <h2 className="font-semibold text-white">Tạo Video Affiliate</h2>
+              <p className="mt-1 text-sm text-slate-300">
+                Tạo video từ nhiều video nguồn phù hợp Shopee/TikTok Shop
+              </p>
+            </div>
+          </div>
+          <Link to="/projects/new">
+            <GlassButton variant="secondary" className="border-purple-500/30 text-purple-200 hover:text-white hover:bg-purple-500/10">
+              Create Project
+            </GlassButton>
+          </Link>
+        </div>
+      </GlassCard>
 
       <WorkflowGuideCards />
       <StudioQuickActions />

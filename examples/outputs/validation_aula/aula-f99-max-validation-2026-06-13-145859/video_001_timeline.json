@@ -1,0 +1,229 @@
+{
+  "output_index": 1,
+  "template_id": "product_showcase_clean",
+  "target_duration": 12.0,
+  "average_segment_score": 0.991,
+  "source_diversity": {
+    "unique_sources": 4,
+    "total_clips": 7
+  },
+  "clips": [
+    {
+      "segment_id": "9499bb0bc73b",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7595230892298095879.mp4",
+      "start": 3.067,
+      "end": 4.903,
+      "duration": 1.8,
+      "speed": 1.02,
+      "slot_name": "hook",
+      "text_role": "hook",
+      "segment_score": 1.0,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 364,
+        "y": 0,
+        "width": 324,
+        "height": 576
+      },
+      "crop_mode": "center_crop",
+      "crop_safety_score": 0.578,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "e80ccec7b096",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7587114182856772885.mp4",
+      "start": 34.786,
+      "end": 37.063,
+      "duration": 2.293,
+      "speed": 0.993,
+      "slot_name": "product",
+      "text_role": "product",
+      "segment_score": 0.994,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 0,
+        "y": 0,
+        "width": 576,
+        "height": 1024
+      },
+      "crop_mode": "no_crop_scale",
+      "crop_safety_score": 0.88,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "f374a8fb6f0e",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7639553466544737544.mp4",
+      "start": 17.25,
+      "end": 18.567,
+      "duration": 1.307,
+      "speed": 1.008,
+      "slot_name": "product",
+      "text_role": "product",
+      "segment_score": 0.984,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 0,
+        "y": 0,
+        "width": 576,
+        "height": 1024
+      },
+      "crop_mode": "no_crop_scale",
+      "crop_safety_score": 0.904,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "a59efdf13144",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7595230892298095879.mp4",
+      "start": 10.891,
+      "end": 12.881,
+      "duration": 2.009,
+      "speed": 0.99,
+      "slot_name": "demo",
+      "text_role": "demo",
+      "segment_score": 1.0,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 368,
+        "y": 0,
+        "width": 324,
+        "height": 576
+      },
+      "crop_mode": "center_crop",
+      "crop_safety_score": 0.581,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "8460eb9c36ca",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7587114182856772885.mp4",
+      "start": 30.621,
+      "end": 32.255,
+      "duration": 1.591,
+      "speed": 1.027,
+      "slot_name": "demo",
+      "text_role": "demo",
+      "segment_score": 0.997,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 0,
+        "y": 0,
+        "width": 576,
+        "height": 1024
+      },
+      "crop_mode": "no_crop_scale",
+      "crop_safety_score": 0.854,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "d6c9b458f609",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7648990047949098248.mp4",
+      "start": 0.3,
+      "end": 2.115,
+      "duration": 1.8,
+      "speed": 1.008,
+      "slot_name": "benefit",
+      "text_role": "benefit",
+      "segment_score": 0.965,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 0,
+        "y": 0,
+        "width": 576,
+        "height": 1024
+      },
+      "crop_mode": "no_crop_scale",
+      "crop_safety_score": 0.916,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    },
+    {
+      "segment_id": "99933e2e033d",
+      "source_path": "D:\\Projects\\Auto-Tool\\backend\\dist\\examples\\sample_videos\\AULA F99 F99 Max\\snaptik.vn_7595230892298095879.mp4",
+      "start": 19.262,
+      "end": 20.486,
+      "duration": 1.2,
+      "speed": 1.02,
+      "slot_name": "cta",
+      "text_role": "cta",
+      "segment_score": 1.0,
+      "segment_score_cache_hit": false,
+      "tags": [
+        "high_motion",
+        "bright",
+        "sharp",
+        "stable"
+      ],
+      "crop_box": {
+        "x": 355,
+        "y": 0,
+        "width": 324,
+        "height": 576
+      },
+      "crop_mode": "center_crop",
+      "crop_safety_score": 0.584,
+      "crop_warnings": [],
+      "effective_zoom_motion": 20,
+      "crop_cache_hit": false,
+      "user_review_status": "pending",
+      "source_media_review_status": "pending"
+    }
+  ]
+}

@@ -26,6 +26,7 @@ from app.modules.render_worker.output_log import (
     status_from_log,
 )
 from app.modules.script_writer.script_writer import ProductVideoScript, ScriptWriter
+from app.modules.sese.sese_engine import SESEEngine
 from app.modules.subtitle_generator.subtitle_generator import SubtitleGenerator
 from app.modules.visual_style.subtitle_style_renderer import generate_ass_subtitle
 from app.modules.visual_style.visual_style_service import VisualStyleService, parse_resolution
@@ -103,6 +104,15 @@ def render_one_output(
             "target_video_duration": config.render.duration,
             "warnings": [],
         },
+        "sese": {
+            "enabled": getattr(config.render, "sese_enabled", False),
+            "applied": False,
+            "strategy": "none",
+            "original_duration": None,
+            "final_duration": None,
+            "added_duration": 0.0,
+            "warnings": [],
+        },
         "subtitle_sync": {
             "subtitle_active_duration": None,
             "subtitle_file": str(subtitle_path),
@@ -130,12 +140,6 @@ def render_one_output(
             output_log,
             "write_timeline_report",
             lambda: write_json(timeline_path, _timeline_report(timeline, config.timeline.template_id)),
-        )
-
-        rendered_visual_path = run_step(
-            output_log,
-            "render_visual",
-            lambda: renderer.render_timeline(timeline, config, str(output_dir), base_name=name),
         )
 
         def generate_script() -> ProductVideoScript:
@@ -202,6 +206,42 @@ def render_one_output(
         output_log["voice_duration"] = normalized_voice_duration
         output_log["tts"]["normalized_voice_path"] = normalized_voice_for_render
         output_log["tts"]["voice_duration"] = normalized_voice_duration
+
+        # ── SESE: Adjust timeline ending if voice is longer than visual ──
+        sese_enabled = getattr(config.render, "sese_enabled", False) and not preview_only
+        sese_timeline = timeline
+        if sese_enabled:
+            sese_timeline = run_step(
+                output_log,
+                "sese_synchronize",
+                lambda: SESEEngine.synchronize(
+                    timeline=timeline,
+                    voice_duration=normalized_voice_duration,
+                    config=config,
+                ),
+            )
+            sese_meta = getattr(sese_timeline, "sese_metadata", {})
+            output_log["sese"].update({
+                "applied": sese_meta.get("applied", False),
+                "strategy": sese_meta.get("strategy", "none"),
+                "original_duration": sese_meta.get("original_duration"),
+                "final_duration": sese_meta.get("final_duration"),
+                "added_duration": sese_meta.get("added_duration", 0.0),
+                "warnings": list(sese_meta.get("warnings", [])),
+            })
+            if sese_meta.get("warnings"):
+                extend_warnings(output_log, sese_meta["warnings"])
+
+        # Determine effective video duration for QA (may be extended by SESE)
+        effective_duration = float(
+            getattr(sese_timeline, "target_duration", None) or config.render.duration
+        )
+
+        rendered_visual_path = run_step(
+            output_log,
+            "render_visual",
+            lambda: renderer.render_timeline(sese_timeline, config, str(output_dir), base_name=name),
+        )
 
         def generate_subtitles() -> str:
             subtitle_generator.generate_srt(
@@ -271,7 +311,7 @@ def render_one_output(
             "qa_check",
             lambda: check_output_video(
                 output_path,
-                config.render.duration,
+                effective_duration,
                 expected_resolution=config.render.resolution,
                 subtitle_path=str(subtitle_path),
                 script_path=str(script_path),

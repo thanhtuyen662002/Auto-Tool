@@ -18,6 +18,11 @@ export const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   aspect_ratio: '9:16',
   resolution: '1080x1920',
   fps: 30,
+  sese_enabled: false,
+  sese_mode: 'auto',
+  max_auto_extension_seconds: 8.0,
+  max_auto_extension_ratio: 0.4,
+  sese_failure_strategy: 'trim',
 };
 
 export const DEFAULT_EFFECT_SETTINGS: EffectSettings = {
