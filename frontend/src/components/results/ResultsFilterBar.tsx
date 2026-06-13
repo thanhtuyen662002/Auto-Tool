@@ -8,7 +8,7 @@ const filters: Array<{ value: ResultFilter; label: string; countKey?: keyof Resu
   { value: 'warnings', label: 'Cảnh báo', countKey: 'warnings' },
   { value: 'failed', label: 'Lỗi', countKey: 'failed' },
   { value: 'qa_failed', label: 'QA lỗi', countKey: 'qaFailed' },
-  { value: 'needs_review', label: 'Cần review', countKey: 'needsReview' },
+  { value: 'needs_review', label: 'Cần đánh giá', countKey: 'needsReview' },
 ];
 
 export default function ResultsFilterBar({
@@ -95,10 +95,10 @@ export default function ResultsFilterBar({
           onChange={(event) => onSortChange(event.target.value as ResultSort)}
           aria-label="Sắp xếp kết quả"
         >
-          <option value="index_asc">Index tăng dần</option>
-          <option value="index_desc">Index giảm dần</option>
+          <option value="index_asc">Thứ tự tăng dần</option>
+          <option value="index_desc">Thứ tự giảm dần</option>
           <option value="status">Ưu tiên lỗi</option>
-          <option value="duration_desc">Duration dài nhất</option>
+          <option value="duration_desc">Thời lượng dài nhất</option>
         </select>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -106,7 +106,7 @@ export default function ResultsFilterBar({
             <button
               className={`rounded px-2.5 py-2 ${viewMode === 'grid' ? 'bg-cyan-300 text-slate-950' : 'text-slate-300 hover:bg-white/10'}`}
               type="button"
-              title="Grid view"
+              title="Dạng lưới"
               onClick={() => onViewModeChange('grid')}
             >
               <Grid3X3 size={16} />
@@ -114,7 +114,7 @@ export default function ResultsFilterBar({
             <button
               className={`rounded px-2.5 py-2 ${viewMode === 'compact' ? 'bg-cyan-300 text-slate-950' : 'text-slate-300 hover:bg-white/10'}`}
               type="button"
-              title="Compact view"
+              title="Dạng danh sách"
               onClick={() => onViewModeChange('compact')}
             >
               <List size={16} />

@@ -16,7 +16,7 @@ import UpdateBanner from '../components/UpdateBanner';
 const FALLBACK_VERSION = '1.0.0-rc1';
 
 const pageTitles: Array<[string, string]> = [
-  ['/onboarding', 'Onboarding'],
+  ['/onboarding', 'Hướng dẫn nhanh'],
   ['/recovery', 'Khôi phục job'],
   ['/help', 'Trợ giúp'],
   ['/settings/', 'Cài đặt project'],

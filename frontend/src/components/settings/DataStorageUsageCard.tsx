@@ -9,15 +9,15 @@ import { formatBytes } from '../../utils/formatBytes';
 const categoryLabels: Record<string, string> = {
   config: 'Cài đặt',
   database: 'Database',
-  projects: 'Project metadata',
+  projects: 'Dữ liệu Dự án',
   outputs: 'Outputs',
-  exports: 'Export packs',
-  subtitles: 'Subtitles',
+  exports: 'Gói xuất bản',
+  subtitles: 'Phụ đề',
   logs: 'Logs',
   cache: 'Cache',
   temp: 'Temp',
-  backups: 'Backups',
-  frontend: 'Frontend build',
+  backups: 'Bản sao lưu (Backups)',
+  frontend: 'Bản build giao diện',
 };
 
 export default function DataStorageUsageCard() {
@@ -64,7 +64,7 @@ export default function DataStorageUsageCard() {
 
   return (
     <SettingsSection
-      title="Storage Usage"
+      title="Dung lượng Lưu trữ"
       description="Xem nhanh dung lượng app đang dùng. Các mục có thể cleanup vẫn cần preview trước khi xóa."
     >
       <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -73,10 +73,10 @@ export default function DataStorageUsageCard() {
           <div className="mt-2 text-2xl font-semibold text-white">{formatBytes(report?.total_size_bytes ?? 0)}</div>
           <div className="mt-4 flex flex-wrap gap-2">
             <GlassButton loading={loading} onClick={() => void refresh()}>
-              <RefreshCw size={16} /> Refresh
+              <RefreshCw size={16} /> Làm mới
             </GlassButton>
             <GlassButton variant="ghost" onClick={() => void openFirstOutputFolder()}>
-              Open outputs
+              Mở thư mục output
             </GlassButton>
           </div>
         </div>
@@ -93,7 +93,7 @@ export default function DataStorageUsageCard() {
               <div className="mt-2 grid gap-1 text-xs text-slate-400">
                 {items.slice(0, 3).map((item) => (
                   <div key={item.path} className="truncate">
-                    {item.exists ? 'OK' : 'Missing'} · {item.description ?? item.path}
+                    {item.exists ? 'Tồn tại' : 'Thiếu'} · {item.description ?? item.path}
                   </div>
                 ))}
               </div>

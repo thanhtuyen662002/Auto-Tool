@@ -120,7 +120,7 @@ export default function CreateProjectPage() {
           type="button"
           onClick={() => navigate('/import-inbox')}
         >
-          Open Import Inbox
+          Mở hòm thư inbox
         </button>
         <h1 className="text-2xl font-semibold text-ink">Tạo dự án</h1>
           <p className="mt-1 text-sm text-muted">Nhập thông tin sản phẩm và thư mục trên máy để tạo cấu hình render.</p>

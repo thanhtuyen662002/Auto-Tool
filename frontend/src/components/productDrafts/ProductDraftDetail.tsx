@@ -34,7 +34,7 @@ const EMPTY_PRODUCT: ProductInfoNormalized = {
   description: '',
   features: [],
   specs: [],
-  cta: 'Xem chi tiet san pham ngay',
+  cta: 'Xem chi tiết sản phẩm ngay',
   industry_preset_id: 'general_product',
   hashtag_suggestions: [],
   warnings: [],
@@ -99,15 +99,17 @@ export default function ProductDraftDetail({
           <div>
             <h2 className="text-lg font-semibold text-ink">{draft.title}</h2>
             <p className="mt-1 text-sm text-muted">
-              Source: {draft.source.source_name ?? 'manual'} · Imported: {formatDate(draft.source.imported_at)}
+              Nguồn: {draft.source.source_name === 'shopee' ? 'Shopee Extension' : 'Thủ công'} · Ngày nhập: {formatDate(draft.source.imported_at)}
             </p>
             {draft.source.source_url ? (
               <a className="mt-2 inline-block text-sm font-semibold text-brand" href={draft.source.source_url} rel="noreferrer" target="_blank">
-                Open Source
+                Mở link gốc
               </a>
             ) : null}
           </div>
-          <span className="rounded-md bg-surface px-3 py-1 text-xs font-semibold uppercase text-muted">{draft.status}</span>
+          <span className="rounded-md bg-surface px-3 py-1 text-xs font-semibold uppercase text-muted">
+            {draft.status === 'new' ? 'Mới' : draft.status === 'reviewed' ? 'Đã xem' : draft.status === 'applied' ? 'Đã dùng' : draft.status === 'archived' ? 'Đã lưu trữ' : draft.status}
+          </span>
         </div>
       </div>
 
@@ -233,7 +235,9 @@ export default function ProductDraftDetail({
           <ul className="mt-3 space-y-2 text-sm">
             {draft.validation_issues.map((issue, index) => (
               <li className="rounded-md bg-surface px-3 py-2" key={`${issue.field}-${index}`}>
-                <span className="font-semibold capitalize">{issue.severity}</span>: {issue.message}
+                <span className="font-semibold capitalize">
+                  {issue.severity === 'error' ? 'Lỗi' : issue.severity === 'warning' ? 'Cảnh báo' : 'Thông tin'}
+                </span>: {issue.message}
               </li>
             ))}
           </ul>

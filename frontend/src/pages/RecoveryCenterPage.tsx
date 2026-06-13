@@ -130,16 +130,16 @@ export default function RecoveryCenterPage() {
             <p className="mt-3 text-sm leading-6 text-slate-300">{item.reason}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <GlassButton variant="primary" disabled={!item.recoverable} onClick={() => { setSelected(item); setResumeRequest(defaultResume); }}>
-                Resume safely
+                Khôi phục an toàn
               </GlassButton>
               <GlassButton loading={busyJobId === item.job_id} onClick={() => void runAction(item.job_id, () => reconcileJob(item.job_id), 'Đã reconcile output hiện có.')}>
-                Reconcile
+                Khớp lại (Reconcile)
               </GlassButton>
               <GlassButton variant="ghost" onClick={() => navigate(`/results/${item.project_id ?? 'project'}/${item.job_id}`)}>
                 Mở kết quả tạm thời
               </GlassButton>
-              <GlassButton variant="ghost" loading={busyJobId === item.job_id} onClick={() => void runAction(item.job_id, () => cleanupJobLock(item.job_id), 'Đã cleanup lock của job.')}>
-                Cleanup lock
+              <GlassButton variant="ghost" loading={busyJobId === item.job_id} onClick={() => void runAction(item.job_id, () => cleanupJobLock(item.job_id), 'Đã dọn dẹp lock của job.')}>
+                Dọn dẹp lock
               </GlassButton>
               <GlassButton variant="danger" loading={busyJobId === item.job_id} onClick={() => void runAction(item.job_id, () => markJobCancelled(item.job_id), 'Đã đánh dấu job là đã hủy.')}>
                 Đánh dấu đã hủy
@@ -165,10 +165,10 @@ export default function RecoveryCenterPage() {
               value={resumeRequest.resume_mode}
               onChange={(event) => setResumeRequest({ ...resumeRequest, resume_mode: event.target.value as ResumeMode })}
             >
-              <option value="reconcile_then_continue">Reconcile then continue</option>
-              <option value="retry_interrupted">Retry interrupted only</option>
-              <option value="retry_failed">Retry failed only</option>
-              <option value="continue_pending">Continue pending only</option>
+              <option value="reconcile_then_continue">Khớp lại rồi tiếp tục</option>
+              <option value="retry_interrupted">Chỉ thử lại phần bị gián đoạn</option>
+              <option value="retry_failed">Chỉ thử lại phần bị lỗi</option>
+              <option value="continue_pending">Chỉ tiếp tục phần đang chờ</option>
             </select>
           </label>
           <Toggle

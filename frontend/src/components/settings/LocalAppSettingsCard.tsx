@@ -107,15 +107,15 @@ export default function LocalAppSettingsCard() {
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
           <GlassButton variant="primary" loading={loading} onClick={() => void save()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><Save size={16} /> Lưu</GlassButton>
-          <GlassButton variant="secondary" onClick={() => void reset()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><RotateCcw size={16} /> Reset</GlassButton>
+          <GlassButton variant="secondary" onClick={() => void reset()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><RotateCcw size={16} /> Đặt lại</GlassButton>
           <GlassButton variant="ghost" loading={checking} onClick={() => void checkSystem()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><RefreshCw size={16} /> Kiểm tra hệ thống</GlassButton>
         </div>
         {message ? <p className="mt-3 text-sm text-cyan-100">{message}</p> : null}
       </SettingsSection>
-
+ 
       <SettingsSection title="Trạng thái máy chủ (Production)" description="Trạng thái frontend production build được phục vụ trực tiếp bởi FastAPI.">
         <div className="grid gap-3 md:grid-cols-3">
-          <StatusValue label="Chế độ chạy" value={frontendStatus?.data.mode === 'production_single_port' ? 'Single Port (Production)' : frontendStatus ? 'Development' : 'Không xác định'} ready={frontendStatus?.data.mode === 'production_single_port'} />
+          <StatusValue label="Chế độ chạy" value={frontendStatus?.data.mode === 'production_single_port' ? 'Single Port (Production)' : frontendStatus ? 'Phát triển (Development)' : 'Không xác định'} ready={frontendStatus?.data.mode === 'production_single_port'} />
           <StatusValue label="Frontend Build" value={frontendStatus?.data.index_html_exists ? 'Đã tìm thấy bản build' : 'Thiếu bản build'} ready={Boolean(frontendStatus?.data.index_html_exists)} />
           <StatusValue label="Máy chủ cục bộ" value={frontendStatus?.data.served_by_backend ? 'Sẵn sàng' : 'Không xác định'} ready={Boolean(frontendStatus?.data.served_by_backend)} />
         </div>
@@ -132,9 +132,9 @@ export default function LocalAppSettingsCard() {
           </div>
         ) : null}
       </SettingsSection>
-
+ 
       {systemCheck ? (
-        <SettingsSection title={`System Check · ${systemCheck.platform}`} description={systemCheck.ready ? 'Các thành phần bắt buộc đã sẵn sàng.' : 'Còn thành phần bắt buộc cần cài đặt hoặc cấu hình.'}>
+        <SettingsSection title={`Kiểm tra Hệ thống · ${systemCheck.platform}`} description={systemCheck.ready ? 'Các thành phần bắt buộc đã sẵn sàng.' : 'Còn thành phần bắt buộc cần cài đặt hoặc cấu hình.'}>
           <div className="grid gap-2 md:grid-cols-2">
             {systemCheck.checks.map((item) => {
               const ready = item.status === 'ready';

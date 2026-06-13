@@ -8,13 +8,13 @@ import {
 import type { ProductAsset, ProductAssetRole } from '../../types/project';
 
 const ROLES: Array<{ value: ProductAssetRole; label: string }> = [
-  { value: 'main_product', label: 'Main Product' },
-  { value: 'reference', label: 'Reference' },
+  { value: 'main_product', label: 'Ảnh chính' },
+  { value: 'reference', label: 'Tham khảo' },
   { value: 'poster', label: 'Poster' },
-  { value: 'thumbnail', label: 'Thumbnail' },
-  { value: 'description', label: 'Description' },
-  { value: 'variation', label: 'Variation' },
-  { value: 'unused', label: 'Unused' },
+  { value: 'thumbnail', label: 'Ảnh thu nhỏ (Thumbnail)' },
+  { value: 'description', label: 'Ảnh mô tả' },
+  { value: 'variation', label: 'Ảnh phân loại (Variation)' },
+  { value: 'unused', label: 'Không dùng' },
 ];
 
 export default function ProductAssetSelector({
@@ -117,7 +117,7 @@ export default function ProductAssetSelector({
   if (loading) {
     return (
       <section className="rounded-lg border border-line bg-white p-5 shadow-panel">
-        <h3 className="text-base font-semibold text-ink">Product Assets</h3>
+        <h3 className="text-base font-semibold text-ink">Tài nguyên sản phẩm</h3>
         <p className="mt-2 text-sm text-muted">Đang tải ảnh từ draft...</p>
       </section>
     );
@@ -127,7 +127,7 @@ export default function ProductAssetSelector({
     <section className="rounded-lg border border-line bg-white p-5 shadow-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-ink">Product Assets</h3>
+          <h3 className="text-base font-semibold text-ink">Tài nguyên sản phẩm</h3>
           <p className="mt-1 text-sm text-muted">Ảnh được lấy từ Shopee draft. Chỉ ảnh được chọn mới được lưu local.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -137,7 +137,7 @@ export default function ProductAssetSelector({
             disabled={busy}
             onClick={() => void loadAssets()}
           >
-            Refresh
+            Làm mới
           </button>
           <button
             className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
@@ -145,7 +145,7 @@ export default function ProductAssetSelector({
             disabled={busy || !selectedAssetIds.length}
             onClick={() => void importSelected()}
           >
-            {busy ? 'Đang xử lý...' : 'Import Assets'}
+            {busy ? 'Đang xử lý...' : 'Nhập tài nguyên'}
           </button>
         </div>
       </div>
@@ -197,20 +197,20 @@ function AssetCard({
         {previewUrl ? (
           <img className="h-full w-full object-contain" src={previewUrl} alt={asset.filename || 'Product asset'} />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-muted">No preview</div>
+          <div className="flex h-full items-center justify-center text-sm text-muted">Không có xem trước</div>
         )}
       </div>
       <div className="space-y-3 p-3">
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <Info label="Role" value={roleLabel(asset.role)} />
-          <Info label="Status" value={asset.status} />
-          <Info label="Quality" value={quality} />
-          <Info label="Size" value={asset.width && asset.height ? `${asset.width}x${asset.height}` : 'N/A'} />
+          <Info label="Vai trò" value={roleLabel(asset.role)} />
+          <Info label="Trạng thái" value={asset.status === 'skipped' ? 'Bỏ qua' : asset.status === 'downloaded' ? 'Đã tải' : asset.status === 'pending' ? 'Chờ tải' : asset.status} />
+          <Info label="Chất lượng" value={quality} />
+          <Info label="Kích thước" value={asset.width && asset.height ? `${asset.width}x${asset.height}` : 'N/A'} />
         </div>
 
         <label className="flex items-center gap-2 text-sm text-ink">
           <input checked={asset.is_selected} disabled={busy} type="checkbox" onChange={(event) => onToggle(event.target.checked)} />
-          Select
+          Chọn
         </label>
 
         <select
@@ -228,10 +228,10 @@ function AssetCard({
 
         <div className="flex flex-wrap gap-2">
           <button className="rounded-md bg-brand px-3 py-2 text-xs font-semibold text-white disabled:opacity-60" type="button" disabled={busy} onClick={onSetMain}>
-            Set as Main
+            Đặt làm ảnh chính
           </button>
           <button className="rounded-md border border-line bg-white px-3 py-2 text-xs font-semibold text-ink hover:border-brand" type="button" disabled={busy} onClick={onSkip}>
-            Skip
+            Bỏ qua
           </button>
         </div>
 

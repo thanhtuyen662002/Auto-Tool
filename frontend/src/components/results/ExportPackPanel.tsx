@@ -17,11 +17,11 @@ export interface ExportPackOptions {
 }
 
 const optionRows: Array<[keyof ExportPackOptions, string]> = [
-  ['copy_videos', 'Video files'],
-  ['include_subtitles', 'Subtitle files'],
-  ['include_logs', 'Logs'],
-  ['include_captions', 'Captions'],
-  ['include_posting_checklist', 'Posting checklist'],
+  ['copy_videos', 'Tệp Video'],
+  ['include_subtitles', 'Tệp phụ đề'],
+  ['include_logs', 'Nhật ký (Logs)'],
+  ['include_captions', 'Lời bình/Hashtag'],
+  ['include_posting_checklist', 'Checklist đăng bài'],
 ];
 
 const scopes: Array<{ value: ExportScope; label: string; hint: string }> = [
@@ -77,7 +77,7 @@ export default function ExportPackPanel({
 
       <div className="grid gap-3">
         <label>
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-normal text-slate-500">Platform</span>
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-normal text-slate-500">Nền tảng (Platform)</span>
           <select
             className="h-10 w-full rounded-md border border-white/15 bg-slate-950/70 px-3 text-sm"
             value={platformTarget}
@@ -86,7 +86,7 @@ export default function ExportPackPanel({
             <option value="tiktok">TikTok</option>
             <option value="instagram_reels">Instagram Reels</option>
             <option value="youtube_shorts">YouTube Shorts</option>
-            <option value="generic_vertical">Generic Vertical</option>
+            <option value="generic_vertical">Video đứng chung</option>
           </select>
         </label>
 

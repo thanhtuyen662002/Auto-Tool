@@ -26,11 +26,11 @@ export default function ExportPackCreatedCard({
       <div className="mt-3 flex flex-wrap gap-2">
         <GlassButton className="px-3" variant="secondary" onClick={onCopy}>
           <Clipboard size={15} />
-          Copy path
+          Copy đường dẫn
         </GlassButton>
         <GlassButton className="px-3" variant="ghost" onClick={onOpen}>
           <FolderOpen size={15} />
-          Open folder
+          Mở thư mục
         </GlassButton>
       </div>
     </div>

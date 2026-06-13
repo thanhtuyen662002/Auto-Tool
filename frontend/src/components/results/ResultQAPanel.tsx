@@ -34,25 +34,25 @@ export default function ResultQAPanel({
         <div>
           <h2 className="flex items-center gap-2 font-semibold text-white">
             <ShieldCheck size={18} className="text-emerald-300" />
-            Final QA
+            Đánh giá QA
           </h2>
           <p className="mt-1 text-sm text-slate-400">Kiểm tra kỹ thuật cuối trước khi đóng gói đăng nền tảng.</p>
         </div>
         <GlassBadge variant={failed.length ? 'failed' : warnings.length ? 'warning' : checked.length ? 'success' : 'neutral'}>
-          {checked.length ? `${checked.length}/${items.length} checked` : 'Not checked'}
+          {checked.length ? `Đã kiểm tra ${checked.length}/${items.length}` : 'Chưa kiểm tra'}
         </GlassBadge>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-center">
-        <Metric label="Passed" value={batchSummary?.passed ?? passed.length} />
-        <Metric label="Warnings" value={batchSummary?.passed_with_warnings ?? warnings.length} />
-        <Metric label="Failed" value={batchSummary?.failed ?? failed.length} />
-        <Metric label="Average" value={average == null ? '-' : `${average}%`} />
+        <Metric label="Đạt (Passed)" value={batchSummary?.passed ?? passed.length} />
+        <Metric label="Cảnh báo (Warnings)" value={batchSummary?.passed_with_warnings ?? warnings.length} />
+        <Metric label="Lỗi (Failed)" value={batchSummary?.failed ?? failed.length} />
+        <Metric label="Trung bình" value={average == null ? '-' : `${average}%`} />
       </div>
 
       <div className="grid gap-3 border-t border-white/10 pt-4">
         <label>
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-normal text-slate-500">Platform target</span>
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-normal text-slate-500">Nền tảng đích</span>
           <select
             className="h-10 w-full rounded-md border border-white/15 bg-slate-950/70 px-3 text-sm"
             value={platformTarget}
@@ -61,7 +61,7 @@ export default function ResultQAPanel({
             <option value="tiktok">TikTok</option>
             <option value="instagram_reels">Instagram Reels</option>
             <option value="youtube_shorts">YouTube Shorts</option>
-            <option value="generic_vertical">Generic Vertical</option>
+            <option value="generic_vertical">Video đứng chung</option>
           </select>
         </label>
         <GlassButton variant="primary" loading={busy} disabled={!items.length} onClick={onRunQA}>
@@ -86,7 +86,7 @@ export default function ResultQAPanel({
                 {item.qa?.report_path ? (
                   <a className="mt-2 inline-flex items-center gap-1 font-semibold text-cyan-200 hover:text-cyan-100" href={finalOutputQAReportUrl(item.qa.report_path)} target="_blank" rel="noreferrer">
                     <ExternalLink size={13} />
-                    QA report
+                    Báo cáo QA
                   </a>
                 ) : null}
               </div>

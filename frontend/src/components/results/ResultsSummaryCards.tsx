@@ -12,11 +12,11 @@ export default function ResultsSummaryCards({
 }) {
   const progress = jobStatus ? `${Math.round(jobStatus.progress)}%` : summary.total ? '100%' : '-';
   const cards = [
-    { label: 'Tổng output', value: summary.total, detail: `${summary.exportEligible} có thể export`, icon: FileArchive, tone: 'text-cyan-200' },
+    { label: 'Tổng output', value: summary.total, detail: `${summary.exportEligible} có thể xuất`, icon: FileArchive, tone: 'text-cyan-200' },
     { label: 'Sẵn sàng', value: summary.ready, detail: `${summary.selected} đang chọn`, icon: CheckCircle2, tone: 'text-emerald-300' },
-    { label: 'Cảnh báo', value: summary.warnings, detail: `${summary.needsReview} cần review`, icon: AlertTriangle, tone: 'text-amber-300' },
+    { label: 'Cảnh báo', value: summary.warnings, detail: `${summary.needsReview} cần đánh giá`, icon: AlertTriangle, tone: 'text-amber-300' },
     { label: 'Lỗi', value: summary.failed, detail: `${summary.qaFailed} lỗi QA`, icon: ShieldAlert, tone: 'text-rose-300' },
-    { label: 'QA score', value: summary.averageQaScore == null ? '-' : `${summary.averageQaScore}%`, detail: `${summary.qaChecked} đã check`, icon: Gauge, tone: 'text-violet-200' },
+    { label: 'Điểm QA', value: summary.averageQaScore == null ? '-' : `${summary.averageQaScore}%`, detail: `${summary.qaChecked} đã kiểm tra`, icon: Gauge, tone: 'text-violet-200' },
   ];
 
   return (
@@ -37,7 +37,7 @@ export default function ResultsSummaryCards({
         );
       })}
       <div className="sr-only" aria-live="polite">
-        Job progress {progress}
+        Tiến trình công việc {progress}
       </div>
       {jobStatus && jobStatus.status !== 'completed' ? (
         <GlassCard className="sm:col-span-2 xl:col-span-5 overflow-hidden">

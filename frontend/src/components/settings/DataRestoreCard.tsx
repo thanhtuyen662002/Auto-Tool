@@ -61,7 +61,7 @@ export default function DataRestoreCard() {
   }
 
   return (
-    <SettingsSection title="Restore Backup" description="Kiểm tra backup trước khi restore. Mặc định tạo pre-restore backup và không ghi đè file đang có.">
+    <SettingsSection title="Khôi phục Bản sao lưu" description="Kiểm tra backup trước khi restore. Mặc định tạo pre-restore backup và không ghi đè file đang có.">
       <div className="grid gap-5 xl:grid-cols-2">
         <div className="grid gap-3">
           <PathInput

@@ -60,7 +60,7 @@ export default function DataBackupCard() {
   }
 
   return (
-    <SettingsSection title="Backup & Restore" description="Tạo backup zip có manifest. Mặc định không backup video output để tránh file quá nặng.">
+    <SettingsSection title="Sao lưu Dữ liệu" description="Tạo backup zip có manifest. Mặc định không backup video output để tránh file quá nặng.">
       <div className="grid gap-5 xl:grid-cols-2">
         <div className="grid gap-3">
           <Toggle label="Cấu hình & thiết lập" checked={request.include_config} onChange={(value) => setRequest({ ...request, include_config: value })} />
@@ -125,8 +125,8 @@ function PathLine({ path }: { path: string }) {
     <div className="mt-2 break-all">
       Path: {path}
       <div className="mt-2 flex flex-wrap gap-2">
-        <GlassButton variant="ghost" onClick={() => void copy(path)}>Copy path</GlassButton>
-        <GlassButton variant="ghost" onClick={() => void revealFile(path)}>Open folder</GlassButton>
+        <GlassButton variant="ghost" onClick={() => void copy(path)}>Sao chép đường dẫn</GlassButton>
+        <GlassButton variant="ghost" onClick={() => void revealFile(path)}>Mở thư mục</GlassButton>
       </div>
     </div>
   );

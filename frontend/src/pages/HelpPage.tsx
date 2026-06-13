@@ -46,7 +46,7 @@ export default function HelpPage() {
   return (
     <main className="studio-page grid gap-6">
       <section>
-        <GlassBadge variant="neutral">Help</GlassBadge>
+        <GlassBadge variant="neutral">Trợ giúp</GlassBadge>
         <h1 className="mt-3 text-3xl font-semibold text-white">Hướng dẫn nhanh</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
           Các câu trả lời ngắn để bạn chọn đúng workflow, chuẩn bị hệ thống và hiểu các bước chính của Auto Tool Studio.

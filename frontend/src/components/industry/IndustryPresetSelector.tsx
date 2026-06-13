@@ -62,12 +62,12 @@ export default function IndustryPresetSelector({
           <div className="text-sm font-semibold text-ink">{selected.name}</div>
           <p className="mt-1 text-sm leading-relaxed text-muted">{selected.description}</p>
           <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
-            <SummaryItem label="Video style" value={videoStyleLabelForPreset(selected)} />
-            <SummaryItem label="Timeline" value={selected.timeline_template_id} />
-            <SummaryItem label="Overlay" value={selected.visual_style_preset_id} />
-            <SummaryItem label="Voice" value={selected.default_tts_voice} />
-            <SummaryItem label="Edit" value={selected.default_edit_strength} />
-            <SummaryItem label="Script" value={selected.script_variation_mode} />
+            <SummaryItem label="Phong cách video" value={videoStyleLabelForPreset(selected)} />
+            <SummaryItem label="Dòng thời gian" value={selected.timeline_template_id} />
+            <SummaryItem label="Lớp phủ" value={selected.visual_style_preset_id} />
+            <SummaryItem label="Giọng đọc" value={selected.default_tts_voice} />
+            <SummaryItem label="Chỉnh sửa" value={selected.default_edit_strength} />
+            <SummaryItem label="Kịch bản" value={selected.script_variation_mode} />
           </div>
           {!compact ? (
             <>

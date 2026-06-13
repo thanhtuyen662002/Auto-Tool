@@ -976,12 +976,12 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             <ApiErrorBox error={error} />
             {actionMessage ? <div className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">{actionMessage}</div> : null}
             <WorkflowStepper steps={[
-              { label: 'Source', status: sourceFolder ? 'done' : 'active' },
-              { label: 'Preset', status: selectedPresetCard ? 'done' : 'pending' },
-              { label: 'Output', status: outputFolder ? 'done' : 'pending' },
-              { label: 'Check', status: checklist.some((item) => item.status === 'missing') ? 'pending' : 'done' },
-              { label: 'Start', status: jobStatus && !done ? 'active' : done ? 'done' : 'pending' },
-              { label: 'Export', status: exportPack ? 'done' : 'pending' },
+              { label: 'Nguồn', status: sourceFolder ? 'done' : 'active' },
+              { label: 'Cấu hình', status: selectedPresetCard ? 'done' : 'pending' },
+              { label: 'Đầu ra', status: outputFolder ? 'done' : 'pending' },
+              { label: 'Kiểm tra', status: checklist.some((item) => item.status === 'missing') ? 'pending' : 'done' },
+              { label: 'Bắt đầu', status: jobStatus && !done ? 'active' : done ? 'done' : 'pending' },
+              { label: 'Xuất bản', status: exportPack ? 'done' : 'pending' },
             ]} />
             <SourceFolderCard
               mode={workflowMode}
@@ -1531,15 +1531,15 @@ function shortPresetDescription(preset: DouyinReupPreset): string {
 
 function presetBadge(preset: DouyinReupPreset): string {
   const badges: Record<string, string> = {
-    safe_review: 'Recommended',
-    fast_auto: 'Fast',
-    ocr_priority: 'OCR',
-    voice_priority: 'Voice',
-    clean_subtitle_only: 'Clean',
-    music_recut: 'Music',
-    silent_chill_immersive: 'Recommended',
-    silent_product_voiceover: 'Voice',
-    silent_sales_recut: 'Sales',
+    safe_review: 'Khuyên dùng',
+    fast_auto: 'Nhanh',
+    ocr_priority: 'Chữ (OCR)',
+    voice_priority: 'Giọng nói',
+    clean_subtitle_only: 'Chỉ phụ đề',
+    music_recut: 'Nhạc',
+    silent_chill_immersive: 'Khuyên dùng',
+    silent_product_voiceover: 'Giọng nói',
+    silent_sales_recut: 'Bán hàng',
   };
   return badges[preset.id] ?? preset.ui_badge;
 }

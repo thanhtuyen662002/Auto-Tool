@@ -60,7 +60,7 @@ export default function ImportInboxPage() {
         return draftResponse.items.find((draft) => draft.id === current.id) ?? draftResponse.items[0] ?? null;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load Import Inbox.');
+      setError(err instanceof Error ? err.message : 'Không thể tải Hộp thư Nhập sản phẩm.');
     } finally {
       setLoading(false);
     }
@@ -99,7 +99,7 @@ export default function ImportInboxPage() {
       setMessage(successMessage);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Action failed.');
+      setError(err instanceof Error ? err.message : 'Thao tác thất bại.');
     } finally {
       setSaving(false);
     }
@@ -110,28 +110,28 @@ export default function ImportInboxPage() {
     await runAction(async () => {
       const updated = await updateProductDraft(selectedDraft.id, payload);
       setSelectedDraft(updated);
-    }, 'Draft saved.');
+    }, 'Đã lưu nháp.');
   }
 
   async function handleArchiveDraft(draftId: string) {
     await runAction(async () => {
       await archiveProductDraft(draftId);
-    }, 'Draft archived.');
+    }, 'Đã lưu trữ nháp.');
   }
 
   async function handleDeleteDraft(draftId: string) {
-    if (!window.confirm('Delete this draft permanently?')) return;
+    if (!window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn bản nháp này?')) return;
     await runAction(async () => {
       await deleteProductDraft(draftId);
       setSelectedDraft((current) => (current?.id === draftId ? null : current));
-    }, 'Draft deleted.');
+    }, 'Đã xóa nháp.');
   }
 
   async function handleClearArchived() {
-    if (!window.confirm('Delete all archived drafts permanently?')) return;
+    if (!window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn tất cả bản nháp đã lưu trữ?')) return;
     await runAction(async () => {
       await clearArchivedProductDrafts();
-    }, 'Archived drafts cleared.');
+    }, 'Đã dọn dẹp các bản nháp lưu trữ.');
   }
 
   async function handleApply(projectId: string, selectedAssetIds: string[] = []) {
@@ -141,7 +141,7 @@ export default function ImportInboxPage() {
       if (selectedAssetIds.length > 0) {
         await attachProductDraftAssetsToProject(selectedDraft.id, projectId, selectedAssetIds);
       }
-    }, selectedAssetIds.length > 0 ? 'Draft and selected assets applied to project.' : 'Draft applied to project.');
+    }, selectedAssetIds.length > 0 ? 'Đã áp dụng bản nháp và tài nguyên đã chọn vào dự án.' : 'Đã áp dụng bản nháp vào dự án.');
   }
 
   async function handleCreateProject(payload: CreateProjectFromDraftRequest) {
@@ -153,7 +153,7 @@ export default function ImportInboxPage() {
       const response = await createProjectFromDraft(selectedDraft.id, payload);
       navigate(`/settings/${response.project_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create project from draft.');
+      setError(err instanceof Error ? err.message : 'Không thể tạo dự án từ bản nháp.');
     } finally {
       setSaving(false);
     }
@@ -204,7 +204,7 @@ export default function ImportInboxPage() {
         <span className="mx-1 h-9 w-px bg-line" />
         {SOURCE_FILTERS.map((source) => (
           <FilterButton key={source} active={sourceFilter === source} onClick={() => setSourceFilter(source)}>
-            {source === 'all' ? 'Tất cả nguồn' : source}
+            {source === 'all' ? 'Tất cả nguồn' : source === 'shopee' ? 'Shopee Extension' : 'Thủ công (Manual)'}
           </FilterButton>
         ))}
       </section>
@@ -297,30 +297,32 @@ function DraftCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-base font-semibold text-ink">{draft.title}</h2>
-          <p className="mt-1 text-xs text-muted">Nguon: {draft.source.source_name ?? 'manual'}</p>
+          <p className="mt-1 text-xs text-muted">Nguồn: {draft.source.source_name === 'shopee' ? 'Shopee Extension' : 'Thủ công'}</p>
         </div>
-        <span className="rounded bg-surface px-2 py-1 text-xs font-semibold uppercase text-muted">{draft.status}</span>
+        <span className="rounded bg-surface px-2 py-1 text-xs font-semibold uppercase text-muted">
+          {draft.status === 'new' ? 'Mới' : draft.status === 'reviewed' ? 'Đã xem' : draft.status === 'applied' ? 'Đã dùng' : draft.status === 'archived' ? 'Đã lưu trữ' : draft.status}
+        </span>
       </div>
       <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <InfoItem label="Confidence" value={`${Math.round(draft.confidence_score * 100)}%`} />
-        <InfoItem label="Industry" value={draft.industry_preset_id ?? 'N/A'} />
-        <InfoItem label="Imported" value={formatDate(draft.source.imported_at)} />
-        <InfoItem label="Warnings" value={String(warnings)} />
+        <InfoItem label="Độ tin cậy" value={`${Math.round(draft.confidence_score * 100)}%`} />
+        <InfoItem label="Ngành hàng" value={draft.industry_preset_id ?? 'Chưa cấu hình'} />
+        <InfoItem label="Ngày nhập" value={formatDate(draft.source.imported_at)} />
+        <InfoItem label="Cảnh báo" value={String(warnings)} />
       </dl>
       <div className="mt-4 flex flex-wrap gap-2">
         <button className="rounded-md bg-brand px-3 py-2 text-xs font-semibold text-white" type="button" onClick={onView}>
-          View
+          Xem
         </button>
         {draft.source.source_url ? (
           <a className="rounded-md border border-line bg-white px-3 py-2 text-xs font-semibold text-ink hover:border-brand" href={draft.source.source_url} rel="noreferrer" target="_blank">
-            Open Source
+            Mở link gốc
           </a>
         ) : null}
         <button className="rounded-md border border-line bg-white px-3 py-2 text-xs font-semibold text-ink hover:border-brand" type="button" onClick={onArchive}>
-          Archive
+          Lưu trữ
         </button>
         <button className="rounded-md border border-line bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:border-red-400" type="button" onClick={onDelete}>
-          Delete
+          Xóa
         </button>
       </div>
     </article>

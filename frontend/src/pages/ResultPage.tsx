@@ -257,12 +257,12 @@ export default function ResultPage() {
   }
 
   const workflowSteps = [
-    { label: 'Source', status: 'done' as const },
-    { label: 'Preset', status: 'done' as const },
-    { label: 'Processing', status: loading || jobRunning ? 'active' as const : 'done' as const },
-    { label: 'Review', status: outputs.length ? 'done' as const : 'pending' as const },
-    { label: 'Render', status: summary.exportEligible ? 'done' as const : 'pending' as const },
-    { label: 'Export', status: exportPack ? 'done' as const : 'pending' as const },
+    { label: 'Nguồn', status: 'done' as const },
+    { label: 'Cấu hình', status: 'done' as const },
+    { label: 'Xử lý', status: loading || jobRunning ? 'active' as const : 'done' as const },
+    { label: 'Đánh giá', status: outputs.length ? 'done' as const : 'pending' as const },
+    { label: 'Kết xuất', status: summary.exportEligible ? 'done' as const : 'pending' as const },
+    { label: 'Xuất bản', status: exportPack ? 'done' as const : 'pending' as const },
   ];
 
   return (

@@ -24,7 +24,7 @@ export default function PresetCard({ id, name, description, badge, active, silen
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold text-white">{name}</h3>{badge ? <GlassBadge variant={active ? 'ready' : 'neutral'}>{badge}</GlassBadge> : null}</div>
             <p className="mt-2 line-clamp-2 text-sm leading-5 text-slate-300">{description}</p>
-            <div className="mt-3 flex flex-wrap gap-1.5">{silent ? <GlassBadge>Silent</GlassBadge> : null}{review ? <GlassBadge variant="needs_review">Review</GlassBadge> : null}{ocr ? <GlassBadge>OCR</GlassBadge> : null}</div>
+            <div className="mt-3 flex flex-wrap gap-1.5">{silent ? <GlassBadge>Không thoại</GlassBadge> : null}{review ? <GlassBadge variant="needs_review">Kiểm tra</GlassBadge> : null}{ocr ? <GlassBadge>Nhận diện chữ (OCR)</GlassBadge> : null}</div>
           </div>
         </div>
       </GlassCard>

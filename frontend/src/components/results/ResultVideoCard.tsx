@@ -108,7 +108,7 @@ function PreviewTile({
       </div>
       <div className="absolute bottom-3 left-3 flex items-center gap-2 text-sm font-semibold text-white">
         <PlayCircle size={18} />
-        Preview
+        Xem trước
       </div>
       <div className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2 py-1 text-xs text-slate-200">{item.durationLabel}</div>
     </button>
@@ -164,7 +164,7 @@ function CardActions({
       {selectionMode ? (
         <label className="inline-flex min-h-10 items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200">
           <input type="checkbox" checked={selected} disabled={!item.exportEligible} onChange={() => onToggleSelected(item)} />
-          Export
+          Chọn xuất
         </label>
       ) : null}
       <GlassButton className="px-3" variant="primary" disabled={!item.path} onClick={() => onPreview(item)}>
@@ -173,7 +173,7 @@ function CardActions({
       </GlassButton>
       <GlassButton className="px-3" variant="secondary" disabled={!item.path} onClick={() => onCopyPath(item)}>
         <Clipboard size={15} />
-        Path
+        Đường dẫn
       </GlassButton>
       <GlassButton className="px-3" variant="ghost" disabled={!item.path} onClick={() => onRevealFile(item)}>
         <FolderOpen size={15} />
@@ -181,7 +181,7 @@ function CardActions({
       </GlassButton>
       <GlassButton className="px-3" variant="ghost" disabled={!hasCaption} onClick={() => onCopyCaption(item)}>
         <Captions size={15} />
-        Caption
+        Lời bình
       </GlassButton>
       <GlassButton className="px-3" variant="ghost" disabled={!item.logFile && !item.files.length} onClick={() => onShowLog(item)}>
         <FileSearch size={15} />

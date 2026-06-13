@@ -53,7 +53,7 @@ export default function StudioSidebar({
           </div>
           <div className="min-w-0">
             <div className="truncate font-semibold text-white">Auto Tool Studio</div>
-            <div className="text-xs text-slate-400">Local video studio</div>
+            <div className="text-xs text-slate-400">Studio video nội bộ</div>
           </div>
         </div>
         <button className="rounded-md p-2 text-slate-300 hover:bg-white/10 hover:text-white transition-colors lg:hidden" type="button" onClick={onClose} aria-label="Đóng menu">

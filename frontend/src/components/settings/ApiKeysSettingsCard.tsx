@@ -100,7 +100,7 @@ export default function ApiKeysSettingsCard() {
             </div>
             {geminiKeyCount > 0 && (
               <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
-                <ShieldCheck size={11} className="mr-1 inline" />Active
+                <ShieldCheck size={11} className="mr-1 inline" />Đang hoạt động
               </span>
             )}
           </div>

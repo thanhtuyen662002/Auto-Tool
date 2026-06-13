@@ -27,7 +27,7 @@ export default function ResultTechnicalLogDrawer({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-white">Log kỹ thuật</h2>
-            <p className="mt-1 truncate text-sm text-slate-400">{item?.filename ?? jobStatus?.job_id ?? 'Job details'}</p>
+            <p className="mt-1 truncate text-sm text-slate-400">{item?.filename ?? jobStatus?.job_id ?? 'Chi tiết công việc'}</p>
           </div>
           <button className="rounded-md p-2 text-slate-300 hover:bg-white/10 hover:text-white" type="button" onClick={onClose} aria-label="Đóng">
             <X size={18} />
@@ -41,29 +41,29 @@ export default function ResultTechnicalLogDrawer({
           </GlassButton>
           {item?.path ? (
             <GlassButton className="px-3" variant="ghost" onClick={() => void copyText(item.path)}>
-              Copy video path
+              Copy đường dẫn video
             </GlassButton>
           ) : null}
         </div>
 
         {item ? (
           <div className="mt-5 grid gap-5">
-            <Section title="Files">
+            <Section title="Danh sách File">
               {item.files.length ? item.files.map((file) => <PathRow key={`${file.label}-${file.path}`} label={file.label} value={file.path} />) : <EmptyLine text="Không có file liên quan." />}
             </Section>
-            <Section title="Warnings">
-              {item.warnings.length ? item.warnings.map((warning, index) => <LogLine key={`${warning}-${index}`} tone="warning" text={warning} />) : <EmptyLine text="Không có warning." />}
+            <Section title="Cảnh báo (Warnings)">
+              {item.warnings.length ? item.warnings.map((warning, index) => <LogLine key={`${warning}-${index}`} tone="warning" text={warning} />) : <EmptyLine text="Không có cảnh báo." />}
             </Section>
-            <Section title="Errors">
-              {item.errors.length ? item.errors.map((error, index) => <LogLine key={`${error}-${index}`} tone="error" text={error} />) : <EmptyLine text="Không có error." />}
+            <Section title="Lỗi (Errors)">
+              {item.errors.length ? item.errors.map((error, index) => <LogLine key={`${error}-${index}`} tone="error" text={error} />) : <EmptyLine text="Không có lỗi." />}
             </Section>
-            <Section title="Final QA">
-              {item.qa?.issues.length ? item.qa.issues.map((issue, index) => <LogLine key={`${issue.issue_type}-${index}`} tone={issue.severity === 'critical' ? 'error' : 'warning'} text={`${issue.message}${issue.suggestion ? ` Suggested: ${issue.suggestion}` : ''}`} />) : <EmptyLine text={item.qa ? 'QA không có issue.' : 'QA chưa chạy.'} />}
+            <Section title="Đánh giá QA cuối">
+              {item.qa?.issues.length ? item.qa.issues.map((issue, index) => <LogLine key={`${issue.issue_type}-${index}`} tone={issue.severity === 'critical' ? 'error' : 'warning'} text={`${issue.message}${issue.suggestion ? ` Gợi ý: ${issue.suggestion}` : ''}`} />) : <EmptyLine text={item.qa ? 'QA không phát hiện vấn đề.' : 'QA chưa chạy.'} />}
             </Section>
           </div>
         ) : null}
 
-        <Section title="Job logs" className="mt-5">
+        <Section title="Nhật ký công việc" className="mt-5">
           {jobStatus?.logs?.length ? (
             jobStatus.logs.slice(-20).reverse().map((log) => (
               <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs leading-5" key={`${log.created_at}-${log.message}`}>

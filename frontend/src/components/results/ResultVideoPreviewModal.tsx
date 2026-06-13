@@ -28,7 +28,7 @@ export default function ResultVideoPreviewModal({
 }) {
   const hasCaption = Boolean(item && captionBundle(item));
   return (
-    <GlassModal open={Boolean(item)} title={item?.filename ?? 'Preview'} onClose={onClose}>
+    <GlassModal open={Boolean(item)} title={item?.filename ?? 'Xem trước'} onClose={onClose}>
       {item ? (
         <div className="grid gap-4">
           <div className="overflow-hidden rounded-md border border-white/10 bg-black">
@@ -46,9 +46,9 @@ export default function ResultVideoPreviewModal({
             </div>
             <div className="grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
               <PathLine label="Video" value={item.path} />
-              <PathLine label="Subtitle" value={item.subtitleFile} />
-              <PathLine label="Voice" value={item.voiceFile} />
-              <PathLine label="Log" value={item.logFile} />
+              <PathLine label="Phụ đề" value={item.subtitleFile} />
+              <PathLine label="Giọng đọc" value={item.voiceFile} />
+              <PathLine label="Nhật ký (Log)" value={item.logFile} />
             </div>
             {item.caption ? <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm leading-6 text-slate-200">{item.caption}</p> : null}
           </div>
@@ -57,12 +57,12 @@ export default function ResultVideoPreviewModal({
             {selectionMode ? (
               <GlassButton variant={selected ? 'primary' : 'secondary'} disabled={!item.exportEligible} onClick={() => onToggleSelected(item)}>
                 {selected ? <CheckSquare size={16} /> : <Square size={16} />}
-                {selected ? 'Đã chọn export' : 'Chọn export'}
+                {selected ? 'Đã chọn xuất' : 'Chọn xuất'}
               </GlassButton>
             ) : null}
             <GlassButton variant="secondary" disabled={!item.path} onClick={() => onCopyPath(item)}>
               <Clipboard size={16} />
-              Copy path
+              Copy đường dẫn
             </GlassButton>
             <GlassButton variant="secondary" disabled={!item.path} onClick={() => onRevealFile(item)}>
               <FolderOpen size={16} />
@@ -70,7 +70,7 @@ export default function ResultVideoPreviewModal({
             </GlassButton>
             <GlassButton variant="ghost" disabled={!hasCaption} onClick={() => onCopyCaption(item)}>
               <Captions size={16} />
-              Copy caption
+              Copy lời bình
             </GlassButton>
             <GlassButton variant="ghost" onClick={() => onShowLog(item)}>
               <FolderOpen size={16} />

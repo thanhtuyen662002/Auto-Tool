@@ -34,15 +34,15 @@ export default function JobRecoverySettingsCard() {
   }
 
   return (
-    <SettingsSection title="Job Recovery" description="Theo dõi các batch bị gián đoạn và mở Recovery Center để resume an toàn.">
+    <SettingsSection title="Khôi phục tác vụ" description="Theo dõi các batch bị gián đoạn và mở Recovery Center để resume an toàn.">
       <div className="grid gap-3 md:grid-cols-3">
-        <Metric label="Recoverable jobs" value={summary.recoverable} />
-        <Metric label="Interrupted jobs" value={summary.interrupted} />
-        <Metric label="Failed items" value={summary.failed} />
+        <Metric label="Job có thể khôi phục" value={summary.recoverable} />
+        <Metric label="Job bị gián đoạn" value={summary.interrupted} />
+        <Metric label="Output lỗi" value={summary.failed} />
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <GlassButton variant="primary" onClick={() => navigate('/recovery')}>Open Recovery Center</GlassButton>
-        <GlassButton loading={loading} onClick={() => void refresh()}>Refresh</GlassButton>
+        <GlassButton variant="primary" onClick={() => navigate('/recovery')}>Mở trung tâm khôi phục</GlassButton>
+        <GlassButton loading={loading} onClick={() => void refresh()}>Làm mới</GlassButton>
       </div>
       {error ? <div className="mt-3 rounded-md border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-100">{error}</div> : null}
     </SettingsSection>

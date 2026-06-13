@@ -20,10 +20,10 @@ export default function StudioRecentOutputs() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold text-white">Output gần đây</h2>
-          <p className="mt-1 text-sm text-slate-400">Video render xong sẽ nằm trong Results, kèm Final QA và Export Pack.</p>
+          <p className="mt-1 text-sm text-slate-400">Video render xong sẽ nằm trong Kết quả, kèm đánh giá QA cuối và Gói xuất bản.</p>
         </div>
         <Link to="/results">
-          <GlassButton variant="secondary" className="min-h-9 px-3 text-xs">Mở Results</GlassButton>
+          <GlassButton variant="secondary" className="min-h-9 px-3 text-xs">Mở Kết quả</GlassButton>
         </Link>
       </div>
 
@@ -40,12 +40,12 @@ export default function StudioRecentOutputs() {
                   {output.resultUrl ? (
                     <Link to={output.resultUrl} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-white/15 px-3 text-xs font-semibold text-slate-200 hover:bg-white/8">
                       <Play size={13} />
-                      Preview
+                      Xem trước
                     </Link>
                   ) : null}
                   <button className="inline-flex min-h-9 items-center gap-2 rounded-md border border-white/15 px-3 text-xs font-semibold text-slate-200 hover:bg-white/8" type="button" onClick={() => void navigator.clipboard?.writeText(output.outputFolder)}>
                     <Copy size={13} />
-                    Copy path
+                    Copy đường dẫn
                   </button>
                 </div>
               </div>
@@ -56,7 +56,7 @@ export default function StudioRecentOutputs() {
         <div className="mt-4">
           <GlassEmptyState
             title="Chưa có output gần đây"
-            message="Sau khi chạy batch, mở Results để xem video, QA status, export pack và log kỹ thuật khi cần."
+            message="Sau khi chạy batch, mở Kết quả để xem video, trạng thái QA, gói xuất bản và log kỹ thuật khi cần."
             action={
               <Link to="/results">
                 <GlassButton variant="secondary">

@@ -28,13 +28,13 @@ export default function ResultRetryPanel({
         {failedItems.slice(0, 4).map((item) => (
           <div className="min-w-0 rounded-md border border-rose-300/20 bg-rose-400/10 p-3 text-xs" key={item.id}>
             <div className="truncate font-semibold text-rose-100">{item.filename}</div>
-            <div className="mt-1 text-rose-200/80">{item.failedStep || item.errorText || 'Render/QA failed'}</div>
+            <div className="mt-1 text-rose-200/80">{item.failedStep || item.errorText || 'Render/QA thất bại'}</div>
           </div>
         ))}
       </div>
       <GlassButton variant="danger" loading={busy} onClick={onRetryFailed}>
         <RotateCcw size={16} />
-        Retry failed outputs
+        Thử lại các video lỗi
       </GlassButton>
     </GlassCard>
   );

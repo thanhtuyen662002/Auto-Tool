@@ -14,11 +14,11 @@ import { formatBytes } from '../../utils/formatBytes';
 const targets: Array<{ id: CleanupTarget; label: string; defaultChecked: boolean }> = [
   { id: 'launcher_logs', label: 'Launcher logs cũ', defaultChecked: true },
   { id: 'debug_logs', label: 'Debug logs cũ', defaultChecked: true },
-  { id: 'temp_files', label: 'Temp files', defaultChecked: true },
-  { id: 'cache_files', label: 'Cache files', defaultChecked: true },
-  { id: 'preview_frames', label: 'Preview frames', defaultChecked: true },
-  { id: 'failed_partial_renders', label: 'Failed partial renders', defaultChecked: false },
-  { id: 'old_exports', label: 'Old export packs', defaultChecked: false },
+  { id: 'temp_files', label: 'Tệp tạm thời (Temp)', defaultChecked: true },
+  { id: 'cache_files', label: 'Tệp đệm (Cache)', defaultChecked: true },
+  { id: 'preview_frames', label: 'Khung hình xem trước (Preview)', defaultChecked: true },
+  { id: 'failed_partial_renders', label: 'Các phần render lỗi', defaultChecked: false },
+  { id: 'old_exports', label: 'Gói xuất bản cũ', defaultChecked: false },
 ];
 
 export default function DataCleanupCard() {
@@ -77,7 +77,7 @@ export default function DataCleanupCard() {
   }
 
   return (
-    <SettingsSection title="Cleanup" description="Cleanup luôn bắt đầu bằng preview. Không xóa source videos, music folder, database hoặc config.">
+    <SettingsSection title="Dọn dẹp Bộ nhớ" description="Cleanup luôn bắt đầu bằng preview. Không xóa source videos, music folder, database hoặc config.">
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid gap-3">
           <div className="grid gap-2 md:grid-cols-2">
@@ -94,16 +94,16 @@ export default function DataCleanupCard() {
             ))}
           </div>
           <GlassInput
-            label="Older than days"
+            label="Số ngày cũ hơn"
             type="number"
             min={0}
             value={olderThanDays}
             onChange={(event) => setOlderThanDays(Math.max(0, Number(event.target.value) || 0))}
           />
           <div className="flex flex-wrap gap-2">
-            <GlassButton loading={loading} onClick={() => void handlePreview()}>Preview Cleanup</GlassButton>
+            <GlassButton loading={loading} onClick={() => void handlePreview()}>Xem trước dọn dẹp</GlassButton>
             <GlassButton variant="danger" loading={loading} disabled={!preview || !confirmed} onClick={() => void handleRun()}>
-              Run Cleanup
+              Chạy dọn dẹp
             </GlassButton>
           </div>
           <label className="flex items-start gap-3 rounded-md border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-100">
@@ -113,17 +113,17 @@ export default function DataCleanupCard() {
           {error ? <div className="rounded-md border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-100">{error}</div> : null}
         </div>
         <div className="rounded-md border border-white/10 bg-black/15 p-4 text-sm text-slate-300">
-          <h3 className="font-semibold text-white">Cleanup preview</h3>
+          <h3 className="font-semibold text-white">Xem trước dọn dẹp</h3>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <Metric label="Files" value={String(totals.files)} />
-            <Metric label="Size" value={formatBytes(totals.size)} />
+            <Metric label="Số tệp" value={String(totals.files)} />
+            <Metric label="Dung lượng" value={formatBytes(totals.size)} />
           </div>
           {preview ? (
             <div className="mt-3">
               {preview.warnings.map((item) => <div key={item} className="text-amber-200">Cảnh báo: {item}</div>)}
               {preview.errors.map((item) => <div key={item} className="text-rose-200">Lỗi: {item}</div>)}
               <GlassButton className="mt-3" variant="ghost" onClick={() => setShowDetails((value) => !value)}>
-                {showDetails ? 'Hide details' : 'Show details'}
+                {showDetails ? 'Ẩn chi tiết' : 'Hiện chi tiết'}
               </GlassButton>
               {showDetails ? (
                 <div className="mt-3 max-h-72 overflow-auto rounded-md border border-white/10 bg-slate-950/50 p-2">
@@ -136,7 +136,7 @@ export default function DataCleanupCard() {
                 </div>
               ) : null}
             </div>
-          ) : <div className="mt-3 text-slate-400">Bấm Preview Cleanup để xem danh sách file trước.</div>}
+          ) : <div className="mt-3 text-slate-400">Bấm Xem trước dọn dẹp để xem danh sách file trước.</div>}
           {result ? (
             <div className="mt-3 rounded-md border border-emerald-400/25 bg-emerald-400/10 p-3 text-emerald-100">
               Đã xóa {result.deleted_file_count} file, {formatBytes(result.deleted_size_bytes)}.

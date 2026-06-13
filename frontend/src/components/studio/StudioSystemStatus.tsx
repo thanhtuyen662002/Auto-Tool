@@ -15,8 +15,8 @@ const labels: Record<SystemStatusValue | 'connected' | 'offline' | 'unknown', st
   missing: 'Cần cấu hình',
   optional: 'Không bắt buộc',
   unknown: 'Không xác định',
-  connected: 'Connected',
-  offline: 'Offline',
+  connected: 'Đang kết nối',
+  offline: 'Ngoại tuyến (Offline)',
 };
 
 const descriptions = {
@@ -35,13 +35,13 @@ export default function StudioSystemStatus({ status, loading, onRefresh }: Props
     { key: 'backend', label: 'Backend', value: status.backend === 'connected' ? 'connected' : 'offline', description: descriptions.backend },
     { key: 'ffmpeg', label: 'FFmpeg', value: status.ffmpeg, description: descriptions.ffmpeg },
     { key: 'ffprobe', label: 'ffprobe', value: status.ffprobe, description: descriptions.ffprobe },
-    { key: 'translation', label: 'Translation Provider', value: status.translation, description: descriptions.translation },
-    { key: 'ocr', label: 'OCR', value: status.ocr, description: descriptions.ocr },
-    { key: 'tts', label: 'TTS', value: status.tts, description: descriptions.tts },
-    { key: 'outputFolder', label: 'Output Folder', value: status.outputFolder, description: descriptions.outputFolder },
+    { key: 'translation', label: 'Dịch thuật', value: status.translation, description: descriptions.translation },
+    { key: 'ocr', label: 'Nhận diện chữ (OCR)', value: status.ocr, description: descriptions.ocr },
+    { key: 'tts', label: 'Giọng đọc (TTS)', value: status.tts, description: descriptions.tts },
+    { key: 'outputFolder', label: 'Thư mục đầu ra', value: status.outputFolder, description: descriptions.outputFolder },
     {
       key: 'localServer',
-      label: 'Local Server',
+      label: 'Máy chủ cục bộ',
       value: status.localServer,
       description: status.singlePortUrl ? `${descriptions.localServer} ${status.singlePortUrl}` : descriptions.localServer,
     },
@@ -55,8 +55,8 @@ export default function StudioSystemStatus({ status, loading, onRefresh }: Props
             <Server size={18} />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">System Status</h2>
-            <p className="mt-1 text-sm text-slate-400">Trạng thái hệ thống được normalize từ backend health và dependencies.</p>
+            <h2 className="text-lg font-semibold text-white">Trạng thái hệ thống</h2>
+            <p className="mt-1 text-sm text-slate-400">Trạng thái hệ thống được chuẩn hóa từ backend health và các phần phụ thuộc.</p>
           </div>
         </div>
         {onRefresh ? (
