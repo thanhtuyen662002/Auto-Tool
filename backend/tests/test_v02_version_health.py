@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 import app.api as api_module
 from app.api import create_app
+from app.version import APP_VERSION
 
 
 def test_health_reports_douyin_reup_v1_rc_version() -> None:
@@ -12,7 +13,7 @@ def test_health_reports_douyin_reup_v1_rc_version() -> None:
     response = client.get("/api/health")
 
     assert response.status_code == 200
-    assert response.json()["version"] == "1.0.0-rc1"
+    assert response.json()["version"] == APP_VERSION
     assert response.json()["capabilities"] == {
         "douyin_reup": True,
         "silent_immersive_mode": True,

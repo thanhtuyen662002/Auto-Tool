@@ -54,6 +54,8 @@ import type {
   MediaReviewStatus,
   SegmentReviewResponse,
   SegmentReviewStatus,
+  ConfigRequirementCheckRequest,
+  ConfigRequirementCheckResponse,
   SourceMediaResponse,
   UpdateSegmentReviewResponse,
   UpdateSourceMediaReviewResponse,
@@ -64,6 +66,7 @@ import type {
   DouyinApplyPresetResponse,
   DouyinOneClickBatchRequest,
   DouyinOneClickBatchResponse,
+  SilentOneClickBatchRequest,
   DouyinReupJobResultsResponse,
   DouyinOcrTestRequest,
   DouyinOcrTestResponse,
@@ -145,11 +148,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let detail = `${response.status} ${response.statusText}`;
     try {
       const payload = (await response.json()) as { detail?: unknown };
-      if (typeof payload.detail === 'string') {
-        detail = payload.detail;
-      } else if (payload.detail) {
-        detail = JSON.stringify(payload.detail);
-      }
+      detail = formatApiErrorDetail(payload.detail) || detail;
     } catch {
       const text = await response.text();
       if (text) detail = text;
@@ -158,6 +157,38 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+function formatApiErrorDetail(detail: unknown): string {
+  if (!detail) return '';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map(formatApiIssue).filter(Boolean);
+    return messages.length ? messages.join('\n') : JSON.stringify(detail);
+  }
+  if (typeof detail === 'object') {
+    const payload = detail as { error?: unknown; issues?: unknown };
+    const lines: string[] = [];
+    if (typeof payload.error === 'string') lines.push(payload.error);
+    if (Array.isArray(payload.issues)) {
+      lines.push(...payload.issues.map(formatApiIssue).filter(Boolean));
+    }
+    return lines.length ? lines.join('\n') : JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
+function formatApiIssue(issue: unknown): string {
+  if (!issue || typeof issue !== 'object') return String(issue || '');
+  const payload = issue as { message?: unknown; action?: unknown; msg?: unknown; loc?: unknown };
+  const message = typeof payload.message === 'string'
+    ? payload.message
+    : typeof payload.msg === 'string'
+      ? payload.msg
+      : '';
+  const action = typeof payload.action === 'string' ? payload.action : '';
+  const location = Array.isArray(payload.loc) ? payload.loc.join('.') : '';
+  return [location, message, action].filter(Boolean).join(' - ');
 }
 
 export function createProject(config: ProjectConfig): Promise<ProjectResponse> {
@@ -197,6 +228,15 @@ export function saveAppSettings(settings: AppSettings): Promise<AppSettings> {
   return request<AppSettings>('/api/settings', {
     method: 'PUT',
     body: JSON.stringify(settings),
+  });
+}
+
+export function checkConfigRequirements(
+  payload: ConfigRequirementCheckRequest,
+): Promise<ConfigRequirementCheckResponse> {
+  return request<ConfigRequirementCheckResponse>('/api/config/requirements', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 
@@ -270,6 +310,15 @@ export function startDouyinOneClickBatch(
   payload: DouyinOneClickBatchRequest,
 ): Promise<DouyinOneClickBatchResponse> {
   return request<DouyinOneClickBatchResponse>('/api/douyin-reup/one-click', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function startSilentOneClickBatch(
+  payload: SilentOneClickBatchRequest,
+): Promise<DouyinOneClickBatchResponse> {
+  return request<DouyinOneClickBatchResponse>('/api/silent-reup/one-click', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -590,6 +639,13 @@ export function getJobStatus(jobId: string): Promise<JobStatus> {
 export function getJobResults(jobId: string): Promise<JobResult> {
   return request<JobResult>(`/api/jobs/${jobId}/results`);
 }
+
+export function deleteJob(jobId: string): Promise<{ success: boolean; job_id: string }> {
+  return request<{ success: boolean; job_id: string }>(`/api/jobs/${jobId}`, {
+    method: 'DELETE',
+  });
+}
+
 
 export function getOutputReview(projectId: string): Promise<OutputReviewResponse> {
   return request<OutputReviewResponse>(`/api/projects/${projectId}/outputs/review`);

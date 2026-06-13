@@ -195,6 +195,7 @@ from app.modules.job_recovery import (
     ResumeJobResult,
 )
 from app.presets import get_default_presets
+from app.utils.env_loader import load_local_env
 from app.schemas.api_schema import (
     AppSettings,
     ApplyIndustryPresetRequest,
@@ -245,6 +246,9 @@ from app.schemas.api_schema import (
     CreateProjectFromDraftResponse,
     DeleteProductDraftResponse,
     ClearArchivedDraftsResponse,
+    ConfigRequirementCheckRequest,
+    ConfigRequirementCheckResponse,
+    ConfigRequirementIssue,
     ProjectCreateResponse,
     ProjectDetailResponse,
     RenderRequest,
@@ -912,6 +916,8 @@ def create_app() -> FastAPI:
                 settings=settings,
                 product_context=request.product_context,
             )
+            config = _apply_app_settings(config)
+            _require_config_ready(config, mode="douyin_reup")
             scanner = DouyinFolderScanner()
             media = scanner.scan_folder(config.source_folder)
             total_outputs = _count_douyin_selected(media, config.douyin_reup or DouyinReupSettings(enabled=True))
@@ -1231,6 +1237,8 @@ def create_app() -> FastAPI:
                 settings=settings,
                 product_context=stored.get("product_context") or {},
             )
+            config = _apply_app_settings(config)
+            _require_config_ready(config, mode="silent_reup")
             database.create_project(project_id, config.model_dump(mode="json"))
             database.create_job(job_id, project_id, preview_only=False, total_outputs=1)
             threading.Thread(
@@ -1280,6 +1288,8 @@ def create_app() -> FastAPI:
                 settings=settings,
                 product_context=request.product_context,
             )
+            config = _apply_app_settings(config)
+            _require_config_ready(config, mode="silent_reup")
             scanner = DouyinFolderScanner()
             media = scanner.scan_folder(config.source_folder)
             total_outputs = _count_douyin_selected(media, config.douyin_reup or DouyinReupSettings(enabled=True))
@@ -1309,6 +1319,8 @@ def create_app() -> FastAPI:
         database.init_db()
         try:
             config = _build_douyin_project_config(request)
+            config = _apply_app_settings(config)
+            _require_config_ready(config, mode="douyin_reup")
             scanner = DouyinFolderScanner()
             media = scanner.scan_folder(config.source_folder)
             total_outputs = _count_douyin_selected(media, config.douyin_reup or DouyinReupSettings(enabled=True))
@@ -1519,6 +1531,16 @@ def create_app() -> FastAPI:
         database.init_db()
         saved = database.update_app_settings(settings.model_dump(mode="json"))
         return AppSettings.model_validate(saved)
+
+    @app.post("/api/config/requirements", response_model=ConfigRequirementCheckResponse)
+    def check_config_requirements(request: ConfigRequirementCheckRequest) -> ConfigRequirementCheckResponse:
+        try:
+            config, has_custom_script = _config_for_requirement_check(request)
+        except ValidationError as exc:
+            raise HTTPException(status_code=400, detail=exc.errors()) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _check_config_requirements(config, mode=request.mode, has_custom_script=has_custom_script)
 
     @app.post("/api/product-info/import", response_model=ProductInfoImportResponse)
     def import_product_info(request: ProductInfoImportRequest) -> ProductInfoImportResponse:
@@ -2059,6 +2081,7 @@ def create_app() -> FastAPI:
                 status_code=400,
                 detail=_safety_error_detail(safety_result),
             ) from exc
+        _require_config_ready(config, mode="product_render", has_custom_script=bool(project.get("custom_script")))
         safety_result = SafetyGuardService().check_before_render(config)
         if safety_result.errors_count:
             raise HTTPException(
@@ -2458,6 +2481,16 @@ def create_app() -> FastAPI:
             logs=logs,
             cache_summary=job.get("results", {}).get("cache_summary"),
         )
+
+    @app.delete("/api/jobs/{job_id}")
+    def delete_job(job_id: str) -> dict[str, Any]:
+        database.init_db()
+        job = database.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        database.delete_job(job_id)
+        return {"success": True, "job_id": job_id}
+
 
     @app.get("/api/jobs/{job_id}/results", response_model=JobResultsResponse)
     def get_job_results(job_id: str) -> JobResultsResponse:
@@ -3547,6 +3580,188 @@ def _save_latest_script_from_summary(
 
 def _get_app_settings() -> AppSettings:
     return AppSettings.model_validate(database.get_app_settings() or {})
+
+
+def _config_for_requirement_check(request: ConfigRequirementCheckRequest) -> tuple[ProjectConfig | None, bool]:
+    if request.project_config is not None:
+        return _apply_app_settings(request.project_config), False
+    if request.project_id:
+        database.init_db()
+        project = database.get_project(request.project_id)
+        if not project:
+            raise LookupError(f"Project not found: {request.project_id}")
+        config = _apply_app_settings(ProjectConfig.model_validate(project["config"]))
+        return config, bool(project.get("custom_script"))
+    return None, False
+
+
+def _require_config_ready(
+    config: ProjectConfig,
+    *,
+    mode: str,
+    has_custom_script: bool = False,
+) -> None:
+    result = _check_config_requirements(config, mode=mode, has_custom_script=has_custom_script)
+    if result.errors_count:
+        raise HTTPException(status_code=400, detail=_config_requirements_error_detail(result))
+
+
+def _check_config_requirements(
+    config: ProjectConfig | None,
+    *,
+    mode: str,
+    has_custom_script: bool = False,
+) -> ConfigRequirementCheckResponse:
+    load_local_env()
+    issues: list[ConfigRequirementIssue] = []
+
+    if _gemini_required_for_mode(config, mode, has_custom_script=has_custom_script):
+        if not _has_gemini_key(config):
+            if _script_fallback_enabled():
+                issues.append(
+                    ConfigRequirementIssue(
+                        severity="warning",
+                        code="gemini_missing_using_fallback",
+                        field="settings.gemini_api_keys",
+                        message=(
+                            "Chưa có Gemini API key. Tool sẽ dùng kịch bản dự phòng vì "
+                            "AUTO_TOOL_ALLOW_SCRIPT_FALLBACK đang bật."
+                        ),
+                        action="Nhập Gemini API key trong trang Cài đặt để tạo script/dịch subtitle bằng AI.",
+                    )
+                )
+            else:
+                issues.append(
+                    ConfigRequirementIssue(
+                        severity="error",
+                        code="missing_gemini_api_key",
+                        field="settings.gemini_api_keys",
+                        message=(
+                            "Chưa cấu hình Gemini API key. Tác vụ này cần Gemini để tạo hoặc dịch nội dung video."
+                        ),
+                        action="Vào Cài đặt > API key, nhập ít nhất một Gemini API key rồi lưu lại.",
+                    )
+                )
+
+    if _google_tts_required_for_mode(config, mode):
+        auth = _google_tts_auth_values(config)
+        if not any(auth.values()):
+            issues.append(
+                ConfigRequirementIssue(
+                    severity="error",
+                    code="missing_google_tts_credentials",
+                    field="settings.google_tts_credentials_json_path",
+                    message="Bạn đang chọn Google Cloud TTS nhưng chưa cung cấp API key, access token hoặc file service account JSON.",
+                    action="Vào Cài đặt > API key, nhập Google TTS API key hoặc chọn file service account JSON.",
+                )
+            )
+        credential_path = auth.get("credentials_json_path")
+        if credential_path and not Path(credential_path).expanduser().exists():
+            issues.append(
+                ConfigRequirementIssue(
+                    severity="error",
+                    code="google_tts_credentials_file_missing",
+                    field="settings.google_tts_credentials_json_path",
+                    message=f"File service account Google TTS không tồn tại: {credential_path}",
+                    action="Chọn lại đúng file JSON trong trang Cài đặt hoặc bỏ trống nếu dùng API key/access token.",
+                )
+            )
+
+    errors_count = sum(1 for issue in issues if issue.severity == "error")
+    warnings_count = sum(1 for issue in issues if issue.severity == "warning")
+    return ConfigRequirementCheckResponse(
+        ready=errors_count == 0,
+        errors_count=errors_count,
+        warnings_count=warnings_count,
+        issues=issues,
+    )
+
+
+def _config_requirements_error_detail(result: ConfigRequirementCheckResponse) -> dict[str, Any]:
+    return {
+        "success": False,
+        "error": "Thiếu cấu hình bắt buộc trước khi render.",
+        "issues": [issue.model_dump(mode="json") for issue in result.issues],
+    }
+
+
+def _gemini_required_for_mode(
+    config: ProjectConfig | None,
+    mode: str,
+    *,
+    has_custom_script: bool = False,
+) -> bool:
+    normalized_mode = mode.strip().lower()
+    if normalized_mode == "product_render":
+        return not has_custom_script
+    settings = config.douyin_reup if config else None
+    if normalized_mode == "douyin_reup":
+        return settings is None or _normalized_provider(settings.translation_provider) == "gemini"
+    if normalized_mode == "silent_reup":
+        if settings is None:
+            return True
+        return bool(settings.generate_visual_captions) or _normalized_provider(settings.translation_provider) == "gemini"
+    return False
+
+
+def _google_tts_required_for_mode(config: ProjectConfig | None, mode: str) -> bool:
+    if config is None:
+        return False
+    providers = {_normalized_provider(config.tts.provider)}
+    settings = config.douyin_reup
+    if settings and settings.generate_voiceover_for_silent_video:
+        providers.add(_normalized_provider(settings.silent_voiceover_provider))
+    return "google_cloud_tts" in providers
+
+
+def _has_gemini_key(config: ProjectConfig | None) -> bool:
+    settings = _get_app_settings()
+    candidates: list[str] = []
+    if config is not None:
+        candidates.extend(config.ai.gemini_api_keys)
+    candidates.extend(settings.gemini_api_keys)
+    candidates.extend(_split_env_keys(os.getenv("GEMINI_API_KEYS", "")))
+    candidates.append(os.getenv("GEMINI_API_KEY", ""))
+    return any(candidate.strip() for candidate in candidates)
+
+
+def _google_tts_auth_values(config: ProjectConfig | None) -> dict[str, str]:
+    settings = _get_app_settings()
+    return {
+        "api_key": (
+            (config.tts.api_key if config else None)
+            or settings.google_tts_api_key
+            or os.getenv("GOOGLE_TTS_API_KEY")
+            or os.getenv("GOOGLE_CLOUD_TTS_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+            or ""
+        ).strip(),
+        "credentials_json_path": (
+            (config.tts.credentials_json_path if config else None)
+            or settings.google_tts_credentials_json_path
+            or os.getenv("GOOGLE_TTS_CREDENTIALS_JSON_PATH")
+            or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            or ""
+        ).strip(),
+        "access_token": (
+            (config.tts.access_token if config else None)
+            or settings.google_tts_access_token
+            or os.getenv("GOOGLE_TTS_ACCESS_TOKEN")
+            or ""
+        ).strip(),
+    }
+
+
+def _script_fallback_enabled() -> bool:
+    return os.getenv("AUTO_TOOL_ALLOW_SCRIPT_FALLBACK", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalized_provider(value: str | None) -> str:
+    return (value or "").strip().lower().replace("-", "_")
+
+
+def _split_env_keys(value: str) -> list[str]:
+    return [part.strip() for part in value.replace(";", "\n").replace(",", "\n").splitlines() if part.strip()]
 
 
 def _silent_settings_from_payload(payload: dict[str, Any] | None = None) -> DouyinReupSettings:

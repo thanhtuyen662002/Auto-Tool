@@ -89,6 +89,27 @@ class AppSettings(BaseModel):
         return cleaned or None
 
 
+class ConfigRequirementIssue(BaseModel):
+    severity: Literal["error", "warning"] = "error"
+    code: str
+    field: str
+    message: str
+    action: str
+
+
+class ConfigRequirementCheckRequest(BaseModel):
+    project_config: ProjectConfig | None = None
+    project_id: str | None = None
+    mode: Literal["product_render", "douyin_reup", "silent_reup", "subtitle_render"] = "product_render"
+
+
+class ConfigRequirementCheckResponse(BaseModel):
+    ready: bool
+    errors_count: int = 0
+    warnings_count: int = 0
+    issues: list[ConfigRequirementIssue] = Field(default_factory=list)
+
+
 class BrowsePathRequest(BaseModel):
     mode: str = Field(default="folder", pattern="^(file|folder)$")
     title: str | None = None

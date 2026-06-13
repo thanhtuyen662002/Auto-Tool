@@ -4,6 +4,7 @@ import {
   listDouyinReupPresets,
   scanDouyinReupFolder,
   startDouyinOneClickBatch,
+  startSilentOneClickBatch,
 } from '../api/client';
 import type {
   BrowsePathMode,
@@ -11,12 +12,13 @@ import type {
   DouyinOneClickBatchResponse,
   DouyinReupPreset,
   DouyinReupScanResponse,
+  SilentOneClickBatchRequest,
   SystemDependencyStatusResponse,
 } from '../types/project';
 import { arrayField, numberField, unwrapApiResponse } from '../utils/apiResponse';
 
 export type StartDouyinRequest = DouyinOneClickBatchRequest;
-export type StartSilentRequest = DouyinOneClickBatchRequest;
+export type StartSilentRequest = SilentOneClickBatchRequest;
 
 export async function scanDouyinFolder(sourceFolder: string): Promise<DouyinReupScanResponse> {
   const rawResponse = await scanDouyinReupFolder(sourceFolder);
@@ -35,7 +37,7 @@ export function startDouyinOneClick(request: StartDouyinRequest): Promise<Douyin
 }
 
 export function startSilentOneClick(request: StartSilentRequest): Promise<DouyinOneClickBatchResponse> {
-  return startDouyinOneClickBatch(request);
+  return startSilentOneClickBatch(request);
 }
 
 export async function getPresets(): Promise<DouyinReupPreset[]> {

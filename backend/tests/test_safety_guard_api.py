@@ -24,8 +24,9 @@ def test_safety_check_endpoint_returns_warnings(tmp_path: Path) -> None:
     assert payload["warnings_count"] >= 1
 
 
-def test_render_is_blocked_when_product_name_is_blank(tmp_path: Path) -> None:
+def test_render_is_blocked_when_product_name_is_blank(tmp_path: Path, monkeypatch) -> None:
     database.DB_PATH = tmp_path / "safety-render-block.db"
+    monkeypatch.setenv("AUTO_TOOL_ALLOW_SCRIPT_FALLBACK", "1")
 
     with TestClient(create_app()) as client:
         created = client.post("/api/projects", json=_project_config(tmp_path, name="   "))
@@ -39,8 +40,9 @@ def test_render_is_blocked_when_product_name_is_blank(tmp_path: Path) -> None:
     assert detail["error"] == "Product info safety check failed"
 
 
-def test_render_still_queues_when_product_has_warning_only(tmp_path: Path) -> None:
+def test_render_still_queues_when_product_has_warning_only(tmp_path: Path, monkeypatch) -> None:
     database.DB_PATH = tmp_path / "safety-render-warning.db"
+    monkeypatch.setenv("AUTO_TOOL_ALLOW_SCRIPT_FALLBACK", "1")
 
     with TestClient(create_app()) as client:
         created = client.post("/api/projects", json=_project_config(tmp_path, feature="100% hiệu quả"))

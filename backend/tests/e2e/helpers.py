@@ -135,6 +135,7 @@ def create_dummy_videos(source_dir: Path, count: int = 3, duration: float = 4.6)
 def patch_fast_tts(monkeypatch: pytest.MonkeyPatch, fail_pattern: str | None = None) -> None:
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEYS", raising=False)
+    monkeypatch.setenv("AUTO_TOOL_ALLOW_SCRIPT_FALLBACK", "1")
     monkeypatch.setenv("AUTO_TOOL_TTS_PROVIDER", "edge_tts")
 
     def fake_generate_voice(self: TTSManager, text: str, output_path: str, settings: TTSSettings) -> TTSResult:

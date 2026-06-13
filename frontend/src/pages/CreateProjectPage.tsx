@@ -6,12 +6,14 @@ import IndustryPresetSelector from '../components/industry/IndustryPresetSelecto
 import ProductInfoImporter from '../components/productImport/ProductInfoImporter';
 import ProductInfoForm from '../components/ProductInfoForm';
 import type { ApplyIndustryPresetOptions, IndustryPreset, ProductInfoNormalized, ProjectConfig } from '../types/project';
+import { getLocalAppConfig } from '../services/localAppApi';
 import { applyIndustryPresetToConfig, DEFAULT_INDUSTRY_APPLY_OPTIONS } from '../utils/industryPresetApply';
+import { getLocalUiSettings } from '../utils/localSettings';
 import { defaultProjectConfig, formatJson, maskSensitiveConfig, saveProjectConfig } from '../utils/projectState';
 
 export default function CreateProjectPage() {
   const navigate = useNavigate();
-  const [config, setConfig] = useState<ProjectConfig>(() => defaultProjectConfig());
+  const [config, setConfig] = useState<ProjectConfig>(() => projectConfigWithLocalPathDefaults());
   const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
   const [lastSavedConfig, setLastSavedConfig] = useState<ProjectConfig | null>(null);
   const [industryPresets, setIndustryPresets] = useState<IndustryPreset[]>([]);
@@ -30,6 +32,34 @@ export default function CreateProjectPage() {
     getIndustryPresets()
       .then((response) => setIndustryPresets(response.presets))
       .catch((err) => setError(err instanceof Error ? err.message : 'Không thể tải danh sách ngành hàng.'));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const defaults = defaultProjectConfig();
+    getLocalAppConfig()
+      .then((localConfig) => {
+        if (!active) return;
+        setConfig((current) => ({
+          ...current,
+          source_folder: shouldApplyPathDefault(current.source_folder, defaults.source_folder)
+            ? localConfig.default_source_folder || current.source_folder
+            : current.source_folder,
+          output_folder: shouldApplyPathDefault(current.output_folder, defaults.output_folder)
+            ? localConfig.default_output_folder || current.output_folder
+            : current.output_folder,
+          music: {
+            ...current.music,
+            source_folder: shouldApplyPathDefault(current.music.source_folder || '', defaults.music.source_folder || '')
+              ? localConfig.default_music_folder || current.music.source_folder
+              : current.music.source_folder,
+          },
+        }));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, []);
 
   function handleIndustrySelect(presetId: string) {
@@ -183,4 +213,22 @@ export default function CreateProjectPage() {
       </div>
     </main>
   );
+}
+
+function projectConfigWithLocalPathDefaults(): ProjectConfig {
+  const base = defaultProjectConfig();
+  const local = getLocalUiSettings();
+  return {
+    ...base,
+    source_folder: local.defaultSourceFolder || base.source_folder,
+    output_folder: local.defaultOutputFolder || base.output_folder,
+    music: {
+      ...base.music,
+      source_folder: local.defaultMusicFolder || base.music.source_folder,
+    },
+  };
+}
+
+function shouldApplyPathDefault(current: string, originalDefault: string): boolean {
+  return !current.trim() || current === originalDefault;
 }

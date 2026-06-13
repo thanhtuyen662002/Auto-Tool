@@ -1,13 +1,15 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Clapperboard, FolderOpen, Loader2, Clock, ExternalLink } from 'lucide-react';
+import { Clapperboard, FolderOpen, Loader2, Clock, ExternalLink, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { listJobs } from '../api/client';
+import { listJobs, deleteJob } from '../api/client';
 import type { JobStatus } from '../types/project';
 import ResultsLayout from '../components/results/ResultsLayout';
 import GlassBadge from '../components/glass/GlassBadge';
 import GlassButton from '../components/glass/GlassButton';
 import GlassPagination from '../components/glass/GlassPagination';
+import GlassModal from '../components/glass/GlassModal';
+
 
 const ACTIVE_STATUSES = new Set(['queued', 'running', 'paused']);
 
@@ -19,6 +21,28 @@ export default function ResultsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const pageSize = 10;
+
+  const [jobToDelete, setJobToDelete] = useState<JobStatus | null>(null);
+  const [deletingJob, setDeletingJob] = useState(false);
+
+  async function handleDeleteJob() {
+    if (!jobToDelete) return;
+    setDeletingJob(true);
+    try {
+      const response = await deleteJob(jobToDelete.job_id);
+      if (response.success) {
+        setJobToDelete(null);
+        await load(false, currentPage);
+      } else {
+        setError('Không thể xóa tác vụ.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Có lỗi xảy ra khi xóa tác vụ.');
+    } finally {
+      setDeletingJob(false);
+    }
+  }
+
 
   async function load(quiet = false, page = currentPage) {
     if (!quiet) setLoading(true);
@@ -181,6 +205,15 @@ export default function ResultsPage() {
                             <ExternalLink size={12} className="ml-1" />
                           </GlassButton>
                         </Link>
+                        <GlassButton
+                          variant="danger"
+                          className="min-h-9 px-3 text-xs hover:scale-[1.03] active:scale-[0.97] transition-all"
+                          onClick={() => setJobToDelete(job)}
+                          title="Xóa tác vụ"
+                          aria-label="Xóa tác vụ"
+                        >
+                          <Trash2 size={14} />
+                        </GlassButton>
                       </div>
                     </div>
                   </div>
@@ -209,6 +242,34 @@ export default function ResultsPage() {
           </div>
         )}
       </div>
+
+      <GlassModal
+        open={jobToDelete !== null}
+        title="Xác nhận xóa tác vụ"
+        onClose={() => setJobToDelete(null)}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-200">
+            Bạn có chắc chắn muốn xóa tác vụ của dự án <strong>{jobToDelete?.project_name || jobToDelete?.project_id}</strong>?
+          </p>
+          <p className="text-xs text-rose-300">
+            Hành động này sẽ xóa vĩnh viễn tiến trình chạy, nhật ký logs và các kết quả tạm thời của tác vụ này khỏi hệ thống.
+          </p>
+          {jobToDelete && ACTIVE_STATUSES.has(jobToDelete.status) && (
+            <p className="text-xs text-amber-300 font-medium">
+              Cảnh báo: Tác vụ này đang ở trạng thái hoạt động ({jobToDelete.status === 'running' ? 'đang chạy' : jobToDelete.status === 'paused' ? 'tạm dừng' : 'chờ chạy'}). Việc xóa tác vụ sẽ làm gián đoạn tiến trình hiện tại.
+            </p>
+          )}
+          <div className="flex justify-end gap-3 mt-6">
+            <GlassButton variant="ghost" onClick={() => setJobToDelete(null)}>
+              Hủy bỏ
+            </GlassButton>
+            <GlassButton variant="danger" loading={deletingJob} onClick={() => void handleDeleteJob()}>
+              Xác nhận xóa
+            </GlassButton>
+          </div>
+        </div>
+      </GlassModal>
     </ResultsLayout>
   );
 }

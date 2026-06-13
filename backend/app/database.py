@@ -1084,6 +1084,31 @@ def delete_project(project_id: str) -> None:
         conn.execute("DELETE FROM projects WHERE project_id = ?", (project_id,))
 
 
+def delete_job(job_id: str) -> None:
+    with get_connection() as conn:
+        # Get all subtitle review document ids related to the job
+        doc_rows = conn.execute("SELECT id FROM subtitle_review_documents WHERE job_id = ?", (job_id,)).fetchall()
+        doc_ids = [row["id"] for row in doc_rows]
+        
+        # Delete job logs
+        conn.execute("DELETE FROM job_logs WHERE job_id = ?", (job_id,))
+        
+        # Delete subtitle lines, suggestions, and reports related to the documents of this job
+        for doc_id in doc_ids:
+            conn.execute("DELETE FROM subtitle_review_lines WHERE document_id = ?", (doc_id,))
+            conn.execute("DELETE FROM subtitle_rewrite_suggestions WHERE document_id = ?", (doc_id,))
+            conn.execute("DELETE FROM subtitle_quality_reports WHERE document_id = ?", (doc_id,))
+            
+        conn.execute("DELETE FROM subtitle_review_documents WHERE job_id = ?", (job_id,))
+        
+        # Delete silent visual tag reports
+        conn.execute("DELETE FROM silent_visual_tag_reports WHERE job_id = ?", (job_id,))
+        
+        # Finally delete job itself
+        conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
+
+
+
 def duplicate_project(project_id: str, new_project_id: str, new_name: str) -> dict[str, Any] | None:
     now = _now()
     with get_connection() as conn:

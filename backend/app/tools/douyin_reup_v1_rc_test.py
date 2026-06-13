@@ -23,9 +23,10 @@ from app.modules.final_output_qa.export_pack_service import ExportPackService
 from app.modules.subtitle_review import SubtitleReviewService, SubtitleReviewStatus
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir, write_json
+from app.version import APP_VERSION
 
 
-VERSION = "1.0.0-rc1"
+VERSION = APP_VERSION
 
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in {"utf-8", "utf8"}:

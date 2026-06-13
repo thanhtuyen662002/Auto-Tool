@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from app.tools.douyin_reup_v1_rc_test import build_parser, run_rc_test
+from app.version import APP_VERSION
 
 
 def test_v1_rc_command_returns_success_with_warnings_for_empty_dataset(tmp_path: Path) -> None:
@@ -26,7 +27,7 @@ def test_v1_rc_command_returns_success_with_warnings_for_empty_dataset(tmp_path:
 
     result = run_rc_test(args)
 
-    assert result["version"] == "1.0.0-rc1"
+    assert result["version"] == APP_VERSION
     assert result["status"] == "success_with_warnings"
     assert result["scanned"] == 0
     assert "No video files found" in result["warnings"][0]

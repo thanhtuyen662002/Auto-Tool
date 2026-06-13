@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   analyzeCropSafety,
   analyzeProjectSegments,
+  checkConfigRequirements,
   checkProjectSafety,
   clearProjectCache,
   createProject,
@@ -403,6 +404,13 @@ export default function RenderSettingsPage() {
     setScriptError(null);
     try {
       const activeProjectId = await ensureCurrentProject();
+      const requirements = await checkConfigRequirements({
+        project_id: activeProjectId,
+        mode: 'product_render',
+      });
+      if (!requirements.ready) {
+        throw new Error(requirements.issues.map(formatRequirementIssue).join('\n'));
+      }
       const safety = await checkProjectSafety(activeProjectId);
       setSafetyResult(safety);
       if (safety.errors_count > 0) {
@@ -423,6 +431,10 @@ export default function RenderSettingsPage() {
       setError(err instanceof Error ? err.message : 'Không thể bắt đầu render.');
       setBusy(false);
     }
+  }
+
+  function formatRequirementIssue(issue: { message: string; action: string }) {
+    return `${issue.message}${issue.action ? `\n${issue.action}` : ''}`;
   }
 
   async function handleGenerateScriptVariants() {

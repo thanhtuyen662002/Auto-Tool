@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -56,23 +57,60 @@ def _normalize_version(version: str) -> str:
     return version.strip().lstrip("v")
 
 
-def _parse_semver(version: str) -> tuple[int, ...]:
-    """Parse semver lỏng: '1.0.0-rc1' -> (1, 0, 0). Pre-release được coi là nhỏ hơn release."""
-    clean = _normalize_version(version)
-    # Tách pre-release label nếu có (vd: 1.0.0-rc1 → core='1.0.0', pre='-rc1')
-    core = clean.split("-")[0].split("+")[0]
-    parts = core.split(".")
-    try:
-        return tuple(int(p) for p in parts[:3])
-    except ValueError:
-        return (0, 0, 0)
-
-
 def is_newer(remote_version: str, local_version: str) -> bool:
     """True nếu remote_version mới hơn local_version."""
-    remote = _parse_semver(remote_version)
-    local = _parse_semver(local_version)
-    return remote > local
+    remote_core, remote_pre = _parse_semver_for_compare(remote_version)
+    local_core, local_pre = _parse_semver_for_compare(local_version)
+    if remote_core != local_core:
+        return remote_core > local_core
+    if remote_pre is None and local_pre is not None:
+        return True
+    if remote_pre is not None and local_pre is None:
+        return False
+    if remote_pre is None and local_pre is None:
+        return False
+    return _compare_prerelease(remote_pre or (), local_pre or ()) > 0
+
+
+def _parse_semver_for_compare(
+    version: str,
+) -> tuple[tuple[int, int, int], tuple[tuple[int, int | str], ...] | None]:
+    clean = _normalize_version(version)
+    core_text, _, prerelease_text = clean.split("+", 1)[0].partition("-")
+    parts = core_text.split(".")
+    try:
+        core_parts = [int(part) for part in parts[:3]]
+    except ValueError:
+        core_parts = [0, 0, 0]
+    while len(core_parts) < 3:
+        core_parts.append(0)
+    return (core_parts[0], core_parts[1], core_parts[2]), _parse_prerelease(prerelease_text)
+
+
+def _parse_prerelease(value: str) -> tuple[tuple[int, int | str], ...] | None:
+    cleaned = value.strip().lower()
+    if not cleaned:
+        return None
+    parts: list[tuple[int, int | str]] = []
+    for token in re.findall(r"[a-z]+|\d+", cleaned.replace("_", ".").replace("-", ".")):
+        if token.isdigit():
+            parts.append((0, int(token)))
+        else:
+            parts.append((1, token))
+    return tuple(parts) or None
+
+
+def _compare_prerelease(
+    remote: tuple[tuple[int, int | str], ...],
+    local: tuple[tuple[int, int | str], ...],
+) -> int:
+    for remote_part, local_part in zip(remote, local):
+        if remote_part == local_part:
+            continue
+        return 1 if remote_part > local_part else -1
+    if len(remote) == len(local):
+        return 0
+    return 1 if len(remote) > len(local) else -1
 
 
 # ─── GitHub API ──────────────────────────────────────────────────────────────

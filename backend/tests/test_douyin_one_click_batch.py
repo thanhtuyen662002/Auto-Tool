@@ -41,6 +41,15 @@ def test_douyin_one_click_batch_queues_job_with_preset_settings(tmp_path: Path, 
     monkeypatch.setattr("app.api.DouyinFolderScanner", FakeScanner)
 
     with TestClient(create_app()) as client:
+        client.put(
+            "/api/settings",
+            json={
+                "gemini_api_keys": ["test-gemini-key"],
+                "google_tts_credentials_json_path": None,
+                "google_tts_api_key": None,
+                "google_tts_access_token": None,
+            },
+        )
         response = client.post(
             "/api/douyin-reup/one-click",
             json={

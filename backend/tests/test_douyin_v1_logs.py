@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from app.tools.douyin_reup_v1_rc_test import build_parser, run_rc_test
+from app.version import APP_VERSION
 
 
 def test_v1_rc_command_writes_job_log_and_summary(tmp_path: Path) -> None:
@@ -24,5 +25,5 @@ def test_v1_rc_command_writes_job_log_and_summary(tmp_path: Path) -> None:
     assert result["status"] == "success_with_warnings"
     assert job_log.exists()
     assert summary.exists()
-    assert json.loads(job_log.read_text(encoding="utf-8"))["version"] == "1.0.0-rc1"
-    assert json.loads(summary.read_text(encoding="utf-8"))["version"] == "1.0.0-rc1"
+    assert json.loads(job_log.read_text(encoding="utf-8"))["version"] == APP_VERSION
+    assert json.loads(summary.read_text(encoding="utf-8"))["version"] == APP_VERSION

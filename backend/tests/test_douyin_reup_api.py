@@ -39,6 +39,15 @@ def test_douyin_reup_scan_and_process_api_queue_job(tmp_path, monkeypatch):
     monkeypatch.setattr("app.api.run_douyin_reup_job", lambda job_id: None)
 
     with TestClient(create_app()) as client:
+        client.put(
+            "/api/settings",
+            json={
+                "gemini_api_keys": ["test-gemini-key"],
+                "google_tts_credentials_json_path": None,
+                "google_tts_api_key": None,
+                "google_tts_access_token": None,
+            },
+        )
         scan = client.post("/api/douyin-reup/scan", json={"source_folder": str(source_dir)})
         assert scan.status_code == 200
         assert scan.json()["valid_videos"] == 1

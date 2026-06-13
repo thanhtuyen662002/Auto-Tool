@@ -61,6 +61,15 @@ def test_silent_detect_and_plan_api(tmp_path, monkeypatch):
     monkeypatch.setattr("app.api.threading.Thread", FakeThread)
 
     with TestClient(create_app()) as client:
+        client.put(
+            "/api/settings",
+            json={
+                "gemini_api_keys": ["test-gemini-key"],
+                "google_tts_credentials_json_path": None,
+                "google_tts_api_key": None,
+                "google_tts_access_token": None,
+            },
+        )
         detected = client.post("/api/silent-reup/detect", json={"source_folder": str(tmp_path)})
         assert detected.status_code == 200
         assert detected.json()["items"][0]["recommended_mode"] == "silent_immersive"
@@ -117,6 +126,15 @@ def test_silent_one_click_api_queues_batch(tmp_path, monkeypatch):
     monkeypatch.setattr("app.api.start_background_dependency_warmup", lambda **_kwargs: None)
 
     with TestClient(create_app()) as client:
+        client.put(
+            "/api/settings",
+            json={
+                "gemini_api_keys": ["test-gemini-key"],
+                "google_tts_credentials_json_path": None,
+                "google_tts_api_key": None,
+                "google_tts_access_token": None,
+            },
+        )
         response = client.post(
             "/api/silent-reup/one-click",
             json={

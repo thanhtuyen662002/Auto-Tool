@@ -265,6 +265,27 @@ export interface AppSettings {
   google_tts_access_token?: string | null;
 }
 
+export interface ConfigRequirementIssue {
+  severity: 'error' | 'warning';
+  code: string;
+  field: string;
+  message: string;
+  action: string;
+}
+
+export interface ConfigRequirementCheckRequest {
+  project_config?: ProjectConfig | null;
+  project_id?: string | null;
+  mode?: 'product_render' | 'douyin_reup' | 'silent_reup' | 'subtitle_render';
+}
+
+export interface ConfigRequirementCheckResponse {
+  ready: boolean;
+  errors_count: number;
+  warnings_count: number;
+  issues: ConfigRequirementIssue[];
+}
+
 export type BrowsePathMode = 'file' | 'folder';
 
 export interface BrowsePathRequest {
@@ -385,6 +406,21 @@ export interface DouyinOneClickBatchRequest {
   auto_render_after_translation?: boolean | null;
   product_context?: Record<string, unknown>;
   advanced_overrides?: Record<string, unknown>;
+}
+
+export interface SilentOneClickBatchRequest {
+  project_name: string;
+  source_folder: string;
+  output_folder: string;
+  strategy?: 'chill_immersive' | 'product_review_voiceover' | 'sales_recut' | string;
+  bgm_folder?: string | null;
+  visual_style_preset_id?: string | null;
+  process_mode?: 'all_videos' | 'first_n' | 'selected';
+  max_videos?: number | null;
+  selected_video_paths?: string[];
+  source_selection_id?: string | null;
+  review_before_render?: boolean;
+  product_context?: Record<string, unknown>;
 }
 
 export interface DouyinOneClickBatchResponse {

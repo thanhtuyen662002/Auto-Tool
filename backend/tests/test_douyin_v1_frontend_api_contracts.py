@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.api import create_app
+from app.version import APP_VERSION
 
 
 def test_v1_health_and_presets_api_contract() -> None:
@@ -13,7 +14,7 @@ def test_v1_health_and_presets_api_contract() -> None:
 
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
-    assert health.json()["version"] == "1.0.0-rc1"
+    assert health.json()["version"] == APP_VERSION
     assert health.json()["capabilities"]["douyin_reup"] is True
     assert health.json()["capabilities"]["silent_immersive_mode"] is True
     assert presets.status_code == 200

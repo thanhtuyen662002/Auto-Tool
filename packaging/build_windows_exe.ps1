@@ -10,6 +10,43 @@ $Frontend = Join-Path $Root "frontend"
 $Dist     = Join-Path $Frontend "dist"
 $Vendor   = Join-Path $Backend "vendor"
 
+function Test-NodeVersionSupported($VersionText) {
+  $clean = ($VersionText -replace '^v', '').Trim()
+  $parts = $clean.Split('.')
+  if ($parts.Count -lt 2) { return $false }
+  $major = [int]$parts[0]
+  $minor = [int]$parts[1]
+  if ($major -gt 22) { return $true }
+  if ($major -eq 22 -and $minor -ge 12) { return $true }
+  if ($major -eq 20 -and $minor -ge 19) { return $true }
+  return $false
+}
+
+function Assert-NodeVersionForFrontendBuild {
+  $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $nodeCommand) {
+    throw "Node.js is not installed or not available in PATH. Install Node.js 20.19+ or 22.12+ before building."
+  }
+  $nodeVersion = (& node -v).Trim()
+  $npmVersion = (& npm -v).Trim()
+  Write-Host "  Node.js: $nodeVersion ($($nodeCommand.Source))" -ForegroundColor DarkGray
+  Write-Host "  npm    : $npmVersion" -ForegroundColor DarkGray
+  if (-not (Test-NodeVersionSupported $nodeVersion)) {
+    throw "Node.js $nodeVersion is too old for Vite 7. Use Node.js 20.19+ or 22.12+."
+  }
+}
+
+function Invoke-BuildPython {
+  $pythonCommand = Get-Command py -ErrorAction SilentlyContinue
+  if (-not $pythonCommand) {
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+  }
+  if (-not $pythonCommand) {
+    throw "Python is not installed or not available in PATH."
+  }
+  & $pythonCommand.Source @args
+}
+
 # â”€â”€â”€ Helper: download with progress â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Download-File($Url, $OutFile, $Label) {
   if (Test-Path $OutFile) {
@@ -34,6 +71,7 @@ Write-Host ""
 Write-Host "=== [1/4] Building frontend ===" -ForegroundColor Cyan
 Push-Location $Frontend
 try {
+  Assert-NodeVersionForFrontendBuild
   npm install
   npm run build
 } finally {
@@ -130,9 +168,9 @@ Write-Host ""
 Write-Host "=== [3/4] Installing Python dependencies & building EXE ===" -ForegroundColor Cyan
 Push-Location $Backend
 try {
-  py -m pip install -r requirements.txt
-  py -m pip install -r requirements-build.txt
-  py -m PyInstaller `
+  Invoke-BuildPython -m pip install -r requirements.txt
+  Invoke-BuildPython -m pip install -r requirements-build.txt
+  Invoke-BuildPython -m PyInstaller `
     --noconfirm `
     --clean `
     --name $Name `
@@ -189,6 +227,7 @@ try {
   $DistPkg      = Join-Path $DistRoot "packaging"
   New-Item -ItemType Directory -Force -Path $DistConfig | Out-Null
   New-Item -ItemType Directory -Force -Path $DistPkg    | Out-Null
+  Copy-Item -Path (Join-Path $Root "VERSION") -Destination (Join-Path $DistRoot "VERSION") -Force
   Copy-Item -Path (Join-Path $Root "packaging\local_app_config.example.json") -Destination $DistPkg -Force
   Copy-Item -Path (Join-Path $Root "packaging\README_LOCAL_APP.md")           -Destination $DistPkg -Force
   if (-not (Test-Path (Join-Path $DistConfig "local_app_config.json"))) {

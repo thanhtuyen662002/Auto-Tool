@@ -304,11 +304,11 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   const qaFailedResults = useMemo(() => results.filter((output) => output.final_output_qa?.status === 'failed'), [results]);
   const resultGroups = useMemo(
     () => [
-      { title: 'Ready for Review', items: results.filter((output) => output.status === 'needs_review') },
-      { title: 'Rendered', items: results.filter((output) => output.status === 'success') },
-      { title: 'Failed', items: results.filter((output) => output.status === 'failed') },
+      { title: 'Cần duyệt phụ đề trước khi render MP4', items: results.filter((output) => output.status === 'needs_review') },
+      { title: 'Đã render MP4', items: results.filter((output) => output.status === 'success') },
+      { title: 'Lỗi', items: results.filter((output) => output.status === 'failed') },
       {
-        title: 'Skipped',
+        title: 'Bỏ qua',
         items: results.filter((output) => !['needs_review', 'success', 'failed'].includes(output.status)),
       },
     ],
@@ -501,7 +501,23 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         setRecentMusicFolders((current) => addRecentFolder(RECENT_MUSIC_KEY, current, settings.music_folder || ''));
         syncRecentPath('music', settings.music_folder || '');
       }
-      const request = {
+      const productContext = buildSilentProductContext(silentProductContext);
+      const silentAutoRender = settings.auto_render_after_translation || selectedPresetId === 'silent_sales_recut';
+      const response = initialWorkflow === 'silent'
+        ? await startSilentOneClick({
+            project_name: projectName.trim() || 'silent-reup',
+            source_folder: sourceFolder,
+            output_folder: outputFolder,
+            strategy: settings.silent_mode_strategy || strategyFromSilentPreset(selectedPresetId),
+            bgm_folder: settings.music_folder?.trim() || null,
+            visual_style_preset_id: settings.visual_style_preset_id,
+            process_mode: processMode,
+            max_videos: settings.max_videos,
+            selected_video_paths: selectedPaths,
+            review_before_render: Boolean(settings.silent_review_before_render && !silentAutoRender),
+            product_context: productContext,
+          })
+        : await startDouyinOneClick({
         project_name: projectName.trim() || 'douyin-reup',
         source_folder: sourceFolder,
         output_folder: outputFolder,
@@ -513,13 +529,12 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         selected_video_paths: selectedPaths,
         review_subtitles_before_render: settings.review_subtitles_before_render,
         auto_render_after_translation: settings.auto_render_after_translation,
-        product_context: buildSilentProductContext(silentProductContext),
+            product_context: productContext,
         advanced_overrides: {
           ...(mode === 'advanced' ? settings : {}),
           silent_caption_tone: settings.silent_caption_tone,
         },
-      };
-      const response = initialWorkflow === 'silent' ? await startSilentOneClick(request) : await startDouyinOneClick(request);
+          });
       setJobId(response.job_id);
       setJobStatus({
         job_id: response.job_id,
@@ -1487,14 +1502,20 @@ function toStartPresetViewModel(
   mode: StartWorkflowMode,
   recommended: boolean,
 ): StartPresetViewModel {
+  const autoRender = Boolean(
+    preset.settings.auto_render_after_translation
+    || preset.id === 'fast_auto'
+    || preset.id === 'music_recut'
+    || preset.id === 'silent_sales_recut'
+  );
   return {
     id: preset.id,
     name: presetDisplayName(preset),
     description: shortPresetDescription(preset),
     badge: recommended ? undefined : presetBadge(preset),
     recommended,
-    reviewRequired: Boolean(preset.settings.review_subtitles_before_render || preset.settings.silent_review_before_render),
-    autoRender: Boolean(preset.settings.auto_render_after_translation || preset.id === 'fast_auto' || preset.id === 'silent_sales_recut'),
+    reviewRequired: Boolean((preset.settings.review_subtitles_before_render || preset.settings.silent_review_before_render) && !autoRender),
+    autoRender,
     mode,
   };
 }
@@ -1542,6 +1563,12 @@ function presetBadge(preset: DouyinReupPreset): string {
     silent_sales_recut: 'Bán hàng',
   };
   return badges[preset.id] ?? preset.ui_badge;
+}
+
+function strategyFromSilentPreset(presetId: string): string {
+  if (presetId === 'silent_product_voiceover') return 'product_review_voiceover';
+  if (presetId === 'silent_sales_recut') return 'sales_recut';
+  return 'chill_immersive';
 }
 
 function pickRecommendedPresetId(
