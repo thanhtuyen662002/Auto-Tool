@@ -19,27 +19,27 @@ export default function AppearanceSettingsCard() {
   }
 
   return (
-    <SettingsSection title="Appearance" description="Tinh chỉnh nhẹ giao diện glass mà không đổi theme phức tạp.">
+    <SettingsSection title="Giao diện & Chủ đề" description="Tinh chỉnh giao diện hiệu ứng kính (Glassmorphism) cục bộ của ứng dụng.">
       <div className="grid gap-4 lg:grid-cols-3">
-        <GlassSelect label="Theme" value="dark-glass" disabled>
-          <option value="dark-glass">Dark Glass</option>
+        <GlassSelect label="Chủ đề (Theme)" value="dark-glass" disabled>
+          <option value="dark-glass">Dark Glass (Mặc định)</option>
         </GlassSelect>
-        <GlassSelect label="Glass intensity" value={glassIntensity} onChange={(event) => setGlassIntensity(event.target.value as GlassIntensity)}>
-          <option value="soft">Soft</option>
-          <option value="medium">Medium</option>
-          <option value="strong">Strong</option>
+        <GlassSelect label="Độ mờ kính (Glass intensity)" value={glassIntensity} onChange={(event) => setGlassIntensity(event.target.value as GlassIntensity)}>
+          <option value="soft">Nhẹ nhàng (Soft)</option>
+          <option value="medium">Vừa phải (Medium)</option>
+          <option value="strong">Đậm nét (Strong)</option>
         </GlassSelect>
-        <GlassSelect label="Layout density" value={layoutDensity} onChange={(event) => setLayoutDensity(event.target.value as LayoutDensity)}>
-          <option value="comfortable">Comfortable</option>
-          <option value="compact">Compact</option>
+        <GlassSelect label="Mật độ hiển thị (Layout density)" value={layoutDensity} onChange={(event) => setLayoutDensity(event.target.value as LayoutDensity)}>
+          <option value="comfortable">Dễ nhìn (Comfortable)</option>
+          <option value="compact">Gọn gàng (Compact)</option>
         </GlassSelect>
       </div>
       <label className="mt-4 flex items-center gap-3 rounded-md border border-white/10 bg-black/15 px-4 py-3 text-sm text-slate-200">
         <input type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} />
-        Reduce motion cho animation chính
+        Giảm chuyển động (Reduce motion) cho các hiệu ứng động chính
       </label>
       <div className="mt-4 flex flex-wrap gap-2">
-        <GlassButton variant="primary" onClick={save}>Áp dụng</GlassButton>
+        <GlassButton variant="primary" onClick={save} className="hover:scale-[1.02] active:scale-[0.98] transition-all">Áp dụng</GlassButton>
       </div>
       {message ? <div className="mt-3 text-sm text-emerald-200">{message}</div> : null}
     </SettingsSection>

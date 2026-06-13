@@ -1014,3 +1014,11 @@ export function downloadSystemUpdate(): Promise<UpdateDownloadResponse> {
   });
 }
 
+export function listJobs(limit = 100, offset = 0): Promise<{ success: boolean; jobs: JobStatus[] }> {
+  return request<{ success: boolean; jobs: JobStatus[] }>(`/api/jobs?limit=${limit}&offset=${offset}`);
+}
+
+export function getProjectJobs(projectId: string, includePreview = false): Promise<{ success: boolean; jobs: JobStatus[] }> {
+  return request<{ success: boolean; jobs: JobStatus[] }>(`/api/projects/${projectId}/jobs?include_preview=${includePreview}`);
+}
+

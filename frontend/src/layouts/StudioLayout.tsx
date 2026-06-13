@@ -96,9 +96,9 @@ export default function StudioLayout() {
           <div className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100 lg:mx-6">
             <div className="flex items-center gap-2">
               <CircleAlert size={17} />
-              <span>Có {systemStatus.recoverableJobsCount} job bị gián đoạn có thể khôi phục.</span>
+              <span>Có {systemStatus.recoverableJobsCount} tác vụ bị gián đoạn có thể khôi phục.</span>
             </div>
-            <GlassButton className="min-h-8 px-3 py-1" variant="secondary" onClick={() => navigate('/recovery')}>Open Recovery Center</GlassButton>
+            <GlassButton className="min-h-8 px-3 py-1 hover:scale-[1.03] active:scale-[0.97] transition-all" variant="secondary" onClick={() => navigate('/recovery')}>Mở Trung tâm Khôi phục</GlassButton>
           </div>
         ) : null}
         <div className="studio-fade-in">
@@ -107,7 +107,7 @@ export default function StudioLayout() {
       </div>
 
       <StudioCommandCenter open={commandOpen} onClose={() => setCommandOpen(false)} onSystemStatus={() => setStatusOpen(true)} />
-      <GlassModal open={statusOpen} title="System Status" onClose={() => setStatusOpen(false)}>
+      <GlassModal open={statusOpen} title="Trạng thái hệ thống" onClose={() => setStatusOpen(false)}>
         <StudioSystemStatus status={systemStatus} loading={statusLoading} onRefresh={() => void refreshStatus()} />
       </GlassModal>
     </div>
@@ -120,19 +120,19 @@ function resolveTitle(pathname: string): string {
 
 function buildBreadcrumbs(pathname: string, title: string): StudioBreadcrumbItem[] {
   if (pathname === '/' || pathname === '/dashboard') return [];
-  if (pathname.startsWith('/subtitle-review/') && pathname !== '/subtitle-review') return [{ label: 'Sửa phụ đề', to: '/subtitle-review' }, { label: 'Document' }];
-  if (pathname.startsWith('/results/') && pathname !== '/results') return [{ label: 'Kết quả', to: '/results' }, { label: 'Batch' }];
-  if (pathname.startsWith('/settings/') && pathname !== '/settings') return [{ label: 'Cài đặt', to: '/settings' }, { label: 'Project' }];
+  if (pathname.startsWith('/subtitle-review/') && pathname !== '/subtitle-review') return [{ label: 'Sửa phụ đề', to: '/subtitle-review' }, { label: 'Tài liệu' }];
+  if (pathname.startsWith('/results/') && pathname !== '/results') return [{ label: 'Kết quả', to: '/results' }, { label: 'Lô xử lý' }];
+  if (pathname.startsWith('/settings/') && pathname !== '/settings') return [{ label: 'Cài đặt', to: '/settings' }, { label: 'Dự án' }];
   if (pathname.startsWith('/projects/') && pathname !== '/projects/new') {
     const parts = pathname.split('/');
     if (parts.length > 3) {
       const sub = parts[3];
       const subLabelMap: Record<string, string> = {
-        'review': 'Review',
-        'source-media': 'Source Media',
-        'assets': 'Assets',
-        'prompt-pack': 'Prompt Pack',
-        'content': 'Content',
+        'review': 'Đánh giá video',
+        'source-media': 'Video nguồn',
+        'assets': 'Tài nguyên',
+        'prompt-pack': 'Gói câu lệnh',
+        'content': 'Nội dung',
       };
       const subLabel = subLabelMap[sub] || sub;
       const projectId = parts[2];

@@ -4,15 +4,15 @@ import GlassTabs from '../glass/GlassTabs';
 export type SettingsTab = 'general' | 'api_keys' | 'paths' | 'local_app' | 'data_management' | 'providers' | 'appearance' | 'advanced' | 'about';
 
 const tabs: Array<{ value: SettingsTab; label: string }> = [
-  { value: 'general', label: 'General' },
-  { value: 'api_keys', label: '🔑 API Keys' },
-  { value: 'paths', label: 'Paths' },
-  { value: 'local_app', label: 'Local App' },
-  { value: 'data_management', label: 'Dữ liệu' },
-  { value: 'providers', label: 'Providers' },
-  { value: 'appearance', label: 'Appearance' },
-  { value: 'advanced', label: 'Advanced' },
-  { value: 'about', label: 'About' },
+  { value: 'general', label: 'Cấu hình chung' },
+  { value: 'api_keys', label: 'Khóa API' },
+  { value: 'paths', label: 'Thư mục & Đường dẫn' },
+  { value: 'local_app', label: 'Ứng dụng Local' },
+  { value: 'data_management', label: 'Quản lý Dữ liệu' },
+  { value: 'providers', label: 'Dịch thuật & TTS' },
+  { value: 'appearance', label: 'Giao diện & Theme' },
+  { value: 'advanced', label: 'Cấu hình Nâng cao' },
+  { value: 'about', label: 'Giới thiệu' },
 ];
 
 export default function SettingsLayout({

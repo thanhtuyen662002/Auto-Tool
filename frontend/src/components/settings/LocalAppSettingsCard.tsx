@@ -88,47 +88,47 @@ export default function LocalAppSettingsCard() {
 
   return (
     <div className="grid gap-5">
-      <SettingsSection title="Local App" description="Cấu hình launcher, thư mục mặc định và các thao tác desktop trên máy hiện tại.">
+      <SettingsSection title="Cấu hình ứng dụng Local" description="Cấu hình launcher, thư mục mặc định và các thao tác desktop trên máy hiện tại.">
         <div className="grid gap-4 lg:grid-cols-3">
-          <GlassInput label="Default source folder" value={config.default_source_folder} onChange={(event) => setConfig({ ...config, default_source_folder: event.target.value })} />
-          <GlassInput label="Default output folder" value={config.default_output_folder} onChange={(event) => setConfig({ ...config, default_output_folder: event.target.value })} />
-          <GlassInput label="Default music folder" value={config.default_music_folder} onChange={(event) => setConfig({ ...config, default_music_folder: event.target.value })} />
-          <GlassInput label="Backend host" value={config.backend_host} onChange={(event) => setConfig({ ...config, backend_host: event.target.value })} />
-          <GlassInput label="Backend port" type="number" min={1} max={65535} value={config.backend_port} onChange={(event) => setConfig({ ...config, backend_port: Number(event.target.value) })} />
-          <GlassInput label="Recent items" type="number" min={1} max={20} value={config.max_recent_items} onChange={(event) => setConfig({ ...config, max_recent_items: Number(event.target.value) })} />
-          <GlassInput label="Single port URL" value={config.single_port_url} onChange={(event) => setConfig({ ...config, single_port_url: event.target.value })} />
-          <GlassInput label="Frontend dist path" value={config.frontend_dist_path} onChange={(event) => setConfig({ ...config, frontend_dist_path: event.target.value })} />
+          <GlassInput label="Thư mục nguồn mặc định" value={config.default_source_folder} onChange={(event) => setConfig({ ...config, default_source_folder: event.target.value })} />
+          <GlassInput label="Thư mục đầu ra mặc định" value={config.default_output_folder} onChange={(event) => setConfig({ ...config, default_output_folder: event.target.value })} />
+          <GlassInput label="Thư mục nhạc mặc định" value={config.default_music_folder} onChange={(event) => setConfig({ ...config, default_music_folder: event.target.value })} />
+          <GlassInput label="Địa chỉ Backend (Host)" value={config.backend_host} onChange={(event) => setConfig({ ...config, backend_host: event.target.value })} />
+          <GlassInput label="Cổng Backend (Port)" type="number" min={1} max={65535} value={config.backend_port} onChange={(event) => setConfig({ ...config, backend_port: Number(event.target.value) })} />
+          <GlassInput label="Số mục gần đây tối đa" type="number" min={1} max={20} value={config.max_recent_items} onChange={(event) => setConfig({ ...config, max_recent_items: Number(event.target.value) })} />
+          <GlassInput label="Đường dẫn Single Port (URL)" value={config.single_port_url} onChange={(event) => setConfig({ ...config, single_port_url: event.target.value })} />
+          <GlassInput label="Đường dẫn bản build Frontend" value={config.frontend_dist_path} onChange={(event) => setConfig({ ...config, frontend_dist_path: event.target.value })} />
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <Toggle label="Tự mở trình duyệt khi app khởi động" checked={config.auto_open_browser} onChange={(checked) => setConfig({ ...config, auto_open_browser: checked })} />
           <Toggle label="Cho phép Open Folder / Reveal File" checked={config.enable_open_folder} onChange={(checked) => setConfig({ ...config, enable_open_folder: checked })} />
-          <Toggle label="Production single port" checked={config.production_single_port} onChange={(checked) => setConfig({ ...config, production_single_port: checked })} />
-          <Toggle label="Backend serve frontend build" checked={config.serve_frontend_dist} onChange={(checked) => setConfig({ ...config, serve_frontend_dist: checked })} />
+          <Toggle label="Chạy chế độ đơn cổng (Production single port)" checked={config.production_single_port} onChange={(checked) => setConfig({ ...config, production_single_port: checked })} />
+          <Toggle label="Backend tự phục vụ file build Frontend" checked={config.serve_frontend_dist} onChange={(checked) => setConfig({ ...config, serve_frontend_dist: checked })} />
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
-          <GlassButton variant="primary" loading={loading} onClick={() => void save()}><Save size={16} /> Lưu</GlassButton>
-          <GlassButton variant="secondary" onClick={() => void reset()}><RotateCcw size={16} /> Reset</GlassButton>
-          <GlassButton variant="ghost" loading={checking} onClick={() => void checkSystem()}><RefreshCw size={16} /> Kiểm tra hệ thống</GlassButton>
+          <GlassButton variant="primary" loading={loading} onClick={() => void save()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><Save size={16} /> Lưu</GlassButton>
+          <GlassButton variant="secondary" onClick={() => void reset()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><RotateCcw size={16} /> Reset</GlassButton>
+          <GlassButton variant="ghost" loading={checking} onClick={() => void checkSystem()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><RefreshCw size={16} /> Kiểm tra hệ thống</GlassButton>
         </div>
         {message ? <p className="mt-3 text-sm text-cyan-100">{message}</p> : null}
       </SettingsSection>
 
-      <SettingsSection title="Production Server" description="Trạng thái frontend production build được phục vụ trực tiếp bởi FastAPI.">
+      <SettingsSection title="Trạng thái máy chủ (Production)" description="Trạng thái frontend production build được phục vụ trực tiếp bởi FastAPI.">
         <div className="grid gap-3 md:grid-cols-3">
-          <StatusValue label="Run mode" value={frontendStatus?.data.mode === 'production_single_port' ? 'Production Single Port' : frontendStatus ? 'Development' : 'Unknown'} ready={frontendStatus?.data.mode === 'production_single_port'} />
-          <StatusValue label="Frontend" value={frontendStatus?.data.index_html_exists ? 'Build found' : 'Missing'} ready={Boolean(frontendStatus?.data.index_html_exists)} />
-          <StatusValue label="Local Server" value={frontendStatus?.data.served_by_backend ? 'Ready' : 'Unknown'} ready={Boolean(frontendStatus?.data.served_by_backend)} />
+          <StatusValue label="Chế độ chạy" value={frontendStatus?.data.mode === 'production_single_port' ? 'Single Port (Production)' : frontendStatus ? 'Development' : 'Không xác định'} ready={frontendStatus?.data.mode === 'production_single_port'} />
+          <StatusValue label="Frontend Build" value={frontendStatus?.data.index_html_exists ? 'Đã tìm thấy bản build' : 'Thiếu bản build'} ready={Boolean(frontendStatus?.data.index_html_exists)} />
+          <StatusValue label="Máy chủ cục bộ" value={frontendStatus?.data.served_by_backend ? 'Sẵn sàng' : 'Không xác định'} ready={Boolean(frontendStatus?.data.served_by_backend)} />
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-black/15 p-4">
           <div className="min-w-0">
-            <div className="text-xs font-semibold uppercase text-slate-500">Single port URL</div>
+            <div className="text-xs font-semibold uppercase text-slate-500">Đường dẫn URL Single Port</div>
             <div className="mt-1 truncate font-mono text-sm text-cyan-100">{frontendStatus?.data.single_port_url || config.single_port_url}</div>
           </div>
-          <GlassButton variant="secondary" onClick={() => void copyProductionUrl()}><Copy size={15} /> Copy production URL</GlassButton>
+          <GlassButton variant="secondary" onClick={() => void copyProductionUrl()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><Copy size={15} /> Sao chép URL Single Port</GlassButton>
         </div>
         {frontendStatus && !frontendStatus.success ? (
           <div className="mt-4 rounded-md border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
-            Frontend production build chưa có. Hãy chạy scripts/build_frontend hoặc scripts/start_local_prod.
+            Bản build production của Frontend chưa tồn tại. Hãy chạy scripts/build_frontend hoặc scripts/start_local_prod để build trước.
           </div>
         ) : null}
       </SettingsSection>

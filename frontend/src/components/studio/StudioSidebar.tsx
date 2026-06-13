@@ -11,21 +11,21 @@ interface SidebarItem {
 }
 
 const generalItems: SidebarItem[] = [
-  { to: '/', label: 'Tổng quan', helper: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/', label: 'Tổng quan', helper: 'Bảng điều khiển', icon: LayoutDashboard, end: true },
 ];
 
 const studioItems: SidebarItem[] = [
-  { to: '/douyin-reup', label: 'Douyin Reup', helper: 'Video có thoại', icon: Clapperboard },
-  { to: '/silent-mode', label: 'Silent Mode', helper: 'Video không thoại', icon: Waves },
-  { to: '/projects/new', label: 'Product Video Builder', helper: 'Affiliate Video', icon: FolderPlus },
-  { to: '/import-inbox', label: 'Import Inbox', helper: 'Shopee Inbox', icon: Inbox },
-  { to: '/results', label: 'Projects', helper: 'Results', icon: FolderCheck },
+  { to: '/douyin-reup', label: 'Reup có thoại (Douyin)', helper: 'Xử lý hàng loạt có thoại', icon: Clapperboard },
+  { to: '/silent-mode', label: 'Reup không thoại', helper: 'Xử lý hàng loạt không thoại', icon: Waves },
+  { to: '/projects/new', label: 'Tạo Video Affiliate', helper: 'Tạo video sản phẩm từ link', icon: FolderPlus },
+  { to: '/import-inbox', label: 'Nhập hộp thư Shopee', helper: 'Nhập sản phẩm từ inbox', icon: Inbox },
+  { to: '/results', label: 'Tác vụ & Kết quả', helper: 'Lịch sử và tiến trình render', icon: FolderCheck },
 ];
 
 const utilityItems: SidebarItem[] = [
-  { to: '/subtitle-review', label: 'Sửa phụ đề', helper: 'Subtitle Review', icon: Captions },
-  { to: '/recovery', label: 'Khôi phục', helper: 'Recovery', icon: RotateCcw },
-  { to: '/settings', label: 'Cài đặt', helper: 'Settings', icon: Settings },
+  { to: '/subtitle-review', label: 'Sửa phụ đề', helper: 'Kiểm tra & chỉnh sửa phụ đề', icon: Captions },
+  { to: '/recovery', label: 'Khôi phục tác vụ', helper: 'Khôi phục các job bị gián đoạn', icon: RotateCcw },
+  { to: '/settings', label: 'Cài đặt hệ thống', helper: 'Cấu hình & API Keys', icon: Settings },
 ];
 
 export default function StudioSidebar({
@@ -48,7 +48,7 @@ export default function StudioSidebar({
     >
       <div className="flex items-center justify-between gap-3 px-2 py-2">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-md border border-cyan-300/35 bg-cyan-300/10 text-cyan-200">
+          <div className="grid h-9 w-9 place-items-center rounded-md border border-cyan-300/35 bg-cyan-300/10 text-cyan-200 shadow-[0_0_12px_rgba(34,211,238,0.2)] animate-pulse">
             <Sparkles size={18} />
           </div>
           <div className="min-w-0">
@@ -56,7 +56,7 @@ export default function StudioSidebar({
             <div className="text-xs text-slate-400">Local video studio</div>
           </div>
         </div>
-        <button className="rounded-md p-2 text-slate-300 hover:bg-white/10 lg:hidden" type="button" onClick={onClose} aria-label="Đóng menu">
+        <button className="rounded-md p-2 text-slate-300 hover:bg-white/10 hover:text-white transition-colors lg:hidden" type="button" onClick={onClose} aria-label="Đóng menu">
           <X size={18} />
         </button>
       </div>
@@ -69,7 +69,7 @@ export default function StudioSidebar({
             to={to}
             onClick={onClose}
             className={({ isActive }) =>
-              `flex min-h-12 items-center gap-3 rounded-md border px-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-cyan-300/35 ${
+              `flex min-h-12 items-center gap-3 rounded-md border px-3 text-sm font-medium transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-300/35 [&_svg]:transition-transform [&_svg]:duration-300 hover:[&_svg]:scale-110 ${
                 isActive
                   ? 'border-cyan-300/35 bg-cyan-300/12 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.12)]'
                   : 'border-transparent text-slate-300 hover:bg-white/7 hover:text-white'
@@ -85,7 +85,7 @@ export default function StudioSidebar({
         ))}
 
         <div className="mt-4 px-3 mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-          Content Studio
+          Xưởng nội dung
         </div>
 
         {studioItems.map(({ to, label, helper, icon: Icon, end }) => (
@@ -95,7 +95,7 @@ export default function StudioSidebar({
             to={to}
             onClick={onClose}
             className={({ isActive }) =>
-              `flex min-h-12 items-center gap-3 rounded-md border px-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-cyan-300/35 ${
+              `flex min-h-12 items-center gap-3 rounded-md border px-3 text-sm font-medium transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-300/35 [&_svg]:transition-transform [&_svg]:duration-300 hover:[&_svg]:scale-110 ${
                 isActive
                   ? 'border-cyan-300/35 bg-cyan-300/12 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.12)]'
                   : 'border-transparent text-slate-300 hover:bg-white/7 hover:text-white'
@@ -111,7 +111,7 @@ export default function StudioSidebar({
         ))}
 
         <div className="mt-4 px-3 mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-          Utilities
+          Công cụ hệ thống
         </div>
 
         {utilityItems.map(({ to, label, helper, icon: Icon, end }) => (
@@ -121,7 +121,7 @@ export default function StudioSidebar({
             to={to}
             onClick={onClose}
             className={({ isActive }) =>
-              `flex min-h-12 items-center gap-3 rounded-md border px-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-cyan-300/35 ${
+              `flex min-h-12 items-center gap-3 rounded-md border px-3 text-sm font-medium transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-300/35 [&_svg]:transition-transform [&_svg]:duration-300 hover:[&_svg]:scale-110 ${
                 isActive
                   ? 'border-cyan-300/35 bg-cyan-300/12 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.12)]'
                   : 'border-transparent text-slate-300 hover:bg-white/7 hover:text-white'
@@ -140,13 +140,13 @@ export default function StudioSidebar({
       <button
         type="button"
         onClick={onStatusClick}
-        className="mt-auto rounded-md border border-white/10 bg-white/5 p-3 text-left transition hover:border-cyan-300/25 hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-cyan-300/35"
+        className="mt-auto rounded-md border border-white/10 bg-white/5 p-3 text-left transition-all duration-300 hover:border-cyan-300/25 hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-cyan-300/35 group"
       >
-        <div className="text-xs font-semibold text-slate-200">Auto Tool Studio</div>
+        <div className="text-xs font-semibold text-slate-200 group-hover:text-cyan-200 transition-colors">Auto Tool Studio</div>
         <div className="mt-1 font-mono text-[11px] text-slate-500">v{version}</div>
         <div className="mt-3 flex items-center justify-between gap-2">
           <span className="text-xs text-slate-400">Backend</span>
-          <GlassBadge variant={connected ? 'success' : 'failed'}>{connected ? 'Connected' : 'Offline'}</GlassBadge>
+          <GlassBadge variant={connected ? 'success' : 'failed'}>{connected ? 'Đã kết nối' : 'Ngoại tuyến'}</GlassBadge>
         </div>
       </button>
     </aside>

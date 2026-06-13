@@ -33,19 +33,19 @@ export default function StudioTopBar({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button type="button" onClick={onStatus} className="hidden sm:inline-flex">
+          <button type="button" onClick={onStatus} className="hidden sm:inline-flex hover:opacity-85 transition-opacity">
             <GlassBadge variant={connected ? 'success' : 'failed'}>
               {connected ? <Server size={12} /> : <WifiOff size={12} />}
-              <span className="ml-1">{connected ? 'Connected' : 'Offline'}</span>
+              <span className="ml-1">{connected ? 'Đã kết nối' : 'Ngoại tuyến'}</span>
             </GlassBadge>
           </button>
-          <GlassButton variant="primary" className="hidden min-h-9 px-3 text-xs md:inline-flex" onClick={onNewBatch}>
+          <GlassButton variant="primary" className="hidden min-h-9 px-3 text-xs md:inline-flex hover:scale-[1.03] active:scale-[0.97] transition-all duration-300" onClick={onNewBatch}>
             <Plus size={15} />
-            New Batch
+            Tạo lô mới
           </GlassButton>
-          <GlassButton variant="ghost" className="min-h-9 px-3 text-xs" onClick={onHelp}>
+          <GlassButton variant="ghost" className="min-h-9 px-3 text-xs hover:scale-[1.03] active:scale-[0.97] transition-all duration-300" onClick={onHelp}>
             <HelpCircle size={15} />
-            Help
+            Trợ giúp
           </GlassButton>
         </div>
       </div>

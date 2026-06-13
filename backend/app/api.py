@@ -1787,6 +1787,14 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return VideoPromptPackResponse(success=True, prompt_pack=prompt_pack, files=files)
 
+    @app.get("/api/projects/{project_id}/jobs")
+    def list_project_jobs(project_id: str, include_preview: bool = False) -> dict[str, Any]:
+        database.init_db()
+        jobs = database.get_project_jobs(project_id, include_preview=include_preview)
+        # Sort so latest jobs are first
+        jobs = sorted(jobs, key=lambda x: x["created_at"], reverse=True)
+        return {"success": True, "jobs": jobs}
+
     @app.get("/api/projects/{project_id}/latest-script", response_model=LatestScriptResponse)
     def get_latest_script(project_id: str) -> LatestScriptResponse:
         project = _get_project_or_404(project_id)
@@ -2375,6 +2383,37 @@ def create_app() -> FastAPI:
             ],
             report_path=report_path,
         )
+
+    @app.get("/api/jobs")
+    def list_all_jobs(limit: int = 100, offset: int = 0) -> dict[str, Any]:
+        database.init_db()
+        with database.get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT j.job_id, j.project_id, j.status, j.current_step, j.progress, 
+                       j.total_outputs, j.completed_outputs, j.failed_outputs, 
+                       j.preview_only, j.created_at, j.updated_at, p.config_json
+                FROM jobs j
+                LEFT JOIN projects p ON j.project_id = p.project_id
+                ORDER BY j.created_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset)
+            ).fetchall()
+        jobs = []
+        for row in rows:
+            job_dict = dict(row)
+            project_name = None
+            if job_dict.get("config_json"):
+                try:
+                    cfg = json.loads(job_dict["config_json"])
+                    project_name = cfg.get("project_name")
+                except Exception:
+                    pass
+            job_dict["project_name"] = project_name
+            job_dict.pop("config_json", None)
+            jobs.append(job_dict)
+        return {"success": True, "jobs": jobs}
 
     @app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
     def get_job(job_id: str) -> JobStatusResponse:

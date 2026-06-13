@@ -1047,6 +1047,11 @@ export interface JobStatus {
   failed_outputs: number;
   logs: JobLogItem[];
   cache_summary?: CacheSummary | null;
+  project_name?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  preview_only?: boolean;
+  project_id?: string;
 }
 
 export interface JobOutput {
