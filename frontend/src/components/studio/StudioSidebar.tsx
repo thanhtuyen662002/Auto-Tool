@@ -15,7 +15,7 @@ const generalItems: SidebarItem[] = [
 ];
 
 const studioItems: SidebarItem[] = [
-  { to: '/douyin-reup', label: 'Reup có thoại (Douyin)', helper: 'Xử lý hàng loạt có thoại', icon: Clapperboard },
+  { to: '/douyin-reup', label: 'Reup có thoại', helper: 'Xử lý hàng loạt có thoại', icon: Clapperboard },
   { to: '/silent-mode', label: 'Reup không thoại', helper: 'Xử lý hàng loạt không thoại', icon: Waves },
   { to: '/projects/new', label: 'Tạo Video Affiliate', helper: 'Tạo video sản phẩm từ link', icon: FolderPlus },
   { to: '/import-inbox', label: 'Nhập hộp thư Shopee', helper: 'Nhập sản phẩm từ inbox', icon: Inbox },
