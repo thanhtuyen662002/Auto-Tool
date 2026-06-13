@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import ApiErrorBox from '../components/ApiErrorBox';
 import GlassButton from '../components/glass/GlassButton';
+import GlassPagination from '../components/glass/GlassPagination';
 import ExportPackPanel, { type ExportPackOptions, type ExportScope } from '../components/results/ExportPackPanel';
 import ResultQAPanel from '../components/results/ResultQAPanel';
 import ResultRetryPanel from '../components/results/ResultRetryPanel';
@@ -100,8 +101,20 @@ export default function ResultPage() {
     return () => window.clearInterval(timer);
   }, [jobId, jobRunning, loadResults]);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 12;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, search, sort]);
+
   const items = useMemo(() => outputs.map(normalizeResultOutput), [outputs]);
   const visibleItems = useMemo(() => filterAndSortResults(items, filter, search, sort), [filter, items, search, sort]);
+  const totalPages = Math.ceil(visibleItems.length / pageSize);
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return visibleItems.slice(start, start + pageSize);
+  }, [visibleItems, currentPage, pageSize]);
   const selectedCount = useMemo(() => items.filter((item) => selectedIds.has(item.id)).length, [items, selectedIds]);
   const summary = useMemo(() => summarizeResults(items, selectedCount), [items, selectedCount]);
   const failedItems = useMemo(() => items.filter((item) => item.health === 'failed' || item.qaStatus === 'failed'), [items]);
@@ -254,17 +267,17 @@ export default function ResultPage() {
 
   return (
     <ResultsLayout
-      title="Results Gallery"
-      subtitle={`Job: ${jobId}`}
-      statusLabel={jobRunning ? 'Live polling' : jobStatus?.status}
+      title="Thư viện kết quả"
+      subtitle={`Tác vụ: ${jobId}`}
+      statusLabel={jobRunning ? 'Đang cập nhật' : jobStatus ? formatStatus(jobStatus.status) : ''}
       actions={
         <>
           {projectId ? <LinkButton to={`/projects/${projectId}/content`} label="Caption" /> : null}
-          {projectId ? <LinkButton to={`/projects/${projectId}/review`} label="Review" /> : null}
+          {projectId ? <LinkButton to={`/projects/${projectId}/review`} label="Đánh giá" /> : null}
           <LinkButton to="/douyin-reup" label="Batch mới" icon={<Clapperboard size={16} />} />
           <GlassButton variant="secondary" loading={loading} onClick={() => void loadResults()}>
             <RefreshCw size={16} />
-            Refresh
+            Làm mới
           </GlassButton>
         </>
       }
@@ -335,7 +348,7 @@ export default function ResultPage() {
               onViewModeChange={setViewMode}
             />
             <ResultVideoGrid
-              items={visibleItems}
+              items={paginatedItems}
               selectedIds={selectedIds}
               selectionMode={selectionMode}
               viewMode={viewMode}
@@ -345,6 +358,12 @@ export default function ResultPage() {
               onPreview={setPreviewItem}
               onShowLog={showLog}
               onToggleSelected={toggleSelected}
+            />
+            <GlassPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              className="mt-6"
             />
           </>
         ) : (
@@ -403,4 +422,18 @@ function LinkButton({ to, label, icon }: { to: string; label: string; icon?: Rea
       {label}
     </Link>
   );
+}
+
+function formatStatus(status: string): string {
+  const labels: Record<string, string> = {
+    success: 'Thành công',
+    warning: 'Có cảnh báo',
+    failed: 'Thất bại',
+    completed: 'Hoàn thành',
+    completed_with_errors: 'Hoàn thành nhưng có lỗi',
+    running: 'Đang chạy',
+    queued: 'Đang chờ',
+    cancelled: 'Đã hủy',
+  };
+  return labels[status.toLowerCase()] ?? status;
 }

@@ -146,3 +146,4 @@ class ProjectListItem(BaseModel):
 
 class ProjectListResponse(BaseModel):
     items: list[ProjectListItem]
+    total: int = 0

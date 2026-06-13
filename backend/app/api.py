@@ -1559,6 +1559,7 @@ def create_app() -> FastAPI:
     def list_projects(limit: int = 100, offset: int = 0) -> ProjectListResponse:
         database.init_db()
         projects = database.list_projects(limit=limit, offset=offset)
+        total = database.count_projects()
         return ProjectListResponse(
             items=[
                 {
@@ -1567,8 +1568,33 @@ def create_app() -> FastAPI:
                     "created_at": project["created_at"],
                 }
                 for project in projects
-            ]
+            ],
+            total=total
         )
+
+    @app.delete("/api/projects/{project_id}")
+    def delete_project(project_id: str) -> dict[str, Any]:
+        database.init_db()
+        project = database.get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        database.delete_project(project_id)
+        return {"success": True, "project_id": project_id}
+
+    @app.post("/api/projects/{project_id}/duplicate")
+    def duplicate_project(project_id: str) -> dict[str, Any]:
+        database.init_db()
+        project = database.get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        new_project_id = str(uuid.uuid4())
+        orig_name = project["config"].get("project_name", "Untitled Project")
+        new_name = f"{orig_name} - Sao chép"
+        new_project = database.duplicate_project(project_id, new_project_id, new_name)
+        if not new_project:
+            raise HTTPException(status_code=500, detail="Failed to duplicate project")
+        return {"success": True, "project_id": new_project_id}
+
 
     @app.get("/api/projects/{project_id}", response_model=ProjectDetailResponse)
     def get_project(project_id: str) -> ProjectDetailResponse:
@@ -2388,6 +2414,7 @@ def create_app() -> FastAPI:
     def list_all_jobs(limit: int = 100, offset: int = 0) -> dict[str, Any]:
         database.init_db()
         with database.get_connection() as conn:
+            total = conn.execute("SELECT COUNT(*) as count FROM jobs").fetchone()["count"]
             rows = conn.execute(
                 """
                 SELECT j.job_id, j.project_id, j.status, j.current_step, j.progress, 
@@ -2413,7 +2440,8 @@ def create_app() -> FastAPI:
             job_dict["project_name"] = project_name
             job_dict.pop("config_json", None)
             jobs.append(job_dict)
-        return {"success": True, "jobs": jobs}
+        return {"success": True, "jobs": jobs, "total": total}
+
 
     @app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
     def get_job(job_id: str) -> JobStatusResponse:

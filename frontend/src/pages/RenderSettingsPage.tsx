@@ -25,7 +25,12 @@ import {
   scanProject,
   startRender,
   videoFileUrl,
+  deleteProject,
+  duplicateProject,
 } from '../api/client';
+import { Copy, Trash2 } from 'lucide-react';
+import GlassButton from '../components/glass/GlassButton';
+import GlassModal from '../components/glass/GlassModal';
 import ApiErrorBox from '../components/ApiErrorBox';
 import EffectSliders from '../components/EffectSliders';
 import NumberInput from '../components/NumberInput';
@@ -120,6 +125,40 @@ export default function RenderSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(false);
+  const [duplicatingProject, setDuplicatingProject] = useState(false);
+
+  async function handleDeleteProject() {
+    if (!projectId) return;
+    setDeletingProject(true);
+    setError(null);
+    try {
+      await deleteProject(projectId);
+      setDeleteConfirmOpen(false);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể xóa dự án.');
+    } finally {
+      setDeletingProject(false);
+    }
+  }
+
+  async function handleDuplicateProject() {
+    if (!projectId) return;
+    setDuplicatingProject(true);
+    setError(null);
+    try {
+      const res = await duplicateProject(projectId);
+      if (res.success && res.project_id) {
+        navigate(`/settings/${res.project_id}`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể nhân bản dự án.');
+    } finally {
+      setDuplicatingProject(false);
+    }
+  }
   const [previewJobId, setPreviewJobId] = useState<string | null>(null);
   const [previewProjectId, setPreviewProjectId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<JobStatus | null>(null);
@@ -530,11 +569,30 @@ export default function RenderSettingsPage() {
           <p className="mt-1 text-sm text-muted">{config.project_name}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <GlassButton
+            variant="secondary"
+            loading={duplicatingProject}
+            onClick={() => void handleDuplicateProject()}
+            className="min-h-9 px-3 text-xs"
+          >
+            <Copy size={13} className="mr-1" />
+            Nhân bản
+          </GlassButton>
+          <GlassButton
+            variant="danger"
+            loading={deletingProject}
+            onClick={() => setDeleteConfirmOpen(true)}
+            className="min-h-9 px-3 text-xs bg-red-950/20 text-red-300 border-red-900/30 hover:bg-red-900/20"
+          >
+            <Trash2 size={13} className="mr-1" />
+            Xóa
+          </GlassButton>
           <ModeToggle mode={mode} onChange={handleModeChange} />
           <div className="rounded bg-white px-3 py-2 text-xs text-muted shadow-sm">
             {dirty ? 'Dự án có thay đổi chưa lưu' : 'Dự án đã đồng bộ'}
           </div>
         </div>
+
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
@@ -704,6 +762,29 @@ export default function RenderSettingsPage() {
           )}
         </aside>
       </div>
+
+      <GlassModal
+        open={deleteConfirmOpen}
+        title="Xác nhận xóa dự án"
+        onClose={() => setDeleteConfirmOpen(false)}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-200">
+            Bạn có chắc chắn muốn xóa dự án <strong>{config.project_name}</strong>?
+          </p>
+          <p className="text-xs text-rose-300">
+            Hành động này sẽ xóa vĩnh viễn tất cả cấu hình, kịch bản, các video kết quả và lịch sử tiến trình chạy của dự án này.
+          </p>
+          <div className="flex justify-end gap-3 mt-4">
+            <GlassButton variant="ghost" onClick={() => setDeleteConfirmOpen(false)}>
+              Hủy bỏ
+            </GlassButton>
+            <GlassButton variant="danger" loading={deletingProject} onClick={() => void handleDeleteProject()}>
+              Xác nhận xóa
+            </GlassButton>
+          </div>
+        </div>
+      </GlassModal>
     </main>
   );
 }

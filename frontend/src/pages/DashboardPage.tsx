@@ -17,14 +17,31 @@ import { getLocalUiSettings, markOnboardingSeen } from '../utils/localSettings';
 
 export default function DashboardPage() {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [status, setStatus] = useState<NormalizedSystemStatus>(() => offlineStatus());
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [showFirstRun, setShowFirstRun] = useState(() => !getLocalUiSettings().onboardingSeen);
 
+  const pageSize = 5;
+
+  async function loadProjects(page: number) {
+    try {
+      const offset = (page - 1) * pageSize;
+      const response = await listProjects(pageSize, offset);
+      setProjects(response.items || []);
+      setTotalPages(Math.ceil((response.total || 0) / pageSize));
+    } catch {
+      setProjects([]);
+      setTotalPages(1);
+    }
+  }
+
   useEffect(() => {
-    listProjects().then((response) => setProjects(response.items.slice(0, 5))).catch(() => setProjects([]));
+    void loadProjects(currentPage);
     void refreshStatus();
-  }, []);
+  }, [currentPage]);
+
 
   async function refreshStatus() {
     setLoadingStatus(true);
@@ -109,7 +126,7 @@ export default function DashboardPage() {
           </div>
           <Link to="/projects/new">
             <GlassButton variant="secondary" className="border-purple-500/30 text-purple-200 hover:text-white hover:bg-purple-500/10">
-              Create Project
+              Tạo dự án
             </GlassButton>
           </Link>
         </div>
@@ -119,9 +136,15 @@ export default function DashboardPage() {
       <StudioQuickActions />
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(360px,0.7fr)]">
-        <StudioRecentProjects projects={projects} />
+        <StudioRecentProjects
+          projects={projects}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
         <StudioSystemStatus status={status} loading={loadingStatus} onRefresh={() => void refreshStatus()} />
       </section>
+
 
       {shouldShowFirstRun ? <FirstRunChecklist status={status} onRefresh={() => void refreshStatus()} /> : null}
 

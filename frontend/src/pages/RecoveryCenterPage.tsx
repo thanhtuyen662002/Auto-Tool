@@ -101,7 +101,7 @@ export default function RecoveryCenterPage() {
       </section>
 
       <div className="flex flex-wrap gap-2">
-        <GlassButton loading={loading} onClick={() => void refresh()}>Refresh</GlassButton>
+        <GlassButton loading={loading} onClick={() => void refresh()}>Làm mới</GlassButton>
         <GlassButton variant="ghost" onClick={() => navigate('/results')}>Mở kết quả</GlassButton>
       </div>
 
@@ -182,9 +182,9 @@ export default function RecoveryCenterPage() {
             onChange={(do_not_overwrite_existing_outputs) => setResumeRequest({ ...resumeRequest, do_not_overwrite_existing_outputs })}
           />
           <div className="flex flex-wrap justify-end gap-2">
-            <GlassButton variant="ghost" onClick={() => setSelected(null)}>Cancel</GlassButton>
+            <GlassButton variant="ghost" onClick={() => setSelected(null)}>Hủy</GlassButton>
             <GlassButton variant="primary" loading={Boolean(selected && busyJobId === selected.job_id)} onClick={() => void confirmResume()}>
-              Resume job
+              Tiếp tục chạy
             </GlassButton>
           </div>
         </div>

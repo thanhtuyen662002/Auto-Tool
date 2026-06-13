@@ -1149,10 +1149,10 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button className={`px-3 py-2 text-sm font-semibold ${resultsTab === 'results' ? 'border-b-2 border-brand text-brand' : 'text-muted'}`} type="button" onClick={() => setResultsTab('results')}>
-                Results
+                Kết quả
               </button>
               <button className={`px-3 py-2 text-sm font-semibold ${resultsTab === 'final_qa' ? 'border-b-2 border-brand text-brand' : 'text-muted'}`} type="button" onClick={() => setResultsTab('final_qa')}>
-                Final QA
+                Đánh giá QA
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1163,7 +1163,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   disabled={busy || !jobId}
                   onClick={() => void handleRetryFailed()}
                 >
-                  Retry failed
+                  Thử lại các video lỗi
                 </button>
               ) : null}
               {reviewDocuments.length > 0 && jobId ? (
@@ -1174,7 +1174,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                     disabled={busy}
                     onClick={() => void handleRenderApproved()}
                   >
-                    Render approved
+                    Render các file đã duyệt
                   </button>
                   <Link
                     className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
@@ -1188,11 +1188,11 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           </div>
           {resultsTab === 'results' && summary ? (
             <div className="mt-4 grid gap-2 text-sm sm:grid-cols-5">
-              <Stat label="Needs review" value={summary.needs_review ?? reviewDocuments.length} />
-              <Stat label="Rendered" value={summary.rendered ?? results.filter((output) => output.status === 'success').length} />
-              <Stat label="Failed" value={summary.failed ?? failedResults.length} />
-              <Stat label="Silent" value={summary.silent_immersive?.videos_processed_silent ?? results.filter((output) => output.reup_mode === 'silent_immersive').length} />
-              <Stat label="Slowest" value={summary.performance?.slowest_step ?? '-'} />
+              <Stat label="Cần duyệt" value={summary.needs_review ?? reviewDocuments.length} />
+              <Stat label="Đã render" value={summary.rendered ?? results.filter((output) => output.status === 'success').length} />
+              <Stat label="Lỗi" value={summary.failed ?? failedResults.length} />
+              <Stat label="Im lặng" value={summary.silent_immersive?.videos_processed_silent ?? results.filter((output) => output.reup_mode === 'silent_immersive').length} />
+              <Stat label="Chậm nhất" value={summary.performance?.slowest_step ?? '-'} />
             </div>
           ) : null}
           {resultsTab === 'results' ? <div className="mt-4 grid gap-5">
@@ -1241,7 +1241,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                           disabled={busy || !jobId}
                           onClick={() => void handleRenderApproved()}
                         >
-                          Render approved
+                          Render các file đã duyệt
                         </button>
                       ) : null}
                       <button
@@ -1250,7 +1250,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                         disabled={busy || !jobId}
                         onClick={() => void handleRetryOutputWithPreset(output, 'silent_product_voiceover')}
                       >
-                        Retry with voiceover
+                        Thử lại với voiceover
                       </button>
                       <button
                         className="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 disabled:text-muted"
@@ -1258,7 +1258,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                         disabled={busy || !jobId}
                         onClick={() => void handleRetryOutputWithPreset(output, 'voice_priority')}
                       >
-                        Retry as ASR video
+                        Thử lại làm video ASR
                       </button>
                     </div>
                   </div>
@@ -1280,7 +1280,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 {output.status === 'failed' ? (
                   <div className="mt-3 flex flex-wrap items-end gap-2">
                     <label className="block">
-                      <span className="mb-1 block text-xs font-semibold text-muted">Change Preset</span>
+                      <span className="mb-1 block text-xs font-semibold text-muted">Đổi Preset</span>
                       <select
                         className="h-9 rounded-md border border-line bg-white px-2 text-xs"
                         value={retryPresetByOutput[output.index] || selectedPresetId}
@@ -1301,7 +1301,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                       disabled={busy || !jobId}
                       onClick={() => void handleRetryWithPreset(output)}
                     >
-                      Retry
+                      Thử lại
                     </button>
                   </div>
                 ) : null}
@@ -1311,7 +1311,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                     type="button"
                     onClick={() => void navigator.clipboard.writeText(output.path)}
                   >
-                    Copy path
+                    Sao chép đường dẫn
                   </button>
                 ) : null}
                 {output.subtitle_review_document_id ? (
@@ -1319,7 +1319,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                     className="ml-2 mt-3 inline-block rounded-md bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                     to={`/subtitle-review/${output.subtitle_review_document_id}`}
                   >
-                    {output.reup_mode === 'silent_immersive' ? 'Review captions' : 'Review subtitle'}
+                    {output.reup_mode === 'silent_immersive' ? 'Duyệt caption' : 'Duyệt phụ đề'}
                   </Link>
                 ) : null}
               </article>
@@ -1387,24 +1387,24 @@ function FinalQAPanel({
   const qaSummary = summary?.final_output_qa;
   const qaFailed = outputs.filter((output) => output.final_output_qa?.status === 'failed').length;
   const optionRows: Array<[keyof ExportOptions, string]> = [
-    ['copy_videos', 'Include videos'],
-    ['include_subtitles', 'Include subtitles'],
-    ['include_logs', 'Include logs'],
-    ['include_captions', 'Include captions'],
-    ['include_posting_checklist', 'Include posting checklist'],
+    ['copy_videos', 'Bao gồm video'],
+    ['include_subtitles', 'Bao gồm phụ đề'],
+    ['include_logs', 'Bao gồm nhật ký'],
+    ['include_captions', 'Bao gồm caption'],
+    ['include_posting_checklist', 'Bao gồm checklist đăng bài'],
   ];
   return (
     <div className="mt-4 grid gap-5">
       <div className="grid gap-3 sm:grid-cols-5">
-        <Stat label="Checked" value={qaSummary?.total_checked ?? checkedOutputs.length} />
-        <Stat label="Passed" value={qaSummary?.passed ?? checkedOutputs.filter((item) => item.final_output_qa?.status === 'passed').length} />
-        <Stat label="Warnings" value={qaSummary?.passed_with_warnings ?? checkedOutputs.filter((item) => item.final_output_qa?.status === 'passed_with_warnings').length} />
-        <Stat label="Failed" value={qaSummary?.failed ?? qaFailed} />
-        <Stat label="Average" value={`${Math.round((qaSummary?.average_score ?? 0) * 100)}%`} />
+        <Stat label="Đã kiểm tra" value={qaSummary?.total_checked ?? checkedOutputs.length} />
+        <Stat label="Đạt" value={qaSummary?.passed ?? checkedOutputs.filter((item) => item.final_output_qa?.status === 'passed').length} />
+        <Stat label="Cảnh báo" value={qaSummary?.passed_with_warnings ?? checkedOutputs.filter((item) => item.final_output_qa?.status === 'passed_with_warnings').length} />
+        <Stat label="Lỗi" value={qaSummary?.failed ?? qaFailed} />
+        <Stat label="Trung bình" value={`${Math.round((qaSummary?.average_score ?? 0) * 100)}%`} />
       </div>
       <div className="flex flex-wrap items-end gap-3 border-y border-line py-4">
         <label>
-          <span className="mb-1 block text-xs font-semibold uppercase text-muted">Platform</span>
+          <span className="mb-1 block text-xs font-semibold uppercase text-muted">Nền tảng</span>
           <select className="h-10 rounded-md border border-line bg-white px-3 text-sm" value={platformTarget} onChange={(event) => setPlatformTarget(event.target.value as PlatformTarget)}>
             <option value="tiktok">TikTok</option>
             <option value="instagram_reels">Instagram Reels</option>
@@ -1413,7 +1413,7 @@ function FinalQAPanel({
           </select>
         </label>
         <button className="h-10 rounded-md border border-line px-4 text-sm font-semibold text-ink hover:border-brand disabled:text-muted" type="button" disabled={busy || !jobId} onClick={() => void onRunQA()}>
-          Run Final QA
+          Chạy đánh giá QA
         </button>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -1428,10 +1428,10 @@ function FinalQAPanel({
                 </div>
                 <label className="flex items-center gap-2 text-xs text-muted">
                   <input type="checkbox" checked={selectedIndexes.includes(output.index)} onChange={() => toggleSelectedIndex(output.index)} />
-                  Export
+                  Xuất file
                 </label>
               </div>
-              <div className="mt-3 text-sm font-semibold text-ink">Score: {qa ? `${Math.round(qa.score * 100)}%` : 'Not checked'}</div>
+              <div className="mt-3 text-sm font-semibold text-ink">Điểm số: {qa ? `${Math.round(qa.score * 100)}%` : 'Chưa kiểm tra'}</div>
               {qa?.issues.length ? (
                 <div className="mt-3 grid gap-2 text-xs">
                   {qa.issues.map((issue, index) => (
@@ -1441,10 +1441,10 @@ function FinalQAPanel({
                     </div>
                   ))}
                 </div>
-              ) : <div className="mt-3 text-xs text-green-700">No technical QA issues.</div>}
+              ) : <div className="mt-3 text-xs text-green-700">Không có vấn đề kỹ thuật.</div>}
               <div className="mt-4 flex flex-wrap gap-2">
-                {qa?.report_path ? <a className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-ink hover:border-brand" href={finalOutputQAReportUrl(qa.report_path)} target="_blank" rel="noreferrer">Open QA Report</a> : null}
-                {qa?.status === 'failed' ? <button className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-ink hover:border-brand disabled:text-muted" type="button" disabled={busy || !jobId} onClick={() => void onRetry(output)}>Retry Render</button> : null}
+                {qa?.report_path ? <a className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-ink hover:border-brand" href={finalOutputQAReportUrl(qa.report_path)} target="_blank" rel="noreferrer">Mở báo cáo QA</a> : null}
+                {qa?.status === 'failed' ? <button className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-ink hover:border-brand disabled:text-muted" type="button" disabled={busy || !jobId} onClick={() => void onRetry(output)}>Render lại</button> : null}
               </div>
             </article>
           );
@@ -1452,8 +1452,8 @@ function FinalQAPanel({
       </div>
       <div className="grid gap-4 border-t border-line pt-5">
         <div>
-          <h3 className="text-base font-semibold text-ink">Platform Export Pack</h3>
-          <p className="mt-1 text-xs text-muted">Prepare local files for manual review and posting.</p>
+          <h3 className="text-base font-semibold text-ink">Gói xuất tệp tin cho nền tảng</h3>
+          <p className="mt-1 text-xs text-muted">Chuẩn bị các tệp tin cục bộ để kiểm tra và đăng tải.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {optionRows.map(([key, label]) => (
@@ -1465,16 +1465,16 @@ function FinalQAPanel({
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white disabled:bg-blue-200" type="button" disabled={busy || !jobId || !selectedIndexes.length} onClick={() => void onCreatePack()}>
-            Create Export Pack
+            Tạo gói xuất file
           </button>
-          {exportPack ? <button className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink" type="button" onClick={() => void navigator.clipboard.writeText(exportPack.output_dir)}>Copy Path</button> : null}
-          {exportPack ? <button className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink" type="button" onClick={() => void onOpenPack()}>Open Folder</button> : null}
+          {exportPack ? <button className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink" type="button" onClick={() => void navigator.clipboard.writeText(exportPack.output_dir)}>Sao chép đường dẫn</button> : null}
+          {exportPack ? <button className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink" type="button" onClick={() => void onOpenPack()}>Mở thư mục</button> : null}
         </div>
         {exportPack ? (
           <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-            <div className="font-semibold">Export pack created</div>
+            <div className="font-semibold">Đã tạo gói xuất file</div>
             <div className="break-all text-xs">{exportPack.output_dir}</div>
-            <div className="mt-1 text-xs">{exportPack.items.filter((item) => item.exists).length} files available.</div>
+            <div className="mt-1 text-xs">{exportPack.items.filter((item) => item.exists).length} tệp tin sẵn sàng.</div>
           </div>
         ) : null}
       </div>
@@ -1681,8 +1681,13 @@ function qaStatusClass(status?: string): string {
 }
 
 function formatQaStatus(status?: string): string {
-  if (!status) return 'Not checked';
-  return status.replaceAll('_', ' ');
+  if (!status) return 'Chưa kiểm tra';
+  const labels: Record<string, string> = {
+    passed: 'Đạt',
+    failed: 'Thất bại',
+    passed_with_warnings: 'Đạt (có cảnh báo)',
+  };
+  return labels[status] ?? status.replaceAll('_', ' ');
 }
 
 function formatSourceType(source?: string | null): string {

@@ -7,20 +7,27 @@ import type { JobStatus } from '../types/project';
 import ResultsLayout from '../components/results/ResultsLayout';
 import GlassBadge from '../components/glass/GlassBadge';
 import GlassButton from '../components/glass/GlassButton';
+import GlassPagination from '../components/glass/GlassPagination';
 
 const ACTIVE_STATUSES = new Set(['queued', 'running', 'paused']);
 
 export default function ResultsPage() {
   const [jobs, setJobs] = useState<JobStatus[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(quiet = false) {
+  const pageSize = 10;
+
+  async function load(quiet = false, page = currentPage) {
     if (!quiet) setLoading(true);
     try {
-      const response = await listJobs();
+      const offset = (page - 1) * pageSize;
+      const response = await listJobs(pageSize, offset);
       if (response.success) {
         setJobs(response.jobs);
+        setTotalPages(Math.ceil((response.total || 0) / pageSize));
       }
       setError(null);
     } catch (err) {
@@ -31,8 +38,9 @@ export default function ResultsPage() {
   }
 
   useEffect(() => {
-    void load();
-  }, []);
+    void load(false, currentPage);
+  }, [currentPage]);
+
 
   // Polling for active jobs
   const hasActiveJob = useMemo(() => jobs.some((job) => ACTIVE_STATUSES.has(job.status)), [jobs]);
@@ -40,10 +48,10 @@ export default function ResultsPage() {
   useEffect(() => {
     if (!hasActiveJob) return undefined;
     const timer = window.setInterval(() => {
-      void load(true);
+      void load(true, currentPage);
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [hasActiveJob]);
+  }, [hasActiveJob, currentPage]);
 
   function getJobTypeLabel(projectId: string): string {
     if (projectId.startsWith('douyin_reup_')) return 'Reup có thoại (Douyin)';
@@ -99,85 +107,93 @@ export default function ResultsPage() {
             </div>
           </div>
         ) : jobs.length ? (
-          <div className="grid gap-4">
-            {jobs.map((job) => {
-              const isActive = ACTIVE_STATUSES.has(job.status);
-              const formattedDate = new Date(job.created_at || Date.now()).toLocaleString('vi-VN');
-              const progressVal = job.progress ?? 0;
-              const linkUrl = isActive
-                ? `/queue/${job.project_id || 'project'}/${job.job_id}`
-                : `/results/${job.project_id || 'project'}/${job.job_id}`;
+          <>
+            <div className="grid gap-4">
+              {jobs.map((job) => {
+                const isActive = ACTIVE_STATUSES.has(job.status);
+                const formattedDate = new Date(job.created_at || Date.now()).toLocaleString('vi-VN');
+                const progressVal = job.progress ?? 0;
+                const linkUrl = isActive
+                  ? `/queue/${job.project_id || 'project'}/${job.job_id}`
+                  : `/results/${job.project_id || 'project'}/${job.job_id}`;
 
-              return (
-                <div key={job.job_id} className="glass-card p-5 border border-white/10 bg-[#0e1628]/40 hover:border-cyan-300/30 transition-all duration-300 hover:scale-[1.005]">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-semibold text-white truncate max-w-md">
-                          {job.project_name || `Dự án: ${job.project_id}`}
-                        </h2>
-                        {getStatusBadge(job.status)}
-                        <span className="text-[11px] rounded bg-white/5 px-2 py-0.5 font-medium text-slate-400">
-                          {getJobTypeLabel(job.project_id || '')}
-                        </span>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-400">
-                        <span className="flex items-center gap-1">
-                          <Clock size={13} />
-                          {formattedDate}
-                        </span>
-                        <span className="font-mono text-slate-500">ID: {job.job_id}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-1 text-right">
-                      <div className="text-sm font-semibold text-white">
-                        {job.completed_outputs} / {job.total_outputs} video đã xong
-                      </div>
-                      {job.failed_outputs > 0 && (
-                        <div className="text-xs text-rose-300 font-medium">
-                          {job.failed_outputs} video bị lỗi
+                return (
+                  <div key={job.job_id} className="glass-card p-5 border border-white/10 bg-[#0e1628]/40 hover:border-cyan-300/30 transition-all duration-300 hover:scale-[1.005]">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-lg font-semibold text-white truncate max-w-md">
+                            {job.project_name || `Dự án: ${job.project_id}`}
+                          </h2>
+                          {getStatusBadge(job.status)}
+                          <span className="text-[11px] rounded bg-white/5 px-2 py-0.5 font-medium text-slate-400">
+                            {getJobTypeLabel(job.project_id || '')}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex-1 min-w-[200px]">
-                      <div className="flex justify-between text-xs text-slate-400 mb-1">
-                        <span>{job.current_step || 'Đang chuẩn bị...'}</span>
-                        <span className="font-semibold text-cyan-200">{progressVal}%</span>
+                        <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-400">
+                          <span className="flex items-center gap-1">
+                            <Clock size={13} />
+                            {formattedDate}
+                          </span>
+                          <span className="font-mono text-slate-500">ID: {job.job_id}</span>
+                        </div>
                       </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            job.status === 'failed'
-                              ? 'bg-rose-500'
-                              : job.status === 'completed'
-                              ? 'bg-emerald-400'
-                              : 'bg-cyan-300'
-                          }`}
-                          style={{ width: `${progressVal}%` }}
-                        />
+
+                      <div className="flex flex-col items-end gap-1 text-right">
+                        <div className="text-sm font-semibold text-white">
+                          {job.completed_outputs} / {job.total_outputs} video đã xong
+                        </div>
+                        {job.failed_outputs > 0 && (
+                          <div className="text-xs text-rose-300 font-medium">
+                            {job.failed_outputs} video bị lỗi
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
-                      <Link to={linkUrl}>
-                        <GlassButton
-                          variant={isActive ? 'primary' : 'secondary'}
-                          className="min-h-9 px-4 text-xs hover:scale-[1.03] active:scale-[0.97] transition-all"
-                        >
-                          {isActive ? 'Giám sát hàng đợi' : 'Xem kết quả'}
-                          <ExternalLink size={12} className="ml-1" />
-                        </GlassButton>
-                      </Link>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex-1 min-w-[200px]">
+                        <div className="flex justify-between text-xs text-slate-400 mb-1">
+                          <span>{job.current_step || 'Đang chuẩn bị...'}</span>
+                          <span className="font-semibold text-cyan-200">{progressVal}%</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              job.status === 'failed'
+                                ? 'bg-rose-500'
+                                : job.status === 'completed'
+                                ? 'bg-emerald-400'
+                                : 'bg-cyan-300'
+                            }`}
+                            style={{ width: `${progressVal}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Link to={linkUrl}>
+                          <GlassButton
+                            variant={isActive ? 'primary' : 'secondary'}
+                            className="min-h-9 px-4 text-xs hover:scale-[1.03] active:scale-[0.97] transition-all"
+                          >
+                            {isActive ? 'Giám sát hàng đợi' : 'Xem kết quả'}
+                            <ExternalLink size={12} className="ml-1" />
+                          </GlassButton>
+                        </Link>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+            <GlassPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              className="mt-6"
+            />
+          </>
         ) : (
           <div className="glass-card p-12 text-center border border-white/10 bg-[#0e1628]/20">
             <Clock className="mx-auto h-12 w-12 text-slate-500" />

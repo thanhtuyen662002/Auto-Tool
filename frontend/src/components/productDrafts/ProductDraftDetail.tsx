@@ -118,8 +118,8 @@ export default function ProductDraftDetail({
       <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold text-ink">Normalized Product</h3>
-            <p className="mt-1 text-xs text-muted">Review and edit before applying this draft to a project.</p>
+            <h3 className="text-base font-semibold text-ink">Thông tin sản phẩm chuẩn hóa</h3>
+            <p className="mt-1 text-xs text-muted">Xem xét và chỉnh sửa trước khi áp dụng bản nháp này vào dự án.</p>
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -127,10 +127,10 @@ export default function ProductDraftDetail({
               value={status}
               onChange={(event) => setStatus(event.target.value as ProductDraftStatus)}
             >
-              <option value="new">New</option>
-              <option value="reviewed">Reviewed</option>
-              <option value="applied">Applied</option>
-              <option value="archived">Archived</option>
+              <option value="new">Mới</option>
+              <option value="reviewed">Đã xem xét</option>
+              <option value="applied">Đã áp dụng</option>
+              <option value="archived">Đã lưu trữ</option>
             </select>
             <button
               className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
@@ -138,18 +138,18 @@ export default function ProductDraftDetail({
               disabled={saving}
               onClick={() => onSave({ normalized_product: product, status, user_note: userNote || null })}
             >
-              {saving ? 'Saving...' : 'Save Changes'}
+              {saving ? 'Đang lưu...' : 'Lưu Thay đổi'}
             </button>
           </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <TextInput label="Name" value={product.name} onChange={(name) => updateProduct({ name })} />
-          <TextInput label="Brand" value={product.brand ?? ''} onChange={(brand) => updateProduct({ brand })} />
+          <TextInput label="Tên sản phẩm" value={product.name} onChange={(name) => updateProduct({ name })} />
+          <TextInput label="Thương hiệu" value={product.brand ?? ''} onChange={(brand) => updateProduct({ brand })} />
         </div>
         <div className="mt-4">
           <TextArea
-            label="Description"
+            label="Mô tả sản phẩm"
             value={product.description}
             rows={4}
             onChange={(description) => updateProduct({ description })}
@@ -157,7 +157,7 @@ export default function ProductDraftDetail({
         </div>
         <div className="mt-4">
           <TextArea
-            label="Features"
+            label="Đặc tính nổi bật"
             value={product.features.join('\n')}
             rows={5}
             onChange={(value) =>
@@ -171,9 +171,9 @@ export default function ProductDraftDetail({
           />
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <TextInput label="CTA" value={product.cta} onChange={(cta) => updateProduct({ cta })} />
+          <TextInput label="Kêu gọi hành động (CTA)" value={product.cta} onChange={(cta) => updateProduct({ cta })} />
           <TextInput
-            label="Industry preset"
+            label="Mẫu cấu hình ngành hàng"
             value={product.industry_preset_id ?? ''}
             onChange={(industry_preset_id) => updateProduct({ industry_preset_id })}
           />
@@ -196,26 +196,26 @@ export default function ProductDraftDetail({
 
         <div className="mt-5 rounded-md border border-line bg-surface/60 p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h4 className="text-sm font-semibold text-ink">Specs</h4>
+            <h4 className="text-sm font-semibold text-ink">Thông số kỹ thuật</h4>
             <button
               className="rounded-md border border-line bg-white px-3 py-2 text-xs font-semibold text-ink hover:border-brand"
               type="button"
               onClick={() => updateProduct({ specs: [...(product.specs ?? []), { name: '', value: '' }] })}
             >
-              + Add Spec
+              + Thêm thông số
             </button>
           </div>
           <div className="space-y-3">
             {(product.specs ?? []).map((spec, index) => (
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" key={`${spec.name}-${index}`}>
-                <TextInput label="Name" value={spec.name} onChange={(name) => updateSpec(index, { name })} />
-                <TextInput label="Value" value={spec.value} onChange={(value) => updateSpec(index, { value })} />
+                <TextInput label="Tên thông số" value={spec.name} onChange={(name) => updateSpec(index, { name })} />
+                <TextInput label="Giá trị" value={spec.value} onChange={(value) => updateSpec(index, { value })} />
                 <button
                   className="h-10 self-end rounded-md border border-line bg-white px-3 text-xs font-semibold text-red-600 hover:border-red-400"
                   type="button"
                   onClick={() => updateProduct({ specs: product.specs.filter((_, specIndex) => specIndex !== index) })}
                 >
-                  Delete
+                  Xóa
                 </button>
               </div>
             ))}
@@ -223,12 +223,12 @@ export default function ProductDraftDetail({
         </div>
 
         <div className="mt-4">
-          <TextArea label="User note" value={userNote} rows={3} onChange={setUserNote} />
+          <TextArea label="Ghi chú cá nhân" value={userNote} rows={3} onChange={setUserNote} />
         </div>
       </div>
 
       <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
-        <h3 className="text-base font-semibold text-ink">Issues</h3>
+        <h3 className="text-base font-semibold text-ink">Các lỗi phát hiện</h3>
         {draft.validation_issues.length ? (
           <ul className="mt-3 space-y-2 text-sm">
             {draft.validation_issues.map((issue, index) => (
@@ -238,20 +238,20 @@ export default function ProductDraftDetail({
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-sm text-muted">No validation issues.</p>
+          <p className="mt-2 text-sm text-muted">Không có lỗi xác thực nào.</p>
         )}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
-          <h3 className="text-base font-semibold text-ink">Apply to Existing Project</h3>
+          <h3 className="text-base font-semibold text-ink">Áp dụng vào Dự án Hiện có</h3>
           <div className="mt-3 flex gap-3">
             <select
               className="min-w-0 flex-1 rounded-md border border-line bg-white px-3 py-2 text-sm"
               value={selectedProjectId}
               onChange={(event) => setSelectedProjectId(event.target.value)}
             >
-              <option value="">Select project</option>
+              <option value="">Chọn dự án</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.project_name}
@@ -264,20 +264,20 @@ export default function ProductDraftDetail({
               disabled={!selectedProjectId || saving}
               onClick={() => onApplyToProject(selectedProjectId, selectedAssetIds)}
             >
-              Apply
+              Áp dụng
             </button>
           </div>
         </div>
 
         <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
-          <h3 className="text-base font-semibold text-ink">Create Project from Draft</h3>
+          <h3 className="text-base font-semibold text-ink">Tạo Dự án Mới từ Bản nháp</h3>
           <div className="mt-3 grid gap-3">
-            <TextInput label="Project name" value={projectName} onChange={setProjectName} />
+            <TextInput label="Tên dự án" value={projectName} onChange={setProjectName} />
             <PathInput label="Thư mục video nguồn" value={sourceFolder} onChange={setSourceFolder} />
             <PathInput label="Thư mục đầu ra" value={outputFolder} onChange={setOutputFolder} />
             <div className="grid gap-3 sm:grid-cols-2">
-              <NumberInput label="Output count" value={outputCount} min={1} onChange={setOutputCount} />
-              <NumberInput label="Duration" value={duration} min={3} onChange={setDuration} />
+              <NumberInput label="Số lượng video kết quả" value={outputCount} min={1} onChange={setOutputCount} />
+              <NumberInput label="Thời lượng video (giây)" value={duration} min={3} onChange={setDuration} />
             </div>
             <button
               className="w-fit rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
@@ -294,7 +294,7 @@ export default function ProductDraftDetail({
                 })
               }
             >
-              Create Project
+              Tạo dự án
             </button>
           </div>
         </div>
@@ -307,7 +307,7 @@ export default function ProductDraftDetail({
             type="button"
             onClick={() => setShowRaw((value) => !value)}
           >
-            {showRaw ? 'Hide Raw Data' : 'Show Raw Data'}
+            {showRaw ? 'Ẩn dữ liệu thô' : 'Hiển thị dữ liệu thô'}
           </button>
           <button
             className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:border-red-400"
@@ -315,12 +315,12 @@ export default function ProductDraftDetail({
             disabled={saving}
             onClick={onArchive}
           >
-            Archive
+            Lưu trữ bản nháp
           </button>
         </div>
         {showRaw ? (
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <pre className="max-h-80 overflow-auto rounded-md bg-surface p-4 text-xs">{draft.raw_text || 'No raw text.'}</pre>
+            <pre className="max-h-80 overflow-auto rounded-md bg-surface p-4 text-xs">{draft.raw_text || 'Không có dữ liệu thô.'}</pre>
             <pre className="max-h-80 overflow-auto rounded-md bg-surface p-4 text-xs">{rawJson}</pre>
           </div>
         ) : null}
@@ -333,8 +333,8 @@ function ExtractionQuality({ report }: { report?: ShopeeExtractorDebugReport | n
   if (!report) {
     return (
       <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
-        <h3 className="text-base font-semibold text-ink">Extraction Quality</h3>
-        <p className="mt-2 text-sm text-muted">No extractor debug report was attached to this draft.</p>
+        <h3 className="text-base font-semibold text-ink">Chất lượng Trích xuất</h3>
+        <p className="mt-2 text-sm text-muted">Không có báo cáo trích xuất nào được đính kèm bản nháp này.</p>
       </div>
     );
   }
@@ -347,9 +347,9 @@ function ExtractionQuality({ report }: { report?: ShopeeExtractorDebugReport | n
     <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-ink">Extraction Quality</h3>
+          <h3 className="text-base font-semibold text-ink">Chất lượng Trích xuất</h3>
           <p className="mt-1 text-xs text-muted">
-            Page type: {report.pageType} · Extracted: {formatDate(report.extractedAt)}
+            Loại trang: {report.pageType} · Ngày trích xuất: {formatDate(report.extractedAt)}
           </p>
         </div>
         <span className={`rounded-md px-3 py-1 text-sm font-semibold ${lowConfidence ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
@@ -359,14 +359,14 @@ function ExtractionQuality({ report }: { report?: ShopeeExtractorDebugReport | n
 
       {lowConfidence ? (
         <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Low extraction confidence. Review key fields before creating a project.
+          Độ tin cậy trích xuất thấp. Hãy kiểm tra kỹ các trường thông tin trước khi tạo dự án.
         </p>
       ) : null}
 
       {report.warnings.length || missingFields.length ? (
         <ul className="mt-3 space-y-1 text-sm text-muted">
           {missingFields.map((field) => (
-            <li key={`missing-${field.field}`}>Missing field: {field.field}</li>
+            <li key={`missing-${field.field}`}>Thiếu trường: {field.field}</li>
           ))}
           {report.warnings.map((warning, index) => (
             <li key={`warning-${index}`}>{warning}</li>
@@ -380,10 +380,10 @@ function ExtractionQuality({ report }: { report?: ShopeeExtractorDebugReport | n
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold text-ink">{field.field}</span>
               <span className={field.valueFound ? 'text-green-700' : 'text-red-600'}>
-                {field.valueFound ? `${Math.round(field.confidence * 100)}%` : 'missing'}
+                {field.valueFound ? `${Math.round(field.confidence * 100)}%` : 'thiếu'}
               </span>
             </div>
-            <div className="mt-1 text-muted">Method: {field.method}</div>
+            <div className="mt-1 text-muted">Phương pháp: {field.method}</div>
             {field.valuePreview ? <div className="mt-1 truncate text-ink">{field.valuePreview}</div> : null}
             {field.warnings.length ? <div className="mt-1 text-amber-700">{field.warnings.join('; ')}</div> : null}
           </div>

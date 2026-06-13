@@ -171,9 +171,23 @@ export function getProject(projectId: string): Promise<ProjectDetail> {
   return request<ProjectDetail>(`/api/projects/${projectId}`);
 }
 
-export function listProjects(): Promise<ProjectListResponse> {
-  return request<ProjectListResponse>('/api/projects');
+export function listProjects(limit?: number, offset?: number): Promise<ProjectListResponse> {
+  const query = limit !== undefined && offset !== undefined ? `?limit=${limit}&offset=${offset}` : '';
+  return request<ProjectListResponse>(`/api/projects${query}`);
 }
+
+export function deleteProject(projectId: string): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/api/projects/${projectId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function duplicateProject(projectId: string): Promise<{ success: boolean; project_id: string }> {
+  return request<{ success: boolean; project_id: string }>(`/api/projects/${projectId}/duplicate`, {
+    method: 'POST',
+  });
+}
+
 
 export function getAppSettings(): Promise<AppSettings> {
   return request<AppSettings>('/api/settings');
@@ -1014,8 +1028,8 @@ export function downloadSystemUpdate(): Promise<UpdateDownloadResponse> {
   });
 }
 
-export function listJobs(limit = 100, offset = 0): Promise<{ success: boolean; jobs: JobStatus[] }> {
-  return request<{ success: boolean; jobs: JobStatus[] }>(`/api/jobs?limit=${limit}&offset=${offset}`);
+export function listJobs(limit = 100, offset = 0): Promise<{ success: boolean; jobs: JobStatus[]; total?: number }> {
+  return request<{ success: boolean; jobs: JobStatus[]; total?: number }>(`/api/jobs?limit=${limit}&offset=${offset}`);
 }
 
 export function getProjectJobs(projectId: string, includePreview = false): Promise<{ success: boolean; jobs: JobStatus[] }> {

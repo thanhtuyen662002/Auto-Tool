@@ -95,14 +95,14 @@ export default function ProjectAssetsPage() {
   }
 
   async function removeAsset(assetId: string) {
-    if (!window.confirm('Remove asset from project? File local sẽ được giữ lại.')) return;
+    if (!window.confirm('Gỡ bỏ tài nguyên khỏi dự án? Tệp tin cục bộ vẫn được giữ lại.')) return;
     setBusy(true);
     setError(null);
     try {
       const response = await deleteProductAsset(assetId);
       const updated = response.items[0];
       setAssets((current) => current.map((asset) => (asset.id === assetId ? updated : asset)));
-      setMessage('Đã remove asset khỏi project.');
+      setMessage('Đã gỡ bỏ tài nguyên khỏi dự án.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không remove được asset.');
     } finally {
@@ -114,9 +114,9 @@ export default function ProjectAssetsPage() {
     <main className="mx-auto max-w-7xl px-6 py-6">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-ink">Product Assets</h1>
+          <h1 className="text-2xl font-semibold text-ink">Tài nguyên sản phẩm</h1>
           <p className="mt-1 text-sm text-muted">
-            {config ? config.project_name : projectId} · Main asset: {config?.assets?.main_product_asset_id ?? 'N/A'}
+            {config ? config.project_name : projectId} · Tài nguyên chính: {config?.assets?.main_product_asset_id ?? 'Không có'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -126,14 +126,14 @@ export default function ProjectAssetsPage() {
             disabled={!projectId}
             onClick={() => navigate(projectId ? `/projects/${projectId}/prompt-pack` : '/')}
           >
-            Use for Prompt Pack
+            Dùng cho Prompt Pack
           </button>
           <button
             className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
             type="button"
             onClick={() => navigate(projectId ? `/settings/${projectId}` : '/')}
           >
-            Back to Settings
+            Quay lại Cài đặt
           </button>
           <button
             className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
@@ -141,7 +141,7 @@ export default function ProjectAssetsPage() {
             disabled={!projectId || busy}
             onClick={() => projectId && void load(projectId)}
           >
-            Refresh
+            Làm mới
           </button>
         </div>
       </div>
@@ -207,12 +207,12 @@ function AssetCard({
         {previewUrl ? <img className="h-full w-full object-contain" src={previewUrl} alt={asset.filename || 'Product asset'} /> : null}
       </div>
       <div className="space-y-3 p-3">
-        <div className="text-sm font-semibold text-ink">{asset.filename || 'Remote asset'}</div>
+        <div className="text-sm font-semibold text-ink">{asset.filename || 'Tài nguyên mạng'}</div>
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <Info label="Status" value={asset.status} />
-          <Info label="Quality" value={asset.quality_score == null ? 'N/A' : `${Math.round(asset.quality_score * 100)}%`} />
-          <Info label="Size" value={asset.width && asset.height ? `${asset.width}x${asset.height}` : 'N/A'} />
-          <Info label="Selected" value={asset.is_selected ? 'Yes' : 'No'} />
+          <Info label="Trạng thái" value={asset.status === 'downloaded' ? 'Đã tải' : asset.status === 'pending' ? 'Đang chờ' : asset.status} />
+          <Info label="Chất lượng" value={asset.quality_score == null ? 'Chưa rõ' : `${Math.round(asset.quality_score * 100)}%`} />
+          <Info label="Kích thước" value={asset.width && asset.height ? `${asset.width}x${asset.height}` : 'Chưa rõ'} />
+          <Info label="Được chọn" value={asset.is_selected ? 'Có' : 'Không'} />
         </div>
         <select
           className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm"
@@ -228,13 +228,13 @@ function AssetCard({
         </select>
         <div className="flex flex-wrap gap-2">
           <button className="rounded-md bg-brand px-3 py-2 text-xs font-semibold text-white disabled:opacity-60" type="button" disabled={busy} onClick={onSetMain}>
-            Set Main
+            Đặt làm chính
           </button>
           <button className="rounded-md border border-line bg-white px-3 py-2 text-xs font-semibold text-ink hover:border-brand" type="button" disabled={busy} onClick={onCopy}>
             Copy Path
           </button>
           <button className="rounded-md border border-line bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:border-red-400" type="button" disabled={busy} onClick={onRemove}>
-            Remove
+            Gỡ bỏ
           </button>
         </div>
         {asset.errors.length ? <p className="text-xs text-red-700">{asset.errors[0]}</p> : null}
@@ -253,8 +253,14 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function roleTitle(role: ProductAssetRole): string {
-  return role
-    .split('_')
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(' ');
+  const titles: Record<ProductAssetRole, string> = {
+    main_product: 'Sản phẩm chính',
+    reference: 'Tham khảo',
+    poster: 'Poster quảng cáo',
+    thumbnail: 'Hình thu nhỏ',
+    description: 'Ảnh mô tả',
+    variation: 'Biến thể',
+    unused: 'Không sử dụng'
+  };
+  return titles[role] ?? role;
 }

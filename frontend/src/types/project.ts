@@ -1669,7 +1669,9 @@ export interface ProjectListItem {
 
 export interface ProjectListResponse {
   items: ProjectListItem[];
+  total: number;
 }
+
 
 export interface CreateProjectFromDraftRequest {
   project_name: string;

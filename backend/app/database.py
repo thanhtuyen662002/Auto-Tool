@@ -1040,3 +1040,76 @@ def _source_media_review_id(project_id: str, media_path: str) -> str:
 
 def _segment_review_id(project_id: str, segment_id: str) -> str:
     return f"{project_id}:segment:{segment_id}"
+
+
+def count_projects() -> int:
+    with get_connection() as conn:
+        row = conn.execute("SELECT COUNT(*) as count FROM projects").fetchone()
+    return row["count"] if row else 0
+
+
+def delete_project(project_id: str) -> None:
+    with get_connection() as conn:
+        # Get all job_ids to delete logs
+        job_rows = conn.execute("SELECT job_id FROM jobs WHERE project_id = ?", (project_id,)).fetchall()
+        job_ids = [row["job_id"] for row in job_rows]
+        
+        # Get all subtitle review document ids to delete review lines, suggestions, and quality reports
+        doc_rows = conn.execute("SELECT id FROM subtitle_review_documents WHERE project_id = ?", (project_id,)).fetchall()
+        doc_ids = [row["id"] for row in doc_rows]
+        
+        # Delete job logs
+        for job_id in job_ids:
+            conn.execute("DELETE FROM job_logs WHERE job_id = ?", (job_id,))
+            
+        # Delete subtitle lines and suggestions
+        for doc_id in doc_ids:
+            conn.execute("DELETE FROM subtitle_review_lines WHERE document_id = ?", (doc_id,))
+            conn.execute("DELETE FROM subtitle_rewrite_suggestions WHERE document_id = ?", (doc_id,))
+            conn.execute("DELETE FROM subtitle_quality_reports WHERE document_id = ?", (doc_id,))
+            
+        conn.execute("DELETE FROM subtitle_review_documents WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM subtitle_quality_reports WHERE project_id = ?", (project_id,))
+        
+        # Delete other tables containing project_id
+        conn.execute("DELETE FROM jobs WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM output_reviews WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM output_content_items WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM source_media_reviews WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM segment_reviews WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM product_assets WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM silent_visual_tag_reports WHERE project_id = ?", (project_id,))
+        
+        # Finally delete project itself
+        conn.execute("DELETE FROM projects WHERE project_id = ?", (project_id,))
+
+
+def duplicate_project(project_id: str, new_project_id: str, new_name: str) -> dict[str, Any] | None:
+    now = _now()
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM projects WHERE project_id = ?", (project_id,)).fetchone()
+        if not row:
+            return None
+        
+        config = json.loads(row["config_json"])
+        config["project_name"] = new_name
+        
+        conn.execute(
+            """
+            INSERT INTO projects (
+                project_id, status, config_json, latest_script_json, custom_script_json, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                new_project_id,
+                "created",
+                json.dumps(config, ensure_ascii=False),
+                row["latest_script_json"],
+                row["custom_script_json"],
+                now,
+                now
+            )
+        )
+    return get_project(new_project_id)
+

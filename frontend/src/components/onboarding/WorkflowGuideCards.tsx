@@ -30,7 +30,7 @@ const workflows = [
     description: '1. Import sản phẩm Shopee/TikTok Shop\n2. Tạo project cấu hình\n3. Thêm video nguồn\n4. Chạy render hàng loạt',
     preset: 'UGC Reviewer Natural',
     to: '/projects/new',
-    action: 'Create Project',
+    action: 'Tạo dự án',
     icon: ShoppingBag,
     accent: 'text-purple-200 bg-purple-300/10 border-purple-300/30',
   },

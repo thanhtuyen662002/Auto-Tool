@@ -163,8 +163,8 @@ export default function ImportInboxPage() {
     <main className="mx-auto max-w-7xl px-6 py-6">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-ink">Import Inbox</h1>
-          <p className="mt-1 text-sm text-muted">San pham duoc gui tu Chrome Extension hoac import thu cong.</p>
+          <h1 className="text-2xl font-semibold text-ink">Hộp thư Nhập sản phẩm</h1>
+          <p className="mt-1 text-sm text-muted">Sản phẩm được gửi từ Chrome Extension hoặc nhập thủ công.</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -172,14 +172,14 @@ export default function ImportInboxPage() {
             type="button"
             onClick={refresh}
           >
-            Refresh
+            Làm mới
           </button>
           <button
             className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:border-red-400"
             type="button"
             onClick={handleClearArchived}
           >
-            Clear Archived
+            Xóa lưu trữ
           </button>
         </div>
       </div>
@@ -188,32 +188,32 @@ export default function ImportInboxPage() {
       {message ? <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{message}</div> : null}
 
       <section className="mb-5 grid gap-3 sm:grid-cols-5">
-        <SummaryCard label="Total drafts" value={summary.total} />
-        <SummaryCard label="New" value={summary.new} />
-        <SummaryCard label="Reviewed" value={summary.reviewed} />
-        <SummaryCard label="Applied" value={summary.applied} />
-        <SummaryCard label="Archived" value={summary.archived} />
+        <SummaryCard label="Tổng nháp" value={summary.total} />
+        <SummaryCard label="Mới" value={summary.new} />
+        <SummaryCard label="Đã xem" value={summary.reviewed} />
+        <SummaryCard label="Đã áp dụng" value={summary.applied} />
+        <SummaryCard label="Đã lưu trữ" value={summary.archived} />
       </section>
 
       <section className="mb-5 flex flex-wrap gap-2">
         {STATUS_FILTERS.map((status) => (
           <FilterButton key={status} active={statusFilter === status} onClick={() => setStatusFilter(status)}>
-            {status === 'all' ? 'All' : titleCase(status)}
+            {status === 'all' ? 'Tất cả' : status === 'new' ? 'Mới' : status === 'reviewed' ? 'Đã xem' : status === 'applied' ? 'Đã áp dụng' : 'Đã lưu trữ'}
           </FilterButton>
         ))}
         <span className="mx-1 h-9 w-px bg-line" />
         {SOURCE_FILTERS.map((source) => (
           <FilterButton key={source} active={sourceFilter === source} onClick={() => setSourceFilter(source)}>
-            {source === 'all' ? 'All Sources' : titleCase(source)}
+            {source === 'all' ? 'Tất cả nguồn' : source}
           </FilterButton>
         ))}
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(300px,0.42fr)_minmax(0,0.58fr)]">
         <section className="space-y-3">
-          {loading ? <p className="rounded-lg border border-line bg-white p-5 text-sm text-muted">Loading drafts...</p> : null}
+          {loading ? <p className="rounded-lg border border-line bg-white p-5 text-sm text-muted">Đang tải bản nháp...</p> : null}
           {!loading && filteredDrafts.length === 0 ? (
-            <p className="rounded-lg border border-line bg-white p-5 text-sm text-muted">No product drafts match these filters.</p>
+            <p className="rounded-lg border border-line bg-white p-5 text-sm text-muted">Không tìm thấy bản nháp nào khớp với bộ lọc.</p>
           ) : null}
           {filteredDrafts.map((draft) => (
             <DraftCard
@@ -239,7 +239,7 @@ export default function ImportInboxPage() {
           />
         ) : (
           <section className="rounded-lg border border-line bg-white p-5 text-sm text-muted shadow-panel">
-            Select a draft to review details.
+            Chọn một bản nháp để xem chi tiết.
           </section>
         )}
       </div>

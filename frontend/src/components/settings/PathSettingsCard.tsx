@@ -28,20 +28,20 @@ export default function PathSettingsCard({ onSaved }: { onSaved?: () => void }) 
   }
 
   return (
-    <SettingsSection title="Paths" description="Các đường dẫn này chỉ lưu trên máy của bạn, không chứa API key hoặc thông tin nhạy cảm.">
+    <SettingsSection title="Thư mục & Đường dẫn" description="Các đường dẫn này chỉ lưu trên máy của bạn, không chứa API key hoặc thông tin nhạy cảm.">
       <div className="grid gap-4 lg:grid-cols-3">
-        <GlassInput label="Default output folder" value={defaultOutputFolder} onChange={(event) => setDefaultOutputFolder(event.target.value)} placeholder="D:/auto-tool/outputs" />
-        <GlassInput label="Default music folder" value={defaultMusicFolder} onChange={(event) => setDefaultMusicFolder(event.target.value)} placeholder="D:/music" />
-        <GlassInput label="Default source folder optional" value={defaultSourceFolder} onChange={(event) => setDefaultSourceFolder(event.target.value)} placeholder="D:/douyin/videos" />
+        <GlassInput label="Thư mục đầu ra mặc định" value={defaultOutputFolder} onChange={(event) => setDefaultOutputFolder(event.target.value)} placeholder="D:/auto-tool/outputs" />
+        <GlassInput label="Thư mục nhạc mặc định" value={defaultMusicFolder} onChange={(event) => setDefaultMusicFolder(event.target.value)} placeholder="D:/music" />
+        <GlassInput label="Thư mục nguồn mặc định (tùy chọn)" value={defaultSourceFolder} onChange={(event) => setDefaultSourceFolder(event.target.value)} placeholder="D:/douyin/videos" />
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <GlassButton variant="primary" onClick={save}>Save</GlassButton>
-        <GlassButton variant="secondary" onClick={() => setDefaultOutputFolder('./examples/outputs')}>Use default</GlassButton>
-        <GlassButton variant="ghost" onClick={clearRecent}>Clear recent folders</GlassButton>
+        <GlassButton variant="primary" onClick={save}>Lưu cấu hình</GlassButton>
+        <GlassButton variant="secondary" onClick={() => setDefaultOutputFolder('./examples/outputs')}>Dùng mặc định</GlassButton>
+        <GlassButton variant="ghost" onClick={clearRecent}>Xóa danh sách thư mục gần đây</GlassButton>
       </div>
       {message ? <div className="mt-3 text-sm text-emerald-200">{message}</div> : null}
       <div className="mt-5 rounded-md border border-white/10 bg-black/15 p-4">
-        <div className="text-sm font-semibold text-white">Recent folders</div>
+        <div className="text-sm font-semibold text-white">Các thư mục đã mở gần đây</div>
         {recentFolders.length ? (
           <div className="mt-2 flex flex-wrap gap-2">
             {[...new Set(recentFolders)].slice(0, 8).map((folder) => (
