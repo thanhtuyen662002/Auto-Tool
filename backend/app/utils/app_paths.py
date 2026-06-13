@@ -7,6 +7,10 @@ from pathlib import Path
 
 APP_NAME = "AutoTool"
 
+# Directory names used when bundling vendor tools via --add-data
+VENDOR_FFMPEG_SUBDIR = "vendor/ffmpeg"
+VENDOR_PIPER_SUBDIR  = "vendor/piper"
+
 
 def backend_dir() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -27,6 +31,23 @@ def bundle_dir() -> Path:
     if bundle:
         return Path(bundle).resolve()
     return executable_dir()
+
+
+def bundled_vendor_dir() -> Path:
+    """Root of the vendor directory bundled via PyInstaller --add-data.
+
+    When frozen: <_MEIPASS>/vendor/
+    When running from source: <project_root>/backend/vendor/
+    """
+    candidates = [
+        bundle_dir() / "vendor",
+        executable_dir() / "vendor",
+        backend_dir() / "vendor",
+    ]
+    for c in candidates:
+        if c.exists():
+            return c.resolve()
+    return bundle_dir() / "vendor"
 
 
 def app_data_dir() -> Path:

@@ -13,7 +13,15 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.utils.app_paths import app_data_dir, backend_dir, executable_dir, project_root, unique_paths
+from app.utils.app_paths import (
+    app_data_dir,
+    backend_dir,
+    bundle_dir,
+    bundled_vendor_dir,
+    executable_dir,
+    project_root,
+    unique_paths,
+)
 
 
 FFMPEG_WINDOWS_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
@@ -575,6 +583,14 @@ def candidate_tool_dirs() -> list[Path]:
     if env_dir:
         bases.append(Path(env_dir).expanduser())
 
+    # Bundled vendor (PyInstaller --add-data) — check first so frozen exe works offline
+    vendor = bundled_vendor_dir()
+    ffmpeg_vendor = vendor / "ffmpeg"
+    bases.extend([
+        ffmpeg_vendor,
+        ffmpeg_vendor / "bin",
+    ])
+
     for root in [executable_dir(), project_root(), backend_dir(), app_data_dir()]:
         bases.extend(
             [
@@ -602,6 +618,14 @@ def piper_candidate_dirs() -> list[Path]:
     if env_dir:
         bases.append(Path(env_dir).expanduser())
 
+    # Bundled vendor (PyInstaller --add-data) — check first so frozen exe works offline
+    vendor = bundled_vendor_dir()
+    piper_vendor = vendor / "piper"
+    bases.extend([
+        piper_vendor,
+        piper_vendor / "bin",
+    ])
+
     for root in [executable_dir(), project_root(), backend_dir(), app_data_dir()]:
         bases.extend(
             [
@@ -628,6 +652,14 @@ def piper_model_candidate_dirs() -> list[Path]:
     env_dir = os.getenv("AUTO_TOOL_PIPER_MODEL_DIR")
     if env_dir:
         bases.append(Path(env_dir).expanduser())
+
+    # Bundled vendor — check first so frozen exe works offline
+    vendor = bundled_vendor_dir()
+    piper_vendor = vendor / "piper"
+    bases.extend([
+        piper_vendor / "models",
+        piper_vendor,
+    ])
 
     for root in [executable_dir(), project_root(), backend_dir(), app_data_dir(), local_piper_root()]:
         bases.extend(
