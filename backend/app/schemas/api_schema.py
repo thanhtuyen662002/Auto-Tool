@@ -148,6 +148,8 @@ class DouyinReupProcessRequest(BaseModel):
     source_folder: str = Field(min_length=1)
     output_folder: str = Field(min_length=1)
     settings: DouyinReupSettings = Field(default_factory=lambda: DouyinReupSettings(enabled=True))
+    selected_video_paths: list[str] = Field(default_factory=list)
+    source_selection_id: str | None = None
 
 
 class DouyinReupProcessResponse(BaseModel):
@@ -181,6 +183,7 @@ class DouyinOneClickBatchRequest(BaseModel):
     process_mode: Literal["all_videos", "first_n", "selected"] = "all_videos"
     max_videos: int | None = Field(default=None, gt=0)
     selected_video_paths: list[str] = Field(default_factory=list)
+    source_selection_id: str | None = None
     review_subtitles_before_render: bool | None = None
     auto_render_after_translation: bool | None = None
     product_context: dict[str, Any] = Field(default_factory=dict)
@@ -315,6 +318,10 @@ class SilentReupOneClickRequest(BaseModel):
     strategy: str = "chill_immersive"
     visual_style_preset_id: str | None = None
     bgm_folder: str | None = None
+    process_mode: Literal["all_videos", "first_n", "selected"] = "all_videos"
+    max_videos: int | None = Field(default=None, gt=0)
+    selected_video_paths: list[str] = Field(default_factory=list)
+    source_selection_id: str | None = None
     review_before_render: bool = True
     product_context: dict[str, Any] = Field(default_factory=dict)
 
@@ -660,6 +667,7 @@ class HealthResponse(BaseModel):
     status: str
     version: str = "unknown"
     capabilities: dict[str, bool] = Field(default_factory=dict)
+    recoverable_jobs_count: int = 0
 
 
 class ErrorResponse(BaseModel):

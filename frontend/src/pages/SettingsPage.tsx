@@ -6,6 +6,7 @@ import OnboardingHero from '../components/onboarding/OnboardingHero';
 import SetupHelpModal, { type SetupHelpTopic } from '../components/onboarding/SetupHelpModal';
 import AdvancedTechnicalSettings from '../components/settings/AdvancedTechnicalSettings';
 import AppearanceSettingsCard from '../components/settings/AppearanceSettingsCard';
+import DataManagementSettings from '../components/settings/DataManagementSettings';
 import PathSettingsCard from '../components/settings/PathSettingsCard';
 import LocalAppSettingsCard from '../components/settings/LocalAppSettingsCard';
 import ProviderSettingsCard from '../components/settings/ProviderSettingsCard';
@@ -87,6 +88,7 @@ export default function SettingsPage() {
 
         {activeTab === 'paths' ? <PathSettingsCard onSaved={() => void refreshStatus()} /> : null}
         {activeTab === 'local_app' ? <LocalAppSettingsCard /> : null}
+        {activeTab === 'data_management' ? <DataManagementSettings /> : null}
 
         {activeTab === 'providers' ? (
           <div className="grid gap-5">

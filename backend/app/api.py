@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import inspect
 import threading
 import uuid
 from collections import Counter
@@ -94,6 +95,20 @@ from app.modules.product_import.product_import_schema import (
 from app.modules.product_import.product_normalizer import ProductNormalizer
 from app.modules.product_import.product_validator import ProductValidator
 from app.modules.output_review.rerender_service import RerenderService
+from app.modules.queue_control import (
+    QueueActionRequest,
+    QueueActionResult,
+    QueueControlAction,
+    QueueControlService,
+    QueueItemPriority,
+    QueuePriorityService,
+    QueueRetryService,
+    QueueSettings,
+    QueueStateResponse,
+    QueueStateService,
+    ResourceGuardService,
+    ResourceStatusResponse,
+)
 from app.modules.render_worker.render_worker import render_project
 from app.modules.segment_scoring.segment_scorer import SegmentScorer, build_scoring_report
 from app.modules.segmenter.segmenter import Segmenter
@@ -121,6 +136,15 @@ from app.modules.silent_caption_templates.caption_template_service import (
 )
 from app.modules.source_media_manager.media_manager_service import MediaManagerService, build_source_media_summary
 from app.modules.source_media_manager.segment_review_service import SegmentReviewService
+from app.modules.source_media import (
+    SourceFolderScanRequest,
+    SourceFolderScanResult,
+    SourceMediaRepository,
+    SourceMediaScanner,
+    SourceMediaSelectionRequest,
+    SourceMediaSelectionResult,
+    SourceMediaSelectionService,
+)
 from app.modules.timeline_templates.template_registry import list_timeline_templates
 from app.modules.tts.tts_manager import list_tts_providers
 from app.modules.tts.providers.google_cloud_tts_provider import list_google_cloud_voices
@@ -139,6 +163,36 @@ from app.local_app import (
     LocalSystemCheckResponse,
     LocalSystemService,
     StaticFrontendService,
+)
+from app.local_app.data_management import (
+    BackupListResponse,
+    BackupRequest,
+    BackupResult,
+    BackupService,
+    CleanupRequest,
+    CleanupResult,
+    CleanupService,
+    RestoreRequest,
+    RestoreResult,
+    RestoreService,
+    StorageUsageApiResponse,
+    StorageUsageService,
+)
+from app.local_app.data_management.data_management_schema import BackupInspectRequest, BackupInspectResult
+from app.modules.job_recovery import (
+    JobCheckpointService,
+    JobRecoveryActionResponse,
+    JobRecoveryCandidatesResponse,
+    JobRecoveryCandidatesData,
+    JobRecoveryJobData,
+    JobRecoveryJobResponse,
+    JobRecoveryService,
+    JobReconciliationService,
+    JobResumeService,
+    JobRunStatus,
+    RecoverableStep,
+    ResumeJobRequest,
+    ResumeJobResult,
 )
 from app.presets import get_default_presets
 from app.schemas.api_schema import (
@@ -290,6 +344,21 @@ def create_app() -> FastAPI:
     local_system_service = LocalSystemService(local_config_service, local_paths_service)
     local_desktop_service = LocalDesktopService(local_config_service, local_paths_service)
     static_frontend_service = StaticFrontendService(local_config_service)
+    storage_usage_service = StorageUsageService()
+    backup_service = BackupService()
+    restore_service = RestoreService(backup_service=backup_service)
+    cleanup_service = CleanupService()
+    job_checkpoint_service = JobCheckpointService()
+    job_recovery_service = JobRecoveryService(job_checkpoint_service)
+    job_reconciliation_service = JobReconciliationService()
+    job_resume_service = JobResumeService(
+        reconciliation_service=job_reconciliation_service,
+        checkpoint_service=job_checkpoint_service,
+    )
+    queue_state_service = QueueStateService()
+    queue_control_service = QueueControlService(queue_state_service)
+    queue_priority_service = QueuePriorityService(queue_state_service)
+    queue_retry_service = QueueRetryService(queue_state_service)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_allowed_cors_origins(),
@@ -302,6 +371,9 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def _startup() -> None:
         database.init_db()
+        recoverable = job_recovery_service.mark_interrupted_jobs_on_startup()
+        if recoverable:
+            logger.warning("Marked %s interrupted job(s) as recoverable.", len(recoverable))
         local_config = local_config_service.load_config()
         local_paths_service.ensure_folder(local_config.default_output_folder)
         start_background_dependency_warmup(
@@ -317,6 +389,7 @@ def create_app() -> FastAPI:
             status="ok",
             version=_APP_VERSION,
             capabilities={"douyin_reup": True, "silent_immersive_mode": True},
+            recoverable_jobs_count=job_recovery_service.count_recoverable_jobs(),
         )
 
     @app.get("/api/system/dependencies", response_model=SystemDependencyStatusResponse)
@@ -399,6 +472,338 @@ def create_app() -> FastAPI:
         except OSError as exc:
             raise HTTPException(status_code=500, detail=f"Cannot reveal file: {exc}") from exc
         return LocalDesktopActionResponse(success=True, path=str(path), message="File revealed.")
+
+    @app.get("/api/local-app/storage-usage", response_model=StorageUsageApiResponse)
+    def local_app_storage_usage() -> StorageUsageApiResponse:
+        report = storage_usage_service.build_report()
+        return StorageUsageApiResponse(success=True, data=report, warnings=report.warnings, errors=[])
+
+    @app.post("/api/local-app/backup", response_model=BackupResult)
+    def local_app_create_backup(request: BackupRequest) -> BackupResult:
+        return backup_service.create_backup(request)
+
+    @app.get("/api/local-app/backups", response_model=BackupListResponse)
+    def local_app_list_backups() -> BackupListResponse:
+        return backup_service.list_backups()
+
+    @app.post("/api/local-app/backup/inspect", response_model=BackupInspectResult)
+    def local_app_inspect_backup(request: BackupInspectRequest) -> BackupInspectResult:
+        return restore_service.inspect_backup(request.backup_path)
+
+    @app.post("/api/local-app/restore", response_model=RestoreResult)
+    def local_app_restore_backup(request: RestoreRequest) -> RestoreResult:
+        return restore_service.restore_backup(request)
+
+    @app.post("/api/local-app/cleanup/preview", response_model=CleanupResult)
+    def local_app_cleanup_preview(request: CleanupRequest) -> CleanupResult:
+        return cleanup_service.preview_cleanup(request)
+
+    @app.post("/api/local-app/cleanup/run", response_model=CleanupResult)
+    def local_app_cleanup_run(request: CleanupRequest) -> CleanupResult:
+        return cleanup_service.run_cleanup(request)
+
+    @app.get("/api/job-recovery/candidates", response_model=JobRecoveryCandidatesResponse)
+    def get_job_recovery_candidates() -> JobRecoveryCandidatesResponse:
+        items = job_recovery_service.find_recovery_candidates()
+        return JobRecoveryCandidatesResponse(success=True, data=JobRecoveryCandidatesData(items=items))
+
+    @app.get("/api/job-recovery/jobs/{job_id}", response_model=JobRecoveryJobResponse)
+    def get_job_recovery_job(job_id: str) -> JobRecoveryJobResponse:
+        try:
+            candidate = job_recovery_service.inspect_job_recovery(job_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        checkpoint = job_checkpoint_service.load_job_checkpoint(job_id)
+        videos = job_checkpoint_service.load_video_checkpoints(job_id)
+        job = database.get_job(job_id)
+        reconciliation = None
+        try:
+            reconciliation = job_reconciliation_service.reconcile_job_outputs(job_id)
+        except LookupError:
+            reconciliation = None
+        return JobRecoveryJobResponse(
+            success=True,
+            data=JobRecoveryJobData(
+                candidate=candidate,
+                checkpoint=checkpoint,
+                video_checkpoints=videos,
+                reconciliation=reconciliation,
+                job=job,
+            ),
+        )
+
+    @app.post("/api/job-recovery/jobs/{job_id}/reconcile", response_model=JobRecoveryActionResponse)
+    def reconcile_recovery_job(job_id: str) -> JobRecoveryActionResponse:
+        try:
+            data = job_reconciliation_service.reconcile_job_outputs(job_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return JobRecoveryActionResponse(success=True, data=data)
+
+    @app.post("/api/job-recovery/jobs/{job_id}/resume", response_model=ResumeJobResult)
+    def resume_recovery_job(job_id: str, request: ResumeJobRequest) -> ResumeJobResult:
+        request = request.model_copy(update={"job_id": job_id})
+        result = job_resume_service.resume_job(request)
+        if not result.success:
+            raise HTTPException(status_code=400, detail="; ".join(result.errors) or "Không thể resume job.")
+        if result.new_job_id:
+            original_job = _get_job_or_404(job_id)
+            retry_outputs = (result.resume_plan or {}).get("retry_outputs") or []
+            if _is_douyin_resume(original_job, retry_outputs):
+                threading.Thread(
+                    target=_run_resume_thread,
+                    args=(
+                        job_id,
+                        job_resume_service,
+                        run_douyin_reup_retry_job,
+                        result.new_job_id,
+                        job_id,
+                        retry_outputs,
+                        {"asr", "translation", "render"},
+                        {},
+                    ),
+                    daemon=True,
+                ).start()
+            elif _job_looks_douyin(original_job):
+                threading.Thread(
+                    target=_run_resume_thread,
+                    args=(job_id, job_resume_service, run_douyin_reup_job, result.new_job_id),
+                    daemon=True,
+                ).start()
+            else:
+                threading.Thread(
+                    target=_run_resume_thread,
+                    args=(job_id, job_resume_service, run_render_job, result.new_job_id),
+                    daemon=True,
+                ).start()
+        else:
+            job_resume_service.release_resume_lock(job_id)
+        return result
+
+    @app.post("/api/job-recovery/jobs/{job_id}/mark-cancelled", response_model=JobRecoveryActionResponse)
+    def mark_recovery_job_cancelled(job_id: str) -> JobRecoveryActionResponse:
+        try:
+            candidate = job_recovery_service.mark_cancelled(job_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return JobRecoveryActionResponse(success=True, data={"candidate": candidate.model_dump(mode="json")})
+
+    @app.post("/api/job-recovery/jobs/{job_id}/cleanup-lock", response_model=JobRecoveryActionResponse)
+    def cleanup_recovery_job_lock(job_id: str) -> JobRecoveryActionResponse:
+        was_locked = job_resume_service.locks.is_job_locked(job_id)
+        job_resume_service.locks.release_job_lock(job_id)
+        return JobRecoveryActionResponse(success=True, data={"was_locked": was_locked, "lock_released": True})
+
+    def _start_resume_job_for_queue(job_id: str, resume_mode: str) -> ResumeJobResult:
+        request = ResumeJobRequest(
+            job_id=job_id,
+            resume_mode=resume_mode,  # type: ignore[arg-type]
+            skip_completed_outputs=True,
+            do_not_overwrite_existing_outputs=True,
+        )
+        result = job_resume_service.resume_job(request)
+        if not result.success:
+            return result
+        if result.new_job_id:
+            original_job = _get_job_or_404(job_id)
+            retry_outputs = (result.resume_plan or {}).get("retry_outputs") or []
+            if _is_douyin_resume(original_job, retry_outputs):
+                threading.Thread(
+                    target=_run_resume_thread,
+                    args=(
+                        job_id,
+                        job_resume_service,
+                        run_douyin_reup_retry_job,
+                        result.new_job_id,
+                        job_id,
+                        retry_outputs,
+                        {"asr", "translation", "render"},
+                        {},
+                    ),
+                    daemon=True,
+                ).start()
+            elif _job_looks_douyin(original_job):
+                threading.Thread(
+                    target=_run_resume_thread,
+                    args=(job_id, job_resume_service, run_douyin_reup_job, result.new_job_id),
+                    daemon=True,
+                ).start()
+            else:
+                threading.Thread(
+                    target=_run_resume_thread,
+                    args=(job_id, job_resume_service, run_render_job, result.new_job_id),
+                    daemon=True,
+                ).start()
+        else:
+            job_resume_service.release_resume_lock(job_id)
+        return result
+
+    @app.get("/api/queue-control/jobs/{job_id}", response_model=QueueStateResponse)
+    def get_queue_control_job(job_id: str) -> QueueStateResponse:
+        try:
+            state = queue_state_service.load_queue_state(job_id) or queue_state_service.rebuild_from_checkpoints(job_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return QueueStateResponse(success=True, data=state, warnings=state.warnings, errors=state.errors)
+
+    @app.post("/api/queue-control/jobs/{job_id}/pause", response_model=QueueActionResult)
+    def pause_queue_job(job_id: str) -> QueueActionResult:
+        try:
+            return queue_control_service.request_pause(job_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/queue-control/jobs/{job_id}/resume", response_model=QueueActionResult)
+    def resume_queue_job(job_id: str) -> QueueActionResult:
+        job_before = _get_job_or_404(job_id)
+        try:
+            action = queue_control_service.resume(job_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if job_before.get("status") in {"paused", "interrupted", "recoverable", "failed", "completed_with_errors"}:
+            resume_result = _start_resume_job_for_queue(job_id, "reconcile_then_continue")
+            action = action.model_copy(
+                update={
+                    "data": {
+                        **action.data,
+                        "resume_job": resume_result.model_dump(mode="json"),
+                    },
+                    "warnings": [*action.warnings, *resume_result.warnings],
+                    "errors": [*action.errors, *resume_result.errors],
+                    "success": action.success and resume_result.success,
+                }
+            )
+        return action
+
+    @app.post("/api/queue-control/jobs/{job_id}/cancel", response_model=QueueActionResult)
+    def cancel_queue_job(job_id: str) -> QueueActionResult:
+        try:
+            return queue_control_service.request_cancel(job_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/queue-control/jobs/{job_id}/retry-failed", response_model=QueueActionResult)
+    def retry_failed_queue_items(job_id: str) -> QueueActionResult:
+        try:
+            action = queue_retry_service.retry_failed_items(job_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if action.affected_items:
+            resume_result = _start_resume_job_for_queue(job_id, "retry_failed")
+            action = action.model_copy(
+                update={
+                    "data": {**action.data, "resume_job": resume_result.model_dump(mode="json")},
+                    "warnings": [*action.warnings, *resume_result.warnings],
+                    "errors": [*action.errors, *resume_result.errors],
+                    "success": action.success and resume_result.success,
+                }
+            )
+        return action
+
+    @app.post("/api/queue-control/jobs/{job_id}/retry-selected", response_model=QueueActionResult)
+    def retry_selected_queue_items(job_id: str, request: QueueActionRequest) -> QueueActionResult:
+        try:
+            return queue_retry_service.retry_selected_items(job_id, request.item_ids, action=QueueControlAction.retry_selected)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/queue-control/jobs/{job_id}/skip-selected", response_model=QueueActionResult)
+    def skip_selected_queue_items(job_id: str, request: QueueActionRequest) -> QueueActionResult:
+        try:
+            return queue_control_service.skip_items(job_id, request.item_ids)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/queue-control/jobs/{job_id}/prioritize-selected", response_model=QueueActionResult)
+    def prioritize_selected_queue_items(job_id: str, request: QueueActionRequest) -> QueueActionResult:
+        try:
+            return queue_priority_service.prioritize_items(job_id, request.item_ids, QueueItemPriority.high)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/queue-control/jobs/{job_id}/move-to-top", response_model=QueueActionResult)
+    def move_queue_items_to_top(job_id: str, request: QueueActionRequest) -> QueueActionResult:
+        try:
+            return queue_priority_service.move_to_top(job_id, request.item_ids)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/queue-control/jobs/{job_id}/move-to-bottom", response_model=QueueActionResult)
+    def move_queue_items_to_bottom(job_id: str, request: QueueActionRequest) -> QueueActionResult:
+        try:
+            return queue_priority_service.move_to_bottom(job_id, request.item_ids)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/queue-control/jobs/{job_id}/resource-status", response_model=ResourceStatusResponse)
+    def get_queue_resource_status(job_id: str) -> ResourceStatusResponse:
+        try:
+            state = queue_state_service.load_queue_state(job_id) or queue_state_service.rebuild_from_checkpoints(job_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        report = ResourceGuardService(state.output_dir).check_resources(state.settings or QueueSettings())
+        return ResourceStatusResponse(success=True, data=report, warnings=list(report.get("warnings") or []), errors=[])
+
+    @app.post("/api/source-media/scan", response_model=SourceFolderScanResult)
+    def scan_source_media_folder(request: SourceFolderScanRequest) -> SourceFolderScanResult:
+        try:
+            return SourceMediaScanner().scan_folder(request)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể scan source media: {exc}") from exc
+
+    @app.get("/api/source-media/folders/{folder_id}", response_model=SourceFolderScanResult)
+    def get_source_media_folder(folder_id: str) -> SourceFolderScanResult:
+        result = SourceMediaRepository().load_scan_result(folder_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Không tìm thấy scan source media: {folder_id}")
+        return result
+
+    @app.post("/api/source-media/folders/{folder_id}/rescan", response_model=SourceFolderScanResult)
+    def rescan_source_media_folder(folder_id: str) -> SourceFolderScanResult:
+        existing = SourceMediaRepository().load_scan_result(folder_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail=f"Không tìm thấy scan source media: {folder_id}")
+        try:
+            return SourceMediaScanner().scan_folder(SourceFolderScanRequest(folder_path=existing.folder_path))
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể rescan source media: {exc}") from exc
+
+    @app.post("/api/source-media/selections", response_model=SourceMediaSelectionResult)
+    def create_source_media_selection(request: SourceMediaSelectionRequest) -> SourceMediaSelectionResult:
+        result = SourceMediaSelectionService().create_selection(request)
+        if not result.success:
+            raise HTTPException(status_code=400, detail="; ".join(result.errors) or "Không thể tạo selection.")
+        return result
+
+    @app.get("/api/source-media/selections/{selection_id}", response_model=SourceMediaSelectionResult)
+    def get_source_media_selection(selection_id: str) -> SourceMediaSelectionResult:
+        result = SourceMediaSelectionService().get_selection(selection_id)
+        if not result.success:
+            raise HTTPException(status_code=404, detail="; ".join(result.errors) or "Không tìm thấy selection.")
+        return result
+
+    @app.get("/api/source-media/thumbnails/{folder_id}/{media_id}", response_class=FileResponse)
+    def get_source_media_thumbnail(folder_id: str, media_id: str) -> FileResponse:
+        repository = SourceMediaRepository()
+        scan = repository.load_scan_result(folder_id)
+        if scan is None:
+            raise HTTPException(status_code=404, detail=f"Không tìm thấy scan source media: {folder_id}")
+        item = next((entry for entry in scan.items if entry.id == media_id), None)
+        if item is None:
+            raise HTTPException(status_code=404, detail=f"Không tìm thấy media: {media_id}")
+        candidates = []
+        if item.thumbnail_path:
+            candidates.append(Path(item.thumbnail_path))
+        candidates.append(repository.thumbnail_folder(folder_id) / f"{media_id}.jpg")
+        for candidate in candidates:
+            path = candidate.expanduser().resolve()
+            if path.exists() and path.is_file():
+                return FileResponse(path, media_type="image/jpeg", filename=path.name)
+        raise HTTPException(status_code=404, detail="Chưa có thumbnail cho media này.")
 
     @app.post("/api/douyin-reup/scan", response_model=DouyinReupScanResponse)
     def scan_douyin_reup_folder(request: DouyinReupScanRequest) -> DouyinReupScanResponse:
@@ -821,8 +1226,20 @@ def create_app() -> FastAPI:
                 "review_subtitles_before_render": request.review_before_render,
                 "silent_review_before_render": request.review_before_render,
                 "auto_render_after_translation": not request.review_before_render,
-                "process_mode": "all",
             }
+            selected_paths = _selected_paths_from_source_selection(request.selected_video_paths, request.source_selection_id)
+            process_mode = "all" if request.process_mode == "all_videos" else request.process_mode
+            if selected_paths:
+                process_mode = "selected"
+            overrides.update(
+                {
+                    "process_mode": process_mode,
+                    "selected_video_paths": selected_paths,
+                    "source_selection_id": request.source_selection_id,
+                }
+            )
+            if request.max_videos is not None:
+                overrides["max_videos"] = request.max_videos
             settings = preset_service.apply_preset(preset_id, overrides=overrides)
             config = _build_douyin_project_config_from_settings(
                 project_name=request.project_name,
@@ -2162,6 +2579,7 @@ def create_app() -> FastAPI:
 
 def run_render_job(job_id: str) -> None:
     database.init_db()
+    checkpoint_service = JobCheckpointService()
     job = database.get_job(job_id)
     if not job:
         return
@@ -2175,18 +2593,21 @@ def run_render_job(job_id: str) -> None:
             progress=100,
             error=f"Project not found: {job['project_id']}",
         )
+        checkpoint_service.update_job_status(job_id, JobRunStatus.failed, "failed")
         return
 
     def progress_callback(payload: dict[str, Any]) -> None:
+        next_status = payload.get("status") or "running"
         database.update_job(
             job_id,
-            status="running",
+            status=next_status,
             current_step=payload.get("current_step", "running"),
             progress=int(payload.get("progress", 0)),
             total_outputs=int(payload.get("total_outputs", job["total_outputs"])),
             completed_outputs=int(payload.get("completed_outputs", 0)),
             failed_outputs=int(payload.get("failed_outputs", 0)),
         )
+        _checkpoint_progress(job_id, checkpoint_service, payload)
 
     def log_callback(level: str, message: str) -> None:
         database.add_job_log(job_id, level, message)
@@ -2194,24 +2615,33 @@ def run_render_job(job_id: str) -> None:
     try:
         database.update_job(job_id, status="running", current_step="starting", progress=1)
         config = _apply_app_settings(ProjectConfig.model_validate(project["config"]))
+        _ensure_job_checkpoint(checkpoint_service, job_id, "product_render", job["project_id"], project["config"], config.output_folder)
+        checkpoint_service.update_job_status(job_id, JobRunStatus.running, "starting")
         custom_script = None
         if project.get("custom_script"):
             custom_script = ProductVideoScript.model_validate(project["custom_script"])
-        summary = render_project(
+        summary = _run_product_render_project(
             config,
             preview_only=job["preview_only"],
             custom_script=custom_script,
             project_id=job["project_id"],
+            job_id=job_id,
             progress_callback=progress_callback,
             log_callback=log_callback,
         )
         _save_latest_script_from_summary(job["project_id"], summary, log_callback)
-        status = "completed" if summary["failed_outputs"] == 0 else "completed_with_errors"
+        queue_status = summary.get("queue_status")
+        if queue_status in {"paused", "cancelled"}:
+            status = queue_status
+            current_step = queue_status
+        else:
+            status = "completed" if summary["failed_outputs"] == 0 else "completed_with_errors"
+            current_step = "completed"
         database.update_job(
             job_id,
             status=status,
-            current_step="completed",
-            progress=100,
+            current_step=current_step,
+            progress=100 if queue_status != "paused" else int((summary["successful_outputs"] + summary["failed_outputs"]) / max(1, summary["requested_outputs"]) * 100),
             total_outputs=summary["requested_outputs"],
             completed_outputs=summary["successful_outputs"],
             failed_outputs=summary["failed_outputs"],
@@ -2224,8 +2654,18 @@ def run_render_job(job_id: str) -> None:
                 ensure_ascii=False,
             ),
         )
+        checkpoint_status = JobRunStatus.paused if queue_status == "paused" else JobRunStatus.cancelled if queue_status == "cancelled" else JobRunStatus.completed
+        checkpoint_service.update_job_status(job_id, checkpoint_status, current_step)
+        checkpoint_service.update_counts(
+            job_id,
+            total_items=summary["requested_outputs"],
+            completed_items=summary["successful_outputs"],
+            failed_items=summary["failed_outputs"],
+            interrupted_items=max(0, summary["requested_outputs"] - summary["successful_outputs"] - summary["failed_outputs"]) if queue_status == "paused" else 0,
+        )
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
+        checkpoint_service.update_job_status(job_id, JobRunStatus.failed, "failed")
         database.update_job(
             job_id,
             status="failed",
@@ -2236,8 +2676,84 @@ def run_render_job(job_id: str) -> None:
         )
 
 
+def _run_product_render_project(
+    config: ProjectConfig,
+    *,
+    preview_only: bool,
+    custom_script: ProductVideoScript | None,
+    project_id: str,
+    job_id: str,
+    progress_callback,
+    log_callback,
+) -> dict[str, Any]:
+    kwargs = {
+        "preview_only": preview_only,
+        "custom_script": custom_script,
+        "project_id": project_id,
+        "progress_callback": progress_callback,
+        "log_callback": log_callback,
+    }
+    if "job_id" in inspect.signature(render_project).parameters:
+        kwargs["job_id"] = job_id
+    return render_project(config, **kwargs)
+
+
+def _run_resume_thread(original_job_id: str, resume_service: JobResumeService, target, *args: Any) -> None:
+    try:
+        target(*args)
+    finally:
+        resume_service.release_resume_lock(original_job_id)
+
+
+def _is_douyin_resume(original_job: dict[str, Any], retry_outputs: list[dict[str, Any]]) -> bool:
+    return _job_looks_douyin(original_job) and bool(retry_outputs)
+
+
+def _job_looks_douyin(job: dict[str, Any]) -> bool:
+    outputs = (job.get("results") or {}).get("outputs") or []
+    return any(isinstance(output, dict) and output.get("source_video") for output in outputs)
+
+
+def _ensure_job_checkpoint(
+    checkpoint_service: JobCheckpointService,
+    job_id: str,
+    mode: str,
+    project_id: str | None,
+    settings_snapshot: dict[str, Any],
+    output_dir: str,
+) -> None:
+    if checkpoint_service.load_job_checkpoint(job_id) is not None:
+        return
+    checkpoint_service.create_job_checkpoint(
+        job_id=job_id,
+        mode=mode,
+        project_id=project_id,
+        settings_snapshot=settings_snapshot,
+        output_dir=output_dir,
+    )
+
+
+def _checkpoint_progress(job_id: str, checkpoint_service: JobCheckpointService, payload: dict[str, Any]) -> None:
+    checkpoint_service.update_job_status(
+        job_id,
+        JobRunStatus.running,
+        payload.get("current_step", "running"),
+    )
+    total = int(payload.get("total_outputs", 0) or 0)
+    completed = int(payload.get("completed_outputs", 0) or 0)
+    failed = int(payload.get("failed_outputs", 0) or 0)
+    checkpoint_service.update_counts(
+        job_id,
+        total_items=total,
+        completed_items=completed,
+        failed_items=failed,
+        interrupted_items=max(0, total - completed - failed),
+    )
+
+
 def run_douyin_reup_job(job_id: str) -> None:
     database.init_db()
+    checkpoint_service = JobCheckpointService()
     job = database.get_job(job_id)
     if not job:
         return
@@ -2254,15 +2770,17 @@ def run_douyin_reup_job(job_id: str) -> None:
         return
 
     def progress_callback(payload: dict[str, Any]) -> None:
+        next_status = payload.get("status") or "running"
         database.update_job(
             job_id,
-            status="running",
+            status=next_status,
             current_step=payload.get("current_step", "running"),
             progress=int(payload.get("progress", 0)),
             total_outputs=int(payload.get("total_outputs", job["total_outputs"])),
             completed_outputs=int(payload.get("completed_outputs", 0)),
             failed_outputs=int(payload.get("failed_outputs", 0)),
         )
+        _checkpoint_progress(job_id, checkpoint_service, payload)
 
     def log_callback(level: str, message: str) -> None:
         database.add_job_log(job_id, level, message)
@@ -2270,6 +2788,8 @@ def run_douyin_reup_job(job_id: str) -> None:
     try:
         database.update_job(job_id, status="running", current_step="starting", progress=1)
         config = _apply_app_settings(ProjectConfig.model_validate(project["config"]))
+        _ensure_job_checkpoint(checkpoint_service, job_id, "douyin_reup", job["project_id"], project["config"], config.output_folder)
+        checkpoint_service.update_job_status(job_id, JobRunStatus.running, "starting")
         summary = DouyinReupService().process_folder(
             config,
             project_id=job["project_id"],
@@ -2277,15 +2797,24 @@ def run_douyin_reup_job(job_id: str) -> None:
             progress_callback=progress_callback,
             log_callback=log_callback,
         )
-        status = "completed" if summary.get("failed_outputs", 0) == 0 else "completed_with_errors"
+        queue_status = summary.get("queue_status")
+        if queue_status in {"paused", "cancelled"}:
+            status = queue_status
+            current_step = queue_status
+        else:
+            status = "completed" if summary.get("failed_outputs", 0) == 0 else "completed_with_errors"
+            current_step = "completed"
+        total_items = int(summary.get("processed_outputs") or job["total_outputs"])
+        completed_items = int(summary.get("successful_outputs") or 0)
+        failed_items = int(summary.get("failed_outputs") or 0)
         database.update_job(
             job_id,
             status=status,
-            current_step="completed",
-            progress=100,
-            total_outputs=int(summary.get("processed_outputs") or job["total_outputs"]),
-            completed_outputs=int(summary.get("successful_outputs") or 0),
-            failed_outputs=int(summary.get("failed_outputs") or 0),
+            current_step=current_step,
+            progress=100 if queue_status != "paused" else int((completed_items + failed_items) / max(1, job["total_outputs"]) * 100),
+            total_outputs=total_items,
+            completed_outputs=completed_items,
+            failed_outputs=failed_items,
             output_folder=summary.get("output_folder"),
             results_json=json.dumps(
                 {
@@ -2295,8 +2824,18 @@ def run_douyin_reup_job(job_id: str) -> None:
                 ensure_ascii=False,
             ),
         )
+        checkpoint_status = JobRunStatus.paused if queue_status == "paused" else JobRunStatus.cancelled if queue_status == "cancelled" else JobRunStatus.completed
+        checkpoint_service.update_job_status(job_id, checkpoint_status, current_step)
+        checkpoint_service.update_counts(
+            job_id,
+            total_items=total_items,
+            completed_items=completed_items,
+            failed_items=failed_items,
+            interrupted_items=max(0, job["total_outputs"] - completed_items - failed_items) if queue_status == "paused" else 0,
+        )
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
+        checkpoint_service.update_job_status(job_id, JobRunStatus.failed, "failed")
         database.update_job(
             job_id,
             status="failed",
@@ -2314,11 +2853,14 @@ def run_silent_reup_plan_job(
     output_dir: str,
 ) -> None:
     database.init_db()
+    checkpoint_service = JobCheckpointService()
     job = database.get_job(job_id)
     if not job:
         return
     try:
         database.update_job(job_id, status="running", current_step="silent_render", progress=10)
+        _ensure_job_checkpoint(checkpoint_service, job_id, "silent_immersive", job.get("project_id"), {"plan": plan_payload, "settings": settings_payload}, output_dir)
+        checkpoint_service.update_job_status(job_id, JobRunStatus.running, "render")
         plan = SilentReupPlan.model_validate(plan_payload)
         settings = DouyinReupSettings.model_validate(settings_payload)
         pipeline = SilentReupPipeline()
@@ -2414,8 +2956,17 @@ def run_silent_reup_plan_job(
             output_folder=output_dir,
             results_json=json.dumps({"summary": summary, "outputs": [output]}, ensure_ascii=False),
         )
+        checkpoint_service.update_job_status(job_id, JobRunStatus.completed, "completed")
+        checkpoint_service.update_counts(
+            job_id,
+            total_items=1,
+            completed_items=1 if success else 0,
+            failed_items=0 if success else 1,
+            interrupted_items=0,
+        )
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
+        checkpoint_service.update_job_status(job_id, JobRunStatus.failed, "failed")
         database.update_job(
             job_id,
             status="failed",
@@ -2434,6 +2985,7 @@ def run_douyin_reup_retry_job(
     settings_override: dict[str, Any],
 ) -> None:
     database.init_db()
+    checkpoint_service = JobCheckpointService()
     job = database.get_job(job_id)
     original_job = database.get_job(original_job_id)
     if not job or not original_job:
@@ -2451,15 +3003,17 @@ def run_douyin_reup_retry_job(
         return
 
     def progress_callback(payload: dict[str, Any]) -> None:
+        next_status = payload.get("status") or "running"
         database.update_job(
             job_id,
-            status="running",
+            status=next_status,
             current_step=f"retry_{payload.get('current_step', 'running')}",
             progress=int(payload.get("progress", 0)),
             total_outputs=int(payload.get("total_outputs", job["total_outputs"])),
             completed_outputs=int(payload.get("completed_outputs", 0)),
             failed_outputs=int(payload.get("failed_outputs", 0)),
         )
+        _checkpoint_progress(job_id, checkpoint_service, payload)
 
     def log_callback(level: str, message: str) -> None:
         database.add_job_log(job_id, level, message)
@@ -2467,6 +3021,8 @@ def run_douyin_reup_retry_job(
     try:
         database.update_job(job_id, status="running", current_step="retry_starting", progress=1)
         config = _apply_app_settings(ProjectConfig.model_validate(project["config"]))
+        _ensure_job_checkpoint(checkpoint_service, job_id, "douyin_reup", job["project_id"], {"retry_of_job_id": original_job_id, "config": project["config"]}, config.output_folder)
+        checkpoint_service.update_job_status(job_id, JobRunStatus.running, "starting")
         base_settings = config.douyin_reup or DouyinReupSettings(enabled=True)
         merged_settings = DouyinReupSettings.model_validate(
             {**base_settings.model_dump(mode="json"), **(settings_override or {})}
@@ -2490,15 +3046,24 @@ def run_douyin_reup_retry_job(
             progress_callback=progress_callback,
             log_callback=log_callback,
         )
-        status = "completed" if summary.get("failed_outputs", 0) == 0 else "completed_with_errors"
+        queue_status = summary.get("queue_status")
+        if queue_status in {"paused", "cancelled"}:
+            status = queue_status
+            current_step = queue_status
+        else:
+            status = "completed" if summary.get("failed_outputs", 0) == 0 else "completed_with_errors"
+            current_step = "completed"
+        total_items = int(summary.get("processed_outputs") or job["total_outputs"])
+        completed_items = int(summary.get("successful_outputs") or 0)
+        failed_items = int(summary.get("failed_outputs") or 0)
         database.update_job(
             job_id,
             status=status,
-            current_step="completed",
-            progress=100,
-            total_outputs=int(summary.get("processed_outputs") or job["total_outputs"]),
-            completed_outputs=int(summary.get("successful_outputs") or 0),
-            failed_outputs=int(summary.get("failed_outputs") or 0),
+            current_step=current_step,
+            progress=100 if queue_status != "paused" else int((completed_items + failed_items) / max(1, job["total_outputs"]) * 100),
+            total_outputs=total_items,
+            completed_outputs=completed_items,
+            failed_outputs=failed_items,
             output_folder=summary.get("output_folder"),
             results_json=json.dumps(
                 {
@@ -2509,8 +3074,18 @@ def run_douyin_reup_retry_job(
                 ensure_ascii=False,
             ),
         )
+        checkpoint_status = JobRunStatus.paused if queue_status == "paused" else JobRunStatus.cancelled if queue_status == "cancelled" else JobRunStatus.completed
+        checkpoint_service.update_job_status(job_id, checkpoint_status, current_step)
+        checkpoint_service.update_counts(
+            job_id,
+            total_items=total_items,
+            completed_items=completed_items,
+            failed_items=failed_items,
+            interrupted_items=max(0, job["total_outputs"] - completed_items - failed_items) if queue_status == "paused" else 0,
+        )
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
+        checkpoint_service.update_job_status(job_id, JobRunStatus.failed, "failed")
         database.update_job(
             job_id,
             status="failed",
@@ -2528,6 +3103,7 @@ def run_subtitle_review_render_job(
     settings_payload: dict[str, Any],
 ) -> None:
     database.init_db()
+    checkpoint_service = JobCheckpointService()
     job = database.get_job(job_id)
     if not job:
         return
@@ -2544,7 +3120,23 @@ def run_subtitle_review_render_job(
 
     try:
         database.update_job(job_id, status="running", current_step="render_approved_subtitles", progress=1)
+        _ensure_job_checkpoint(
+            checkpoint_service,
+            job_id,
+            "subtitle_render",
+            job.get("project_id"),
+            {"document_ids": document_ids, "settings": settings_payload},
+            str(output_root),
+        )
+        checkpoint_service.update_job_status(job_id, JobRunStatus.running, "render")
         for index, document_id in enumerate(document_ids, start=1):
+            checkpoint_service.mark_step_started(
+                job_id,
+                f"video_{index:03d}",
+                document_id,
+                RecoverableStep.render,
+                {"subtitle_review_document_id": document_id},
+            )
             try:
                 document_dir = ensure_dir(output_root / f"video_{index:03d}")
                 log_path = document_dir / f"video_{index:03d}_log.json"
@@ -2634,6 +3226,12 @@ def run_subtitle_review_render_job(
                     }
                 )
                 completed += 1
+                checkpoint_service.mark_step_completed(
+                    job_id,
+                    f"video_{index:03d}",
+                    RecoverableStep.render,
+                    {"video": str(result.get("path") or "")},
+                )
             except Exception as exc:
                 failed += 1
                 document_dir = ensure_dir(output_root / f"video_{index:03d}")
@@ -2668,6 +3266,7 @@ def run_subtitle_review_render_job(
                     }
                 )
                 database.add_job_log(job_id, "error", f"Subtitle review render failed for {document_id}: {exc}")
+                checkpoint_service.mark_step_failed(job_id, f"video_{index:03d}", RecoverableStep.render, str(exc))
 
             database.update_job(
                 job_id,
@@ -2677,6 +3276,13 @@ def run_subtitle_review_render_job(
                 total_outputs=total,
                 completed_outputs=completed,
                 failed_outputs=failed,
+            )
+            checkpoint_service.update_counts(
+                job_id,
+                total_items=total,
+                completed_items=completed,
+                failed_items=failed,
+                interrupted_items=max(0, total - completed - failed),
             )
 
         status = "completed" if failed == 0 else "completed_with_errors"
@@ -2729,8 +3335,11 @@ def run_subtitle_review_render_job(
             output_folder=str(output_root),
             results_json=json.dumps({"summary": summary, "outputs": outputs}, ensure_ascii=False),
         )
+        checkpoint_service.update_job_status(job_id, JobRunStatus.completed, "completed")
+        checkpoint_service.update_counts(job_id, total_items=total, completed_items=completed, failed_items=failed, interrupted_items=0)
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
+        checkpoint_service.update_job_status(job_id, JobRunStatus.failed, "failed")
         database.update_job(
             job_id,
             status="failed",
@@ -2972,11 +3581,24 @@ def _save_visual_tagged_plan(
 
 
 def _build_douyin_project_config(request: DouyinReupProcessRequest) -> ProjectConfig:
+    selected_paths = _selected_paths_from_source_selection(
+        request.selected_video_paths or request.settings.selected_video_paths,
+        request.source_selection_id or request.settings.source_selection_id,
+    )
+    settings = request.settings
+    updates: dict[str, Any] = {}
+    if selected_paths:
+        updates["process_mode"] = "selected"
+        updates["selected_video_paths"] = selected_paths
+    if request.source_selection_id or request.settings.source_selection_id:
+        updates["source_selection_id"] = request.source_selection_id or request.settings.source_selection_id
+    if updates:
+        settings = settings.model_copy(update=updates)
     return _build_douyin_project_config_from_settings(
         project_name=request.project_name,
         source_folder=request.source_folder,
         output_folder=request.output_folder,
-        settings=request.settings,
+        settings=settings,
     )
 
 
@@ -3059,9 +3681,13 @@ def _douyin_product_payload(product_context: dict[str, Any] | None = None) -> di
 
 def _one_click_overrides(request: DouyinOneClickBatchRequest) -> dict[str, Any]:
     process_mode = "all" if request.process_mode == "all_videos" else request.process_mode
+    selected_paths = _selected_paths_from_source_selection(request.selected_video_paths, request.source_selection_id)
+    if selected_paths:
+        process_mode = "selected"
     overrides: dict[str, Any] = {
         "process_mode": process_mode,
-        "selected_video_paths": request.selected_video_paths,
+        "selected_video_paths": selected_paths,
+        "source_selection_id": request.source_selection_id,
     }
     if request.max_videos is not None:
         overrides["max_videos"] = request.max_videos
@@ -3075,6 +3701,21 @@ def _one_click_overrides(request: DouyinOneClickBatchRequest) -> dict[str, Any]:
         overrides["auto_render_after_translation"] = request.auto_render_after_translation
     overrides.update(request.advanced_overrides or {})
     return overrides
+
+
+def _selected_paths_from_source_selection(explicit_paths: list[str] | None, source_selection_id: str | None) -> list[str]:
+    selected_paths = [str(path).strip() for path in (explicit_paths or []) if str(path).strip()]
+    if selected_paths:
+        return selected_paths
+    selection_id = (source_selection_id or "").strip()
+    if not selection_id:
+        return []
+    result = SourceMediaSelectionService().get_selection(selection_id)
+    if not result.success:
+        raise ValueError("; ".join(result.errors) or f"Không tìm thấy source selection: {selection_id}")
+    if not result.selected_paths:
+        raise ValueError(f"Source selection không có video hợp lệ: {selection_id}")
+    return result.selected_paths
 
 
 def _normalize_douyin_settings(settings: DouyinReupSettings, base_dir: Path) -> DouyinReupSettings:

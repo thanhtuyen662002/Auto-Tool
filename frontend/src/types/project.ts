@@ -154,6 +154,7 @@ export interface DouyinReupSettings {
   process_mode: 'all' | 'selected' | 'first_n' | string;
   max_videos?: number | null;
   selected_video_paths: string[];
+  source_selection_id?: string | null;
   keep_temp: boolean;
   review_subtitles_before_render: boolean;
   auto_render_after_translation: boolean;
@@ -374,6 +375,7 @@ export interface DouyinOneClickBatchRequest {
   process_mode?: 'all_videos' | 'first_n' | 'selected';
   max_videos?: number | null;
   selected_video_paths?: string[];
+  source_selection_id?: string | null;
   review_subtitles_before_render?: boolean | null;
   auto_render_after_translation?: boolean | null;
   product_context?: Record<string, unknown>;
@@ -1185,6 +1187,90 @@ export interface UpdateSegmentReviewResponse {
   item: SegmentReviewItem;
 }
 
+export type SourceBrowserMediaType = 'video' | 'audio' | 'image' | 'unknown';
+export type SourceBrowserOrientation = 'vertical' | 'horizontal' | 'square' | 'unknown';
+export type SourceBrowserStatus = 'valid' | 'unreadable' | 'unsupported' | 'missing' | 'warning';
+export type SourceBrowserPriority = 'low' | 'normal' | 'high';
+
+export interface SourceBrowserMediaItem {
+  id: string;
+  folder_id?: string | null;
+  path: string;
+  filename: string;
+  extension: string;
+  media_type: SourceBrowserMediaType | string;
+  status: SourceBrowserStatus | string;
+  duration_seconds?: number | null;
+  width?: number | null;
+  height?: number | null;
+  fps?: number | null;
+  bitrate?: number | null;
+  codec?: string | null;
+  has_audio?: boolean | null;
+  file_size_bytes: number;
+  created_at?: string | null;
+  modified_at?: string | null;
+  orientation: SourceBrowserOrientation | string;
+  aspect_ratio?: number | null;
+  thumbnail_path?: string | null;
+  preview_path?: string | null;
+  quality_score?: number | null;
+  quality_flags: string[];
+  selected: boolean;
+  excluded_reason?: string | null;
+  priority: SourceBrowserPriority;
+  warnings: string[];
+  error_message?: string | null;
+}
+
+export interface SourceFolderScanRequest {
+  folder_path: string;
+  recursive?: boolean;
+  include_extensions?: string[];
+  max_files?: number | null;
+  generate_thumbnails?: boolean;
+  thumbnail_at_second?: number;
+  min_duration_seconds?: number | null;
+  max_duration_seconds?: number | null;
+  prefer_vertical?: boolean;
+}
+
+export interface SourceFolderScanResult {
+  success: boolean;
+  folder_path: string;
+  folder_id: string;
+  total_files_found: number;
+  valid_videos: number;
+  warning_videos: number;
+  unreadable_files: number;
+  vertical_count: number;
+  horizontal_count: number;
+  square_count: number;
+  selected_count: number;
+  items: SourceBrowserMediaItem[];
+  warnings: string[];
+  errors: string[];
+}
+
+export interface SourceMediaSelectionRequest {
+  folder_id: string;
+  selected_item_ids: string[];
+  excluded_item_ids?: string[];
+  priorities?: Record<string, SourceBrowserPriority>;
+  selection_name?: string | null;
+}
+
+export interface SourceMediaSelectionResult {
+  success: boolean;
+  folder_id: string;
+  selection_id?: string | null;
+  selected_count: number;
+  excluded_count: number;
+  selected_paths: string[];
+  warnings: string[];
+  errors: string[];
+}
+
 export interface BulkSegmentReviewResponse {
   success: boolean;
   updated_count: number;
@@ -1743,4 +1829,120 @@ export interface VideoPromptPackResponse {
   success: boolean;
   prompt_pack: VideoPromptPack;
   files: Record<string, string>;
+}
+
+export type QueueRunStatus =
+  | 'queued'
+  | 'running'
+  | 'pausing'
+  | 'paused'
+  | 'resuming'
+  | 'completed'
+  | 'completed_with_warnings'
+  | 'failed'
+  | 'cancel_requested'
+  | 'cancelled'
+  | string;
+
+export type QueueItemStatus =
+  | 'queued'
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+  | 'cancelled'
+  | 'needs_review'
+  | 'rendered'
+  | string;
+
+export interface QueueSettings {
+  max_concurrent_videos: number;
+  max_videos_per_batch?: number | null;
+  pause_after_current_item: boolean;
+  allow_parallel_asr: boolean;
+  allow_parallel_ocr: boolean;
+  allow_parallel_render: boolean;
+  skip_completed_outputs: boolean;
+  do_not_overwrite_existing_outputs: boolean;
+  stop_batch_on_critical_error: boolean;
+  continue_on_video_error: boolean;
+  cooldown_seconds_between_renders: number;
+  resource_guard_enabled: boolean;
+  min_free_disk_gb: number;
+  max_cpu_percent_warning: number;
+  max_memory_percent_warning: number;
+}
+
+export interface QueueItem {
+  id: string;
+  job_id: string;
+  video_id: string;
+  video_path: string;
+  filename?: string | null;
+  status: QueueItemStatus;
+  priority: 'low' | 'normal' | 'high' | string;
+  order_index: number;
+  current_step?: string | null;
+  progress_percent: number;
+  output_video_path?: string | null;
+  failed_step?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  updated_at?: string | null;
+  warnings: string[];
+  previous_errors: string[];
+}
+
+export interface QueueState {
+  job_id: string;
+  project_id?: string | null;
+  mode: string;
+  status: QueueRunStatus;
+  settings: QueueSettings;
+  total_items: number;
+  queued_items: number;
+  running_items: number;
+  completed_items: number;
+  failed_items: number;
+  skipped_items: number;
+  cancelled_items: number;
+  needs_review_items: number;
+  progress_percent: number;
+  current_item_id?: string | null;
+  current_step?: string | null;
+  items: QueueItem[];
+  pause_requested: boolean;
+  cancel_requested: boolean;
+  created_at: string;
+  updated_at: string;
+  output_dir?: string | null;
+  warnings: string[];
+  errors: string[];
+}
+
+export interface QueueStateResponse {
+  success: boolean;
+  data: QueueState;
+  warnings: string[];
+  errors: string[];
+}
+
+export interface QueueActionResult {
+  success: boolean;
+  job_id: string;
+  action: string;
+  affected_items: number;
+  message: string;
+  warnings: string[];
+  errors: string[];
+  data: Record<string, unknown>;
+}
+
+export interface QueueResourceStatusResponse {
+  success: boolean;
+  data: Record<string, unknown>;
+  warnings: string[];
+  errors: string[];
 }

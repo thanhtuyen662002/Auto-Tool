@@ -20,12 +20,14 @@ export type NormalizedSystemStatus = {
   localServerMode?: LocalFrontendStatus['data']['mode'];
   singlePortUrl?: string;
   dependencies?: SystemDependencyStatusResponse | null;
+  recoverableJobsCount: number;
 };
 
 export type HealthResponse = {
   status?: string;
   version?: string;
   capabilities?: Record<string, boolean>;
+  recoverable_jobs_count?: number;
 };
 
 export async function getHealth(): Promise<HealthResponse> {
@@ -70,6 +72,7 @@ export function normalizeSystemStatus(
     localServerMode: frontendStatus?.data.mode,
     singlePortUrl: frontendStatus?.data.single_port_url,
     dependencies,
+    recoverableJobsCount: health?.recoverable_jobs_count ?? 0,
   };
 }
 
@@ -84,6 +87,7 @@ export function offlineStatus(): NormalizedSystemStatus {
     outputFolder: 'unknown',
     localServer: 'unknown',
     dependencies: null,
+    recoverableJobsCount: 0,
   };
 }
 

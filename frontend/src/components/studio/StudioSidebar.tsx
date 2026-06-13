@@ -1,4 +1,4 @@
-import { Captions, Clapperboard, FolderCheck, LayoutDashboard, Settings, Sparkles, Waves, X } from 'lucide-react';
+import { Captions, Clapperboard, FolderCheck, LayoutDashboard, RotateCcw, Settings, Sparkles, Waves, X } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import GlassBadge from '../glass/GlassBadge';
 
@@ -8,6 +8,7 @@ const items = [
   { to: '/silent-mode', label: 'Video không thoại', helper: 'Silent Mode', icon: Waves },
   { to: '/subtitle-review', label: 'Sửa phụ đề', helper: 'Subtitle Review', icon: Captions },
   { to: '/results', label: 'Kết quả', helper: 'Results', icon: FolderCheck },
+  { to: '/recovery', label: 'Khôi phục', helper: 'Recovery', icon: RotateCcw },
   { to: '/settings', label: 'Cài đặt', helper: 'Settings', icon: Settings },
 ];
 

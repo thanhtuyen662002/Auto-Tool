@@ -27,8 +27,8 @@ def main() -> int:
     load_local_env()
     configure_logging()
     local_config = LocalConfigService().load_config()
-    host = local_config.backend_host
-    preferred_port = int(os.getenv("AUTO_TOOL_PORT", str(local_config.backend_port)))
+    host = _launcher_host(local_config.backend_host)
+    preferred_port = _launcher_port(local_config.backend_port)
     if _strict_port_enabled() and not _port_available(preferred_port):
         logger.error("Port %s is already in use. Stop the existing server and try again.", preferred_port)
         return 1
@@ -64,6 +64,22 @@ def main() -> int:
 def _open_browser(url: str) -> None:
     time.sleep(1.0)
     webbrowser.open(url)
+
+
+def _launcher_host(default: str) -> str:
+    value = os.getenv("AUTO_TOOL_HOST", "").strip()
+    return value or default
+
+
+def _launcher_port(default: int) -> int:
+    value = os.getenv("AUTO_TOOL_PORT", "").strip()
+    if not value:
+        return int(default)
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning("Invalid AUTO_TOOL_PORT=%r; using %s.", value, default)
+        return int(default)
 
 
 def _find_available_port(preferred: int) -> int:

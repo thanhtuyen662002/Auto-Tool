@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+import time
 from typing import Any
 
 from app.modules.industry_presets.industry_preset_service import IndustryPresetService
@@ -15,6 +16,16 @@ from app.modules.renderer.renderer import Renderer
 from app.modules.render_worker.output_pipeline import render_one_output
 from app.modules.render_worker.summary_builder import failed_output_records, finalize_summary
 from app.modules.performance.performance_timer import performance_summary
+from app.modules.queue_control import (
+    QueueControlService,
+    QueueItemPriority,
+    QueueItemStatus,
+    QueueRunStatus,
+    QueueSettings,
+    QueueState,
+    QueueStateService,
+    ResourceGuardService,
+)
 from app.modules.segment_scoring.segment_scorer import SegmentScorer, build_scoring_report
 from app.modules.script_variants.script_variant_generator import ScriptVariantGenerator
 from app.modules.script_writer.script_writer import ProductVideoScript
@@ -40,6 +51,7 @@ def render_project(
     preview_only: bool = False,
     custom_script: ProductVideoScript | None = None,
     project_id: str | None = None,
+    job_id: str | None = None,
     progress_callback: ProgressCallback | None = None,
     log_callback: LogCallback | None = None,
 ) -> dict[str, Any]:
@@ -218,6 +230,25 @@ def render_project(
             f"warnings={sum(crop_report.warnings_summary.values())}",
         )
 
+        queue_state_service: QueueStateService | None = None
+        queue_control: QueueControlService | None = None
+        resource_guard: ResourceGuardService | None = None
+        queue_state: QueueState | None = None
+        if job_id:
+            queue_state_service = QueueStateService()
+            queue_control = QueueControlService(queue_state_service)
+            queue_state = queue_state_service.load_queue_state(job_id)
+            if queue_state is None:
+                queue_state = queue_state_service.create_queue_state(
+                    job_id=job_id,
+                    mode="product_render",
+                    video_paths=_timeline_queue_paths(timelines),
+                    settings=QueueSettings(),
+                    output_dir=str(output_dir),
+                    project_id=active_project_id,
+                )
+            resource_guard = ResourceGuardService(str(output_dir))
+
         renderer = Renderer()
         voice_generator = VoiceGenerator(
             cache_service=cache_service,
@@ -235,11 +266,42 @@ def render_project(
         if script_variants:
             summary["script_variants_file"] = str(output_dir / "script_variants.json")
 
-        for timeline in timelines:
+        timeline_by_video_id = {f"video_{timeline.output_index:03d}": timeline for timeline in timelines}
+        while True:
+            queue_item = None
+            if queue_state_service and job_id:
+                queue_state = queue_state_service.load_queue_state(job_id) or queue_state
+                if queue_control and queue_control.should_cancel(job_id):
+                    queue_control.mark_cancelled(job_id)
+                    summary["queue_status"] = "cancelled"
+                    break
+                if queue_control and queue_control.should_pause(job_id):
+                    queue_item = _next_queue_item(queue_state, set(timeline_by_video_id))
+                    if queue_item:
+                        queue_state_service.update_item_status(
+                            job_id,
+                            queue_item.id,
+                            QueueItemStatus.paused,
+                            current_step="paused",
+                            progress_percent=0,
+                        )
+                    queue_control.mark_paused(job_id)
+                    summary["queue_status"] = "paused"
+                    break
+                queue_item = _next_queue_item(queue_state, set(timeline_by_video_id))
+                if queue_item is None:
+                    break
+                timeline = timeline_by_video_id[queue_item.video_id]
+            else:
+                if len(outputs) >= len(timelines):
+                    break
+                timeline = timelines[len(outputs)]
+
             index = timeline.output_index
             completed_outputs = sum(1 for item in outputs if item["status"] in {"success", "warning"})
             failed_outputs = sum(1 for item in outputs if item["status"] == "failed")
-            base_progress = 30 + int(((index - 1) / max(1, len(timelines))) * 65)
+            processed_outputs = completed_outputs + failed_outputs
+            base_progress = 30 + int((processed_outputs / max(1, len(timelines))) * 65)
             _progress(
                 progress_callback,
                 current_step=f"rendering_video_{index}",
@@ -250,8 +312,34 @@ def render_project(
             )
             _log(log_callback, "info", f"Đang render video {index:03d}")
 
-            outputs.append(
-                render_one_output(
+            if queue_state_service and job_id and queue_item:
+                if resource_guard and queue_state:
+                    has_resource_warning, resource_warnings = resource_guard.should_warn_before_next_item(queue_state.settings)
+                    if has_resource_warning:
+                        summary.setdefault("queue_warnings", []).extend(resource_warnings)
+                        for warning in resource_warnings:
+                            _log(log_callback, "warning", warning)
+                        if _has_low_disk_warning(resource_warnings) and queue_control:
+                            queue_state_service.update_item_status(
+                                job_id,
+                                queue_item.id,
+                                QueueItemStatus.paused,
+                                current_step="resource_guard",
+                                progress_percent=0,
+                            )
+                            queue_control.mark_paused(job_id, resource_warnings[0])
+                            summary["queue_status"] = "paused"
+                            break
+                queue_state_service.update_item_status(
+                    job_id,
+                    queue_item.id,
+                    QueueItemStatus.running,
+                    current_step=f"rendering_video_{index}",
+                    progress_percent=10,
+                )
+
+            try:
+                output_record = render_one_output(
                     index=index,
                     timeline=timeline,
                     config=working_config,
@@ -270,7 +358,33 @@ def render_project(
                         media_filter.last_summary,
                     ),
                 )
-            )
+            except Exception as exc:
+                output_record = _failed_single_output(index, output_dir, str(exc), preview_only=preview_only)
+                _log(log_callback, "error", f"Render thất bại cho video {index:03d}: {exc}")
+            outputs.append(output_record)
+
+            if queue_state_service and job_id and queue_item:
+                queue_state = queue_state_service.update_item_status(
+                    job_id,
+                    queue_item.id,
+                    _queue_status_from_output(output_record),
+                    current_step="completed" if output_record.get("status") != "failed" else "failed",
+                    progress_percent=100,
+                    error_message=_queue_error_from_output(output_record),
+                    output_video_path=output_record.get("path"),
+                )
+                if queue_state.settings.cooldown_seconds_between_renders > 0:
+                    time.sleep(queue_state.settings.cooldown_seconds_between_renders)
+
+        if job_id and "queue_status" not in summary and queue_state_service:
+            final_queue_state = queue_state_service.load_queue_state(job_id)
+            if final_queue_state:
+                final_status = QueueRunStatus.completed_with_warnings if final_queue_state.failed_items else QueueRunStatus.completed
+                final_queue_state = final_queue_state.model_copy(update={"status": final_status})
+                queue_state_service.save_queue_state(final_queue_state)
+                summary["queue_status"] = final_queue_state.status.value
+            else:
+                summary["queue_status"] = "completed"
 
         finalize_summary(summary)
     except Exception as exc:
@@ -301,15 +415,110 @@ def render_project(
         write_json(summary_path, summary)
         _log(log_callback, "info", f"Đã ghi tổng kết dự án: {summary_path}")
 
+    final_queue_status = summary.get("queue_status")
+    if final_queue_status in {"paused", "cancelled"}:
+        final_step = final_queue_status
+        processed = int(summary.get("successful_outputs", 0) or 0) + int(summary.get("failed_outputs", 0) or 0)
+        total = max(1, int(summary.get("requested_outputs", working_config.render.output_count) or 1))
+        final_progress = min(99, int((processed / total) * 100))
+    else:
+        final_step = "completed"
+        final_progress = 100
     _progress(
         progress_callback,
-        current_step="completed",
-        progress=100,
+        current_step=final_step,
+        progress=final_progress,
         total_outputs=working_config.render.output_count,
         completed_outputs=summary["successful_outputs"],
         failed_outputs=summary["failed_outputs"],
+        status=final_queue_status if final_queue_status in {"paused", "cancelled"} else None,
     )
     return summary
+
+
+def _timeline_queue_paths(timelines: list[Any]) -> list[str]:
+    paths: list[str] = []
+    for timeline in timelines:
+        first_clip = timeline.clips[0] if getattr(timeline, "clips", None) else None
+        paths.append(str(getattr(first_clip, "source_path", "") or f"video_{timeline.output_index:03d}"))
+    return paths
+
+
+def _next_queue_item(queue_state: QueueState | None, known_video_ids: set[str]):
+    if queue_state is None:
+        return None
+    candidates = [
+        item
+        for item in queue_state.items
+        if item.video_id in known_video_ids and item.status == QueueItemStatus.queued
+    ]
+    if not candidates:
+        return None
+    return sorted(candidates, key=_queue_sort_key)[0]
+
+
+def _queue_sort_key(item) -> tuple[int, int]:
+    priority = {
+        QueueItemPriority.high: 0,
+        QueueItemPriority.normal: 1,
+        QueueItemPriority.low: 2,
+    }.get(item.priority, 1)
+    return (priority, item.order_index)
+
+
+def _queue_status_from_output(output_record: dict[str, Any]) -> QueueItemStatus:
+    status = str(output_record.get("status") or "").lower()
+    if status in {"success", "warning"}:
+        return QueueItemStatus.completed
+    if status == "needs_review":
+        return QueueItemStatus.needs_review
+    if status == "skipped":
+        return QueueItemStatus.skipped
+    return QueueItemStatus.failed
+
+
+def _queue_error_from_output(output_record: dict[str, Any]) -> str | None:
+    if output_record.get("status") != "failed":
+        return None
+    if output_record.get("error"):
+        return str(output_record["error"])
+    errors = output_record.get("errors")
+    if isinstance(errors, list) and errors:
+        return str(errors[0])
+    return "Render output thất bại."
+
+
+def _failed_single_output(index: int, output_dir: Path, reason: str, preview_only: bool = False) -> dict[str, Any]:
+    prefix = "preview" if preview_only else "video"
+    name = f"{prefix}_{index:03d}"
+    now = datetime.now().replace(microsecond=0).isoformat()
+    log_path = output_dir / f"{name}_log.json"
+    message = f"Render thất bại cho video {index:03d}: {reason}"
+    payload = {
+        "index": index,
+        "status": "failed",
+        "started_at": now,
+        "finished_at": now,
+        "duration_seconds": 0,
+        "steps": [{"name": "render_output", "status": "failed", "message": message}],
+        "warnings": [],
+        "errors": [message],
+    }
+    write_json(log_path, payload)
+    return {
+        "index": index,
+        "path": str(output_dir / f"{name}.mp4"),
+        "status": "failed",
+        "duration": None,
+        "error": message,
+        "warnings": [],
+        "errors": [message],
+        "log_file": str(log_path),
+    }
+
+
+def _has_low_disk_warning(warnings: list[str]) -> bool:
+    return any("ổ đĩa thấp" in warning.lower() or "disk" in warning.lower() for warning in warnings)
 
 
 def _preview_config(config: ProjectConfig) -> ProjectConfig:

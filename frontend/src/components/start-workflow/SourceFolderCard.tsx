@@ -11,6 +11,7 @@ export default function SourceFolderCard({
   onChange,
   onBrowse,
   onScan,
+  onOpenBrowser,
   busy,
   scanSummary,
   videos,
@@ -24,6 +25,7 @@ export default function SourceFolderCard({
   onChange: (value: string) => void;
   onBrowse: () => void;
   onScan: () => void;
+  onOpenBrowser?: () => void;
   busy: boolean;
   scanSummary: StartScanSummary | null;
   videos: DouyinVideoItem[];
@@ -72,6 +74,12 @@ export default function SourceFolderCard({
           <ScanSearch size={16} />
           Scan
         </GlassButton>
+        {onOpenBrowser ? (
+          <GlassButton className="px-3" variant="secondary" disabled={!value.trim()} onClick={onOpenBrowser}>
+            <ScanSearch size={16} />
+            Browser
+          </GlassButton>
+        ) : null}
       </div>
 
       {!value.trim() ? (

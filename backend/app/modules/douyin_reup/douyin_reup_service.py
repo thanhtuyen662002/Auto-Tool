@@ -23,6 +23,17 @@ from app.modules.douyin_reup.subtitle_timing_guard import SubtitleTimingGuard
 from app.modules.douyin_reup.subtitle_translator import SubtitleTranslator
 from app.modules.final_output_qa.final_output_qa_schema import PlatformTarget
 from app.modules.final_output_qa.final_output_qa_service import FinalOutputQAService
+from app.modules.queue_control import (
+    QueueControlService,
+    QueueItemPriority,
+    QueueItemStatus,
+    QueueRunStatus,
+    QueueSettings,
+    QueueState,
+    QueueStateService,
+    ResourceGuardService,
+)
+from app.modules.source_media import SourceMediaSelectionService
 from app.modules.silent_immersive_reup.silent_reup_pipeline import SilentReupPipeline
 from app.modules.silent_immersive_reup.silent_reup_service import is_silent_reup_settings
 from app.modules.subtitle_review import SubtitleReviewService
@@ -84,11 +95,88 @@ class DouyinReupService:
         subtitle_sources: Counter[str] = Counter()
         completed = 0
         failed = 0
+        queue_state_service: QueueStateService | None = None
+        queue_control: QueueControlService | None = None
+        resource_guard: ResourceGuardService | None = None
+        queue_state: QueueState | None = None
+        queue_status: str | None = None
+        if job_id:
+            queue_state_service = QueueStateService()
+            queue_control = QueueControlService(queue_state_service)
+            queue_state = queue_state_service.load_queue_state(job_id)
+            current_video_paths = [video.path for video in videos]
+            if queue_state is None or _queue_state_needs_rebuild(queue_state, current_video_paths):
+                queue_state = queue_state_service.create_queue_state(
+                    job_id=job_id,
+                    mode="silent_immersive" if is_silent_reup_settings(settings) else "douyin_reup",
+                    video_paths=current_video_paths,
+                    settings=QueueSettings(max_videos_per_batch=settings.max_videos),
+                    output_dir=str(output_root),
+                    project_id=project_id,
+                )
+                queue_state = _apply_source_selection_priorities(queue_state_service, queue_state, settings)
+            resource_guard = ResourceGuardService(str(output_root))
 
         _progress(progress_callback, total, completed, failed, "scanned", 5)
-        for index, video in enumerate(videos, start=1):
+        videos_by_id = {f"video_{index:03d}": video for index, video in enumerate(videos, start=1)}
+        while True:
+            queue_item = None
+            if queue_state_service and job_id:
+                queue_state = queue_state_service.load_queue_state(job_id) or queue_state
+                if queue_control and queue_control.should_cancel(job_id):
+                    queue_control.mark_cancelled(job_id)
+                    queue_status = "cancelled"
+                    break
+                if queue_control and queue_control.should_pause(job_id):
+                    queue_item = _next_queue_item(queue_state, set(videos_by_id))
+                    if queue_item:
+                        queue_state_service.update_item_status(
+                            job_id,
+                            queue_item.id,
+                            QueueItemStatus.paused,
+                            current_step="paused",
+                            progress_percent=0,
+                        )
+                    queue_control.mark_paused(job_id)
+                    queue_status = "paused"
+                    break
+                queue_item = _next_queue_item(queue_state, set(videos_by_id))
+                if queue_item is None:
+                    break
+                video = videos_by_id[queue_item.video_id]
+                index = _queue_video_index(queue_item.video_id)
+            else:
+                if completed + failed >= total:
+                    break
+                index = completed + failed + 1
+                video = videos[index - 1]
+
             _progress(progress_callback, total, completed, failed, f"douyin_video_{index}", _progress_percent(index - 1, total))
             _log(log_callback, "info", f"Đang xử lý Douyin video {index}/{total}: {video.filename}")
+            if queue_state_service and job_id and queue_item:
+                if resource_guard and queue_state:
+                    has_resource_warning, resource_warnings = resource_guard.should_warn_before_next_item(queue_state.settings)
+                    if has_resource_warning:
+                        for warning in resource_warnings:
+                            _log(log_callback, "warning", warning)
+                        if _has_low_disk_warning(resource_warnings) and queue_control:
+                            queue_state_service.update_item_status(
+                                job_id,
+                                queue_item.id,
+                                QueueItemStatus.paused,
+                                current_step="resource_guard",
+                                progress_percent=0,
+                            )
+                            queue_control.mark_paused(job_id, resource_warnings[0])
+                            queue_status = "paused"
+                            break
+                queue_state_service.update_item_status(
+                    job_id,
+                    queue_item.id,
+                    QueueItemStatus.running,
+                    current_step=f"douyin_video_{index}",
+                    progress_percent=10,
+                )
             try:
                 output = self._process_one_video(
                     index=index,
@@ -115,7 +203,27 @@ class DouyinReupService:
                 subtitle_sources.update([output.subtitle_source or "none"])
                 _log(log_callback, "error", f"Video {index} thất bại: {output.error_message or exc}")
 
+            if queue_state_service and job_id and queue_item:
+                queue_state = queue_state_service.update_item_status(
+                    job_id,
+                    queue_item.id,
+                    _queue_status_from_douyin_output(output),
+                    current_step="completed" if output.status != "failed" else (output.failed_step or "failed"),
+                    progress_percent=100,
+                    error_message=output.error_message or ("; ".join(output.errors) if output.errors else None),
+                    output_video_path=output.path or None,
+                )
+                if queue_state.settings.cooldown_seconds_between_renders > 0:
+                    time.sleep(queue_state.settings.cooldown_seconds_between_renders)
             _progress(progress_callback, total, completed, failed, f"douyin_video_{index}_done", _progress_percent(index, total))
+
+        if job_id and queue_state_service:
+            final_queue_state = queue_state_service.load_queue_state(job_id)
+            if final_queue_state and queue_status is None:
+                final_status = QueueRunStatus.completed_with_warnings if final_queue_state.failed_items else QueueRunStatus.completed
+                final_queue_state = final_queue_state.model_copy(update={"status": final_status})
+                queue_state_service.save_queue_state(final_queue_state)
+                queue_status = final_queue_state.status.value
 
         summary = build_douyin_reup_summary(
             config=config,
@@ -132,8 +240,16 @@ class DouyinReupService:
         summary = summary.model_copy(update={"final_output_qa": final_qa_summary})
         summary_file = output_root / "douyin_reup_summary.json"
         summary = summary.model_copy(update={"summary_file": str(summary_file)})
+        if queue_status:
+            summary = summary.model_copy(update={"queue_status": queue_status})
+        if job_id and queue_state_service:
+            state = queue_state_service.load_queue_state(job_id)
+            if state:
+                summary = summary.model_copy(update={"queue": state.model_dump(mode="json")})
         write_json(summary_file, summary.model_dump(mode="json"))
-        _progress(progress_callback, total, completed, failed, "completed", 100)
+        final_step = queue_status if queue_status in {"paused", "cancelled"} else "completed"
+        final_progress = 100 if queue_status != "paused" else _progress_percent(completed + failed, total)
+        _progress(progress_callback, total, completed, failed, final_step, final_progress, status=queue_status)
         _log(log_callback, "info", f"Đã ghi tổng kết Douyin Reup: {summary_file}")
         return summary.model_dump(mode="json")
 
@@ -702,8 +818,18 @@ class DouyinReupService:
 
     def _select_videos(self, videos: list[DouyinVideoItem], settings: DouyinReupSettings) -> list[DouyinVideoItem]:
         if settings.process_mode == "selected":
-            selected = {str(Path(path).expanduser().resolve()).lower() for path in settings.selected_video_paths}
-            videos = [video for video in videos if str(Path(video.path).expanduser().resolve()).lower() in selected]
+            by_path = {str(Path(video.path).expanduser().resolve()).lower(): video for video in videos}
+            selected_videos: list[DouyinVideoItem] = []
+            seen: set[str] = set()
+            for selected_path in settings.selected_video_paths:
+                key = str(Path(selected_path).expanduser().resolve()).lower()
+                if key in seen:
+                    continue
+                video = by_path.get(key)
+                if video is not None:
+                    selected_videos.append(video)
+                    seen.add(key)
+            videos = selected_videos
         if settings.process_mode == "first_n" and settings.max_videos:
             videos = videos[: settings.max_videos]
         elif settings.max_videos:
@@ -791,18 +917,20 @@ def _progress(
     failed: int,
     current_step: str,
     progress: int,
+    status: str | None = None,
 ) -> None:
     if not callback:
         return
-    callback(
-        {
-            "current_step": current_step,
-            "progress": progress,
-            "total_outputs": total,
-            "completed_outputs": completed,
-            "failed_outputs": failed,
-        }
-    )
+    payload = {
+        "current_step": current_step,
+        "progress": progress,
+        "total_outputs": total,
+        "completed_outputs": completed,
+        "failed_outputs": failed,
+    }
+    if status:
+        payload["status"] = status
+    callback(payload)
 
 
 def _log(callback: LogCallback | None, level: str, message: str) -> None:
@@ -814,6 +942,81 @@ def _progress_percent(done: int, total: int) -> int:
     if total <= 0:
         return 100
     return max(5, min(99, int((done / total) * 95) + 5))
+
+
+def _queue_state_needs_rebuild(queue_state: QueueState, video_paths: list[str]) -> bool:
+    if queue_state.total_items != len(video_paths):
+        return True
+    current = [str(Path(path).expanduser().resolve()).lower() for path in video_paths]
+    existing = [str(Path(item.video_path).expanduser().resolve()).lower() for item in queue_state.items]
+    return current != existing
+
+
+def _apply_source_selection_priorities(
+    queue_state_service: QueueStateService,
+    queue_state: QueueState,
+    settings: DouyinReupSettings,
+) -> QueueState:
+    if not settings.source_selection_id:
+        return queue_state
+    priorities_by_path = SourceMediaSelectionService().get_priority_by_path(settings.source_selection_id)
+    if not priorities_by_path:
+        return queue_state
+    changed = False
+    items = []
+    for item in queue_state.items:
+        priority = priorities_by_path.get(str(Path(item.video_path).expanduser().resolve()).lower())
+        if priority in {QueueItemPriority.low.value, QueueItemPriority.normal.value, QueueItemPriority.high.value}:
+            items.append(item.model_copy(update={"priority": QueueItemPriority(priority)}))
+            changed = True
+        else:
+            items.append(item)
+    if not changed:
+        return queue_state
+    return queue_state_service.save_queue_state(queue_state.model_copy(update={"items": items}))
+
+
+def _next_queue_item(queue_state: QueueState | None, known_video_ids: set[str]):
+    if queue_state is None:
+        return None
+    candidates = [
+        item
+        for item in queue_state.items
+        if item.video_id in known_video_ids and item.status == QueueItemStatus.queued
+    ]
+    if not candidates:
+        return None
+    return sorted(candidates, key=_queue_sort_key)[0]
+
+
+def _queue_sort_key(item) -> tuple[int, int]:
+    priority = {
+        QueueItemPriority.high: 0,
+        QueueItemPriority.normal: 1,
+        QueueItemPriority.low: 2,
+    }.get(item.priority, 1)
+    return (priority, item.order_index)
+
+
+def _queue_video_index(video_id: str) -> int:
+    try:
+        return int(video_id.rsplit("_", 1)[-1])
+    except (ValueError, IndexError):
+        return 1
+
+
+def _queue_status_from_douyin_output(output: DouyinOutputResult) -> QueueItemStatus:
+    if output.status == "success":
+        return QueueItemStatus.completed
+    if output.status == "needs_review":
+        return QueueItemStatus.needs_review
+    if output.status == "skipped":
+        return QueueItemStatus.skipped
+    return QueueItemStatus.failed
+
+
+def _has_low_disk_warning(warnings: list[str]) -> bool:
+    return any("ổ đĩa thấp" in warning.lower() or "disk" in warning.lower() for warning in warnings)
 
 
 def _cached_retry_output(video: DouyinVideoItem, retry_cache: dict[str, dict[str, Any]] | None) -> dict[str, Any] | None:

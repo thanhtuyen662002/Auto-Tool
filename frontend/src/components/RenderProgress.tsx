@@ -19,18 +19,9 @@ export default function RenderProgress({ job }: RenderProgressProps) {
         <div className="h-full bg-brand transition-all" style={{ width: `${progress}%` }} />
       </div>
       <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-        <div className="rounded-md bg-surface p-3">
-          <div className="text-xs text-muted">Đã hoàn thành</div>
-          <div className="font-semibold">{job?.completed_outputs ?? 0}</div>
-        </div>
-        <div className="rounded-md bg-surface p-3">
-          <div className="text-xs text-muted">Bị lỗi</div>
-          <div className="font-semibold">{job?.failed_outputs ?? 0}</div>
-        </div>
-        <div className="rounded-md bg-surface p-3">
-          <div className="text-xs text-muted">Tổng số</div>
-          <div className="font-semibold">{job?.total_outputs ?? 0}</div>
-        </div>
+        <Metric label="Đã hoàn thành" value={job?.completed_outputs ?? 0} />
+        <Metric label="Bị lỗi" value={job?.failed_outputs ?? 0} />
+        <Metric label="Tổng số" value={job?.total_outputs ?? 0} />
       </div>
       {job?.cache_summary ? (
         <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
@@ -42,12 +33,18 @@ export default function RenderProgress({ job }: RenderProgressProps) {
             <div className="text-xs">Cache miss</div>
             <div className="font-semibold">{job.cache_summary.misses ?? 0}</div>
           </div>
-          <div className="rounded-md bg-surface p-3">
-            <div className="text-xs text-muted">Dung lượng cache</div>
-            <div className="font-semibold">{formatCacheSize(job.cache_summary.cache_size_mb ?? 0)}</div>
-          </div>
+          <Metric label="Dung lượng cache" value={formatCacheSize(job.cache_summary.cache_size_mb ?? 0)} />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-md bg-surface p-3">
+      <div className="text-xs text-muted">{label}</div>
+      <div className="font-semibold">{value}</div>
     </div>
   );
 }
@@ -62,8 +59,14 @@ function formatStatus(status: string): string {
   const labels: Record<string, string> = {
     queued: 'Đang chờ',
     running: 'Đang chạy',
+    pausing: 'Đang yêu cầu tạm dừng',
+    paused: 'Đã tạm dừng',
+    resuming: 'Đang tiếp tục',
+    cancel_requested: 'Đang yêu cầu hủy',
+    cancelled: 'Đã hủy',
     completed: 'Hoàn thành',
     completed_with_errors: 'Hoàn thành nhưng có lỗi',
+    completed_with_warnings: 'Hoàn thành có cảnh báo',
     failed: 'Thất bại',
   };
   return labels[normalized] ?? status;
@@ -78,16 +81,13 @@ function formatStep(step: string): string {
     creating_segments: 'Đang tạo cảnh cắt',
     scoring_segments: 'Đang chấm điểm cảnh',
     building_timelines: 'Đang dựng dòng thời gian',
-    preparing_rerender: 'Đang chuẩn bị render lại',
-    building_rerender_timelines: 'Đang dựng dòng thời gian render lại',
+    paused: 'Đã tạm dừng',
+    cancelled: 'Đã hủy',
     completed: 'Hoàn thành',
     failed: 'Thất bại',
   };
-  if (normalized.startsWith('rendering_video_')) {
-    return `Đang render video ${normalized.replace('rendering_video_', '')}`;
-  }
-  if (normalized.startsWith('rerendering_video_')) {
-    return `Đang render lại video ${normalized.replace('rerendering_video_', '')}`;
-  }
+  if (normalized.startsWith('rendering_video_')) return `Đang render video ${normalized.replace('rendering_video_', '')}`;
+  if (normalized.startsWith('douyin_video_')) return `Đang xử lý Douyin video ${normalized.replace('douyin_video_', '').replace('_done', '')}`;
+  if (normalized.startsWith('retry_')) return `Retry: ${formatStep(normalized.replace('retry_', ''))}`;
   return labels[normalized] ?? step;
 }

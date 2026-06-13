@@ -166,6 +166,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   process_mode: 'all',
   max_videos: null,
   selected_video_paths: [],
+  source_selection_id: null,
   keep_temp: false,
   review_subtitles_before_render: true,
   auto_render_after_translation: false,

@@ -32,19 +32,16 @@ call :log "App URL: %APP_URL%"
 echo [INFO] Checking Python...
 set "BOOTSTRAP_PYTHON="
 set "BOOTSTRAP_PYTHON_ARGS="
-where python >nul 2>nul
-if not errorlevel 1 set "BOOTSTRAP_PYTHON=python"
+set "PYTHON_VERSION="
+set "PYTHON_UNSUPPORTED_VERSION="
+call :detect_python python ""
 if defined BOOTSTRAP_PYTHON goto :python_found
-where py >nul 2>nul
-if errorlevel 1 goto :python_missing
-set "BOOTSTRAP_PYTHON=py"
-set "BOOTSTRAP_PYTHON_ARGS=-3"
+call :detect_python py "-3"
+if defined BOOTSTRAP_PYTHON goto :python_found
+if defined PYTHON_UNSUPPORTED_VERSION goto :python_unsupported
+goto :python_missing
 
 :python_found
-set "PYTHON_VERSION="
-for /f "delims=" %%V in ('%BOOTSTRAP_PYTHON% %BOOTSTRAP_PYTHON_ARGS% "%DIAGNOSTICS%" python-version --minimum 3.11 2^>nul') do set "PYTHON_VERSION=%%V"
-if errorlevel 1 goto :python_unsupported
-if not defined PYTHON_VERSION goto :python_unsupported
 echo [OK] Python !PYTHON_VERSION!
 call :log "Python check OK: !PYTHON_VERSION! via %BOOTSTRAP_PYTHON% %BOOTSTRAP_PYTHON_ARGS%"
 
@@ -75,7 +72,11 @@ call :log "WARN: Node/npm missing; frontend build already exists"
 if exist "%VENV_PYTHON%" goto :venv_ready
 echo [INFO] Creating Python environment .venv...
 call :log "Creating .venv"
-%BOOTSTRAP_PYTHON% %BOOTSTRAP_PYTHON_ARGS% -m venv "%PROJECT_ROOT%\.venv" >>"%LOG_FILE%" 2>&1
+if /i "%AUTO_TOOL_LAUNCHER_DEBUG%"=="1" (
+  %BOOTSTRAP_PYTHON% %BOOTSTRAP_PYTHON_ARGS% -m venv "%PROJECT_ROOT%\.venv"
+) else (
+  %BOOTSTRAP_PYTHON% %BOOTSTRAP_PYTHON_ARGS% -m venv "%PROJECT_ROOT%\.venv" >>"%LOG_FILE%" 2>&1
+)
 if errorlevel 1 goto :venv_create_failed
 
 :venv_ready
@@ -85,7 +86,11 @@ call :log "Virtual environment ready: %VENV_PYTHON%"
 
 echo [INFO] Checking backend packages. This may take a few minutes on first run...
 call :log "Installing backend requirements"
-"%VENV_PYTHON%" -m pip install -r "%PROJECT_ROOT%\backend\requirements.txt" >>"%LOG_FILE%" 2>&1
+if /i "%AUTO_TOOL_LAUNCHER_DEBUG%"=="1" (
+  "%VENV_PYTHON%" -m pip install -r "%PROJECT_ROOT%\backend\requirements.txt"
+) else (
+  "%VENV_PYTHON%" -m pip install -r "%PROJECT_ROOT%\backend\requirements.txt" >>"%LOG_FILE%" 2>&1
+)
 if errorlevel 1 goto :pip_failed
 echo [OK] Backend packages ready.
 call :log "Backend requirements OK"
@@ -119,9 +124,17 @@ if not "!NODE_READY!"=="1" goto :frontend_node_missing
 echo [INFO] Frontend build is missing. Building it now...
 call :log "Frontend build missing; running npm install"
 pushd "%PROJECT_ROOT%\frontend"
-call npm install >>"%LOG_FILE%" 2>&1
+if /i "%AUTO_TOOL_LAUNCHER_DEBUG%"=="1" (
+  call npm install
+) else (
+  call npm install >>"%LOG_FILE%" 2>&1
+)
 if errorlevel 1 goto :npm_install_failed
-call npm run build >>"%LOG_FILE%" 2>&1
+if /i "%AUTO_TOOL_LAUNCHER_DEBUG%"=="1" (
+  call npm run build
+) else (
+  call npm run build >>"%LOG_FILE%" 2>&1
+)
 if errorlevel 1 goto :npm_build_failed
 popd
 
@@ -136,11 +149,12 @@ if not errorlevel 1 goto :existing_server
 if not errorlevel 1 goto :port_busy
 
 set "AUTO_TOOL_ROOT=%PROJECT_ROOT%"
+set "AUTO_TOOL_HOST=%API_HOST%"
 set "AUTO_TOOL_PORT=%API_PORT%"
 set "AUTO_TOOL_STRICT_PORT=1"
 set "AUTO_TOOL_OPEN_BROWSER=0"
 set "AUTO_TOOL_LOG_FILE=%LOG_FILE%"
-call :log "Backend start command: python -m app.launcher --host 127.0.0.1 --port 8000"
+call :log "Backend start command: python -m app.launcher with AUTO_TOOL_HOST=%API_HOST%, AUTO_TOOL_PORT=%API_PORT%"
 if /i "%AUTO_TOOL_LAUNCHER_DEBUG%"=="1" goto :debug_server
 
 echo [INFO] Starting local server...
@@ -268,4 +282,22 @@ exit /b 0
 
 :log
 echo [%date% %time%] %~1>>"%LOG_FILE%"
+exit /b 0
+
+:detect_python
+set "CANDIDATE_PYTHON=%~1"
+set "CANDIDATE_ARGS=%~2"
+where "%CANDIDATE_PYTHON%" >nul 2>nul
+if errorlevel 1 exit /b 1
+set "CANDIDATE_VERSION="
+for /f "delims=" %%V in ('%CANDIDATE_PYTHON% %CANDIDATE_ARGS% -c "import sys; print('%%d.%%d.%%d' %% sys.version_info[:3])" 2^>nul') do set "CANDIDATE_VERSION=%%V"
+if not defined CANDIDATE_VERSION exit /b 1
+%CANDIDATE_PYTHON% %CANDIDATE_ARGS% -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 11) else 1)" >nul 2>nul
+if errorlevel 1 (
+  set "PYTHON_UNSUPPORTED_VERSION=%CANDIDATE_VERSION%"
+  exit /b 2
+)
+set "BOOTSTRAP_PYTHON=%CANDIDATE_PYTHON%"
+set "BOOTSTRAP_PYTHON_ARGS=%CANDIDATE_ARGS%"
+set "PYTHON_VERSION=%CANDIDATE_VERSION%"
 exit /b 0

@@ -23,6 +23,33 @@ Choose local Douyin video folder
 
 This release does not auto-download videos, remove watermarks, bypass platform restrictions, auto-login, auto-post, crawl at scale, or sync to cloud. Use it only with videos, music, and assets you have the right to edit, translate, and re-render.
 
+## Local App Data Management
+
+Auto Tool Studio có trang `Settings -> Dữ liệu` để xem dung lượng, tạo backup, inspect/restore backup và dọn cache/log/temp an toàn. Backup mặc định không đưa video output lớn, source video, music folder, `.env`, API key hoặc credential vào file zip.
+
+Tài liệu chi tiết:
+
+- [App Data Backup, Restore & Cleanup](docs/APP_DATA_BACKUP_RESTORE_CLEANUP.md)
+- [Data Management QA Checklist](docs/DATA_MANAGEMENT_QA_CHECKLIST.md)
+
+## Crash Recovery & Job Resume
+
+Auto Tool Studio có Recovery Center tại `/recovery` để phát hiện job bị gián đoạn, reconcile output đã có, resume phần còn lại và tránh ghi đè video đã render xong. App không tự resume khi mở lại; người dùng sẽ chọn hành động trong Recovery Center.
+
+Tài liệu chi tiết:
+
+- [Crash Recovery & Job Resume](docs/CRASH_RECOVERY_JOB_RESUME.md)
+- [Job Recovery QA Checklist](docs/JOB_RECOVERY_QA_CHECKLIST.md)
+
+## Long Batch Queue Control
+
+Auto Tool Studio có cơ chế điều khiển hàng đợi cho batch dài. Người dùng có thể tạm dừng sau video hiện tại, tiếp tục, hủy batch an toàn, retry item lỗi, bỏ qua item, ưu tiên hoặc đổi thứ tự item chưa chạy. Worker ghi `queue_state.json`, `queue_items.json` và `queue_events.log` trong app data và output folder để debug.
+
+Tài liệu chi tiết:
+
+- [Long Batch Queue Control](docs/LONG_BATCH_QUEUE_CONTROL.md)
+- [Long Batch Queue Control QA Checklist](docs/LONG_BATCH_QUEUE_CONTROL_QA_CHECKLIST.md)
+
 ## Douyin Reup Quick Start
 
 Recommended first run:

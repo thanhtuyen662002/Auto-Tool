@@ -16,6 +16,7 @@ const FALLBACK_VERSION = '1.0.0-rc1';
 
 const pageTitles: Array<[string, string]> = [
   ['/onboarding', 'Onboarding'],
+  ['/recovery', 'Khôi phục job'],
   ['/help', 'Trợ giúp'],
   ['/settings/', 'Cài đặt project'],
   ['/settings', 'Cài đặt'],
@@ -85,6 +86,15 @@ export default function StudioLayout() {
               <GlassButton className="min-h-8 px-3 py-1" variant="ghost" onClick={() => void refreshStatus()}><RefreshCw size={14} /> Kiểm tra lại</GlassButton>
               <GlassButton className="min-h-8 px-3 py-1" variant="secondary" onClick={() => navigate('/help')}>Hướng dẫn</GlassButton>
             </div>
+          </div>
+        ) : null}
+        {connected && systemStatus.recoverableJobsCount > 0 ? (
+          <div className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100 lg:mx-6">
+            <div className="flex items-center gap-2">
+              <CircleAlert size={17} />
+              <span>Có {systemStatus.recoverableJobsCount} job bị gián đoạn có thể khôi phục.</span>
+            </div>
+            <GlassButton className="min-h-8 px-3 py-1" variant="secondary" onClick={() => navigate('/recovery')}>Open Recovery Center</GlassButton>
           </div>
         ) : null}
         <div className="studio-fade-in">

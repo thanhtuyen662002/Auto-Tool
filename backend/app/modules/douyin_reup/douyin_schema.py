@@ -58,6 +58,7 @@ class DouyinReupSettings(BaseModel):
     process_mode: str = "all"
     max_videos: int | None = Field(default=None, gt=0)
     selected_video_paths: list[str] = Field(default_factory=list)
+    source_selection_id: str | None = None
     keep_temp: bool = False
     review_subtitles_before_render: bool = True
     auto_render_after_translation: bool = False
@@ -182,6 +183,14 @@ class DouyinReupSettings(BaseModel):
             cleaned.append(path)
             seen.add(path)
         return cleaned
+
+    @field_validator("source_selection_id")
+    @classmethod
+    def clean_source_selection_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
     @model_validator(mode="after")
     def validate_silent_segment_duration(self) -> "DouyinReupSettings":

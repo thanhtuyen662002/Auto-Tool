@@ -11,6 +11,7 @@ import OutputReviewPage from './pages/OutputReviewPage';
 import ProjectAssetsPage from './pages/ProjectAssetsPage';
 import PromptPackPage from './pages/PromptPackPage';
 import RenderQueuePage from './pages/RenderQueuePage';
+import RecoveryCenterPage from './pages/RecoveryCenterPage';
 import RenderSettingsPage from './pages/RenderSettingsPage';
 import ResultPage from './pages/ResultPage';
 import ResultsPage from './pages/ResultsPage';
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="settings/:projectId" element={<RenderSettingsPage />} />
         <Route path="queue/:projectId/:jobId" element={<RenderQueuePage />} />
         <Route path="results" element={<ResultsPage />} />
+        <Route path="recovery" element={<RecoveryCenterPage />} />
         <Route path="results/:projectId/:jobId" element={<ResultPage />} />
         <Route path="results/:jobId" element={<ResultPage />} />
         <Route path="projects/:projectId/review" element={<OutputReviewPage />} />

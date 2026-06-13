@@ -87,3 +87,25 @@ Các đường dẫn gần đây nằm trong `config/recent_paths.json`. Không 
 ## Bản Windows EXE
 
 Chạy `packaging\build_windows_exe.ps1`. File EXE dùng launcher hiện tại, phục vụ frontend build và tự mở trình duyệt theo Local App settings.
+
+## Backup, restore và cleanup dữ liệu local
+
+Trong app, mở `Settings -> Dữ liệu` để:
+
+- Xem dung lượng config, database, outputs, logs, cache, temp và backups.
+- Tạo backup zip kèm manifest.
+- Inspect backup trước khi restore.
+- Tạo pre-restore backup trước khi ghi dữ liệu.
+- Preview cleanup trước khi xóa log/cache/temp.
+
+Backup mặc định không chứa source video, output video lớn, music folder, `.env`, API key hoặc credential. Cleanup không xóa database, config, source video hoặc music folder.
+
+Xem thêm `docs/APP_DATA_BACKUP_RESTORE_CLEANUP.md`.
+
+## Crash recovery và resume job
+
+Nếu app bị tắt giữa batch, lần mở sau backend sẽ đánh dấu job cũ là bị gián đoạn và hiển thị trong Recovery Center. Mở `http://127.0.0.1:8000/recovery` để reconcile output, resume an toàn, retry failed/interrupted hoặc đánh dấu job đã hủy.
+
+App không tự chạy tiếp khi mở lại để tránh bất ngờ. Resume mặc định bỏ qua output đã tồn tại và không ghi đè video cũ.
+
+Xem thêm `docs/CRASH_RECOVERY_JOB_RESUME.md`.
