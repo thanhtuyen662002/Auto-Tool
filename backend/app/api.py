@@ -282,6 +282,8 @@ from app.schemas.api_schema import (
     TimelineTemplateItem,
     TimelineTemplatesResponse,
     MarkPostedRequest,
+    UpdateCheckResponse,
+    UpdateDownloadResponse,
     UpdateOutputReviewRequest,
     UpdateOutputReviewResponse,
     UpdateContentItemRequest,
@@ -311,6 +313,7 @@ from app.utils.dependency_manager import (
 )
 from app.utils.local_dialog import LocalDialogError, browse_local_path
 from app.utils.path_utils import resolve_path
+from app.utils.updater import get_cached_update_info, download_and_prepare_update
 from app.version import APP_VERSION
 
 
@@ -411,6 +414,35 @@ def create_app() -> FastAPI:
             ocr_available=report.ocr_available,
             ocr_message=report.ocr_message,
             warnings=list(report.warnings),
+        )
+
+    @app.get("/api/system/update-check", response_model=UpdateCheckResponse)
+    def system_update_check(force: bool = False) -> UpdateCheckResponse:
+        info = get_cached_update_info(force=force)
+        return UpdateCheckResponse(
+            has_update=info.has_update,
+            current_version=info.current_version,
+            latest_version=info.latest_version,
+            download_url=info.download_url,
+            html_url=info.html_url,
+            release_name=info.release_name,
+            release_notes=info.release_notes,
+            error=info.error,
+        )
+
+    @app.post("/api/system/update-download", response_model=UpdateDownloadResponse)
+    def system_update_download() -> UpdateDownloadResponse:
+        info = get_cached_update_info(force=False)
+        if not info.has_update:
+            raise HTTPException(status_code=400, detail="Không có phiên bản mới để tải.")
+        res = download_and_prepare_update(info)
+        if not res.success:
+            raise HTTPException(status_code=500, detail=res.error or "Tải bản cập nhật thất bại.")
+        return UpdateDownloadResponse(
+            success=True,
+            extract_dir=res.extract_dir,
+            updater_script=res.updater_script,
+            message="Đã tải và chuẩn bị bản cập nhật. Vui lòng đóng ứng dụng để tự động cập nhật.",
         )
 
     @app.get("/api/local-app/config", response_model=LocalAppConfig)

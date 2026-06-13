@@ -984,3 +984,33 @@ export function bulkUpdateSegmentReview(
     }),
   });
 }
+
+export interface UpdateCheckResponse {
+  has_update: boolean;
+  current_version: string;
+  latest_version: string;
+  download_url?: string | null;
+  html_url?: string | null;
+  release_name?: string | null;
+  release_notes?: string | null;
+  error?: string | null;
+}
+
+export interface UpdateDownloadResponse {
+  success: boolean;
+  extract_dir?: string | null;
+  updater_script?: string | null;
+  message: string;
+  error?: string | null;
+}
+
+export function checkSystemUpdate(force = false): Promise<UpdateCheckResponse> {
+  return request<UpdateCheckResponse>(`/api/system/update-check?force=${force}`);
+}
+
+export function downloadSystemUpdate(): Promise<UpdateDownloadResponse> {
+  return request<UpdateDownloadResponse>('/api/system/update-download', {
+    method: 'POST',
+  });
+}
+

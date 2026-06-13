@@ -670,6 +670,25 @@ class HealthResponse(BaseModel):
     recoverable_jobs_count: int = 0
 
 
+class UpdateCheckResponse(BaseModel):
+    has_update: bool
+    current_version: str
+    latest_version: str
+    download_url: str | None = None
+    html_url: str | None = None
+    release_name: str | None = None
+    release_notes: str | None = None
+    error: str | None = None
+
+
+class UpdateDownloadResponse(BaseModel):
+    success: bool
+    extract_dir: str | None = None
+    updater_script: str | None = None
+    message: str = ""
+    error: str | None = None
+
+
 class ErrorResponse(BaseModel):
     detail: str
 

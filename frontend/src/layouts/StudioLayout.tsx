@@ -11,6 +11,7 @@ import StudioTopBar from '../components/studio/StudioTopBar';
 import type { StudioBreadcrumbItem } from '../components/studio/StudioBreadcrumbs';
 import { getSystemStatus, offlineStatus, type NormalizedSystemStatus } from '../services/healthApi';
 import { applyAppearanceSettings, getLocalUiSettings } from '../utils/localSettings';
+import UpdateBanner from '../components/UpdateBanner';
 
 const FALLBACK_VERSION = '1.0.0-rc1';
 
@@ -76,6 +77,7 @@ export default function StudioLayout() {
           onHelp={() => navigate('/help')}
           onStatus={() => setStatusOpen(true)}
         />
+        <UpdateBanner connected={connected} />
         {!connected && !statusLoading ? (
           <div className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm text-amber-100 lg:mx-6">
             <div className="flex items-center gap-2">
