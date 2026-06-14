@@ -25,8 +25,8 @@ const workflows = [
     accent: 'text-pink-200 bg-pink-300/10 border-pink-300/30',
   },
   {
-    title: 'Video Affiliate',
-    subtitle: 'Product Video Builder',
+    title: 'Video tiếp thị liên kết',
+    subtitle: 'Dựng video sản phẩm',
     description: '1. Import sản phẩm Shopee/TikTok Shop\n2. Tạo project cấu hình\n3. Thêm video nguồn\n4. Chạy render hàng loạt',
     preset: 'UGC Reviewer Natural',
     to: '/projects/new',
@@ -48,21 +48,21 @@ const workflows = [
 
 export default function WorkflowGuideCards() {
   return (
-    <section className="grid gap-4 xl:grid-cols-4" aria-label="Chọn workflow">
+    <section className="grid gap-4 xl:grid-cols-4" aria-label="Chọn quy trình">
       {workflows.map(({ icon: Icon, ...workflow }) => (
-        <GlassCard hover strong className="flex min-h-[272px] flex-col p-5" key={workflow.title}>
+        <GlassCard hover strong className="flex min-h-[218px] flex-col p-4" key={workflow.title}>
           <div className={`grid h-11 w-11 place-items-center rounded-md border ${workflow.accent}`}>
             <Icon size={21} />
           </div>
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold text-white">{workflow.title}</h2>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold text-white">{workflow.title}</h2>
             <span className="text-xs text-slate-500">{workflow.subtitle}</span>
           </div>
-          <p className="mt-2 flex-1 text-sm leading-6 text-slate-300 whitespace-pre-line">{workflow.description}</p>
+          <p className="mt-2 max-h-24 flex-1 overflow-hidden text-sm leading-6 text-slate-300 whitespace-pre-line">{workflow.description}</p>
           <div className="mt-4">
             <GlassBadge variant="neutral">Gợi ý: {workflow.preset}</GlassBadge>
           </div>
-          <Link className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-cyan-200 hover:text-cyan-100" to={workflow.to}>
+          <Link className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-200 hover:text-cyan-100" to={workflow.to}>
             {workflow.action}
             <ArrowRight size={16} />
           </Link>

@@ -329,6 +329,78 @@ export interface ScanResponse {
   media: MediaFile[];
 }
 
+export interface DouyinDownloaderStatusResponse {
+  browser_open: boolean;
+  logged_in: boolean;
+  chrome_path?: string | null;
+  driver_path?: string | null;
+  profile_dir: string;
+  current_url?: string | null;
+  page_title?: string | null;
+  message: string;
+}
+
+export interface DouyinDownloaderOpenRequest {
+  start_url?: string | null;
+}
+
+export interface DouyinDownloaderCloseResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface DouyinDownloaderScanRequest {
+  channel_url: string;
+  max_scrolls: number;
+}
+
+export interface DouyinDownloaderDownloadRequest {
+  links: string[];
+  output_folder: string;
+  skip_existing: boolean;
+}
+
+export interface DouyinDownloaderOutputItem {
+  link: string;
+  title?: string | null;
+  path?: string | null;
+  status: 'success' | 'failed' | 'skipped' | 'paused';
+  message: string;
+}
+
+export interface DouyinDownloaderJobResponse {
+  job_id: string;
+  job_type: 'scan' | 'download';
+  status: 'queued' | 'running' | 'paused' | 'completed' | 'failed';
+  current_step: string;
+  progress: number;
+  total_items: number;
+  completed_items: number;
+  failed_items: number;
+  output_folder?: string | null;
+  skip_existing: boolean;
+  pause_requested: boolean;
+  links: string[];
+  outputs: DouyinDownloaderOutputItem[];
+  logs: string[];
+  errors: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DouyinDownloaderHistoryResponse {
+  recent_channel_urls: string[];
+  recent_output_folders: string[];
+  recent_jobs: DouyinDownloaderJobResponse[];
+  downloaded_links: Record<string, DouyinDownloaderOutputItem>;
+}
+
+export interface DouyinDownloaderJobActionResponse {
+  success: boolean;
+  message: string;
+  job: DouyinDownloaderJobResponse;
+}
+
 export interface DouyinVideoItem {
   path: string;
   filename: string;

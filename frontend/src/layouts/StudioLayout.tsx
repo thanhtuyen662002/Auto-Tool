@@ -22,6 +22,7 @@ const pageTitles: Array<[string, string]> = [
   ['/settings/', 'Cài đặt project'],
   ['/settings', 'Cài đặt'],
   ['/app-settings', 'Cài đặt'],
+  ['/douyin-download', 'Tải video Douyin'],
   ['/silent-mode', 'Video không thoại'],
   ['/douyin-reup', 'Video có thoại'],
   ['/subtitle-review', 'Sửa phụ đề'],

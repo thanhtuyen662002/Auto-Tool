@@ -1,4 +1,4 @@
-import { Captions, Clapperboard, FolderCheck, LayoutDashboard, RotateCcw, Settings, Sparkles, Waves, X, Inbox, FolderPlus } from 'lucide-react';
+import { Captions, Clapperboard, Download, FolderCheck, LayoutDashboard, RotateCcw, Settings, Sparkles, Waves, X, Inbox, FolderPlus } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import GlassBadge from '../glass/GlassBadge';
 
@@ -15,6 +15,7 @@ const generalItems: SidebarItem[] = [
 ];
 
 const studioItems: SidebarItem[] = [
+  { to: '/douyin-download', label: 'Tải video Douyin', helper: 'Tải hàng loạt video Douyin', icon: Download },
   { to: '/douyin-reup', label: 'Reup có thoại', helper: 'Xử lý hàng loạt có thoại', icon: Clapperboard },
   { to: '/silent-mode', label: 'Reup không thoại', helper: 'Xử lý hàng loạt không thoại', icon: Waves },
   { to: '/projects/new', label: 'Tạo Video Affiliate', helper: 'Tạo video sản phẩm từ link', icon: FolderPlus },
@@ -43,7 +44,7 @@ export default function StudioSidebar({
 }) {
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-white/10 bg-[#080d19]/92 p-4 backdrop-blur-xl transition-transform lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      className={`fixed inset-y-0 left-0 z-40 flex w-[268px] flex-col border-r border-white/10 bg-[#080d19]/92 p-4 backdrop-blur-xl transition-transform lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
       aria-label="Điều hướng chính"
     >
       <div className="flex items-center justify-between gap-3 px-2 py-2">
@@ -152,4 +153,3 @@ export default function StudioSidebar({
     </aside>
   );
 }
-

@@ -16,6 +16,7 @@ def test_health_reports_douyin_reup_v1_rc_version() -> None:
     assert response.json()["version"] == APP_VERSION
     assert response.json()["capabilities"] == {
         "douyin_reup": True,
+        "douyin_downloader": True,
         "silent_immersive_mode": True,
     }
 

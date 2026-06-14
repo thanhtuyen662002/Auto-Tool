@@ -11,33 +11,33 @@ type Props = {
 };
 
 const labels: Record<SystemStatusValue | 'connected' | 'offline' | 'unknown', string> = {
-  ready: 'Sẵn sàng',
-  missing: 'Cần cấu hình',
-  optional: 'Không bắt buộc',
-  unknown: 'Không xác định',
-  connected: 'Đang kết nối',
-  offline: 'Ngoại tuyến (Offline)',
+  ready: 'Sẵn',
+  missing: 'Thiếu',
+  optional: 'Tùy chọn',
+  unknown: 'Chưa rõ',
+  connected: 'Kết nối',
+  offline: 'Ngoại tuyến',
 };
 
 const descriptions = {
-  backend: 'Server xử lý local cho scan, render, OCR, TTS và export.',
-  ffmpeg: 'Cần để đọc, ghép, burn subtitle và render video.',
-  ffprobe: 'Cần để đọc metadata video trước khi xử lý.',
-  translation: 'Dùng để dịch phụ đề hoặc caption sang tiếng Việt.',
+  backend: 'Máy chủ xử lý cục bộ cho quét, render, nhận diện chữ, giọng đọc và xuất bản.',
+  ffmpeg: 'Cần để đọc, ghép, chèn phụ đề và render video.',
+  ffprobe: 'Cần để đọc thông tin video trước khi xử lý.',
+  translation: 'Dùng để dịch phụ đề hoặc lời dẫn sang tiếng Việt.',
   ocr: 'Chỉ cần khi video có chữ Trung trên màn hình.',
-  tts: 'Chỉ cần khi tạo voiceover tiếng Việt.',
-  outputFolder: 'Nơi lưu video, subtitle, log và export pack.',
-  localServer: 'Backend phục vụ frontend production build và API trên cùng một cổng local.',
+  tts: 'Chỉ cần khi tạo giọng đọc tiếng Việt.',
+  outputFolder: 'Nơi lưu video, phụ đề, nhật ký và gói xuất bản.',
+  localServer: 'Máy chủ cục bộ phục vụ giao diện và API trên cùng một cổng.',
 };
 
 export default function StudioSystemStatus({ status, loading, onRefresh }: Props) {
   const items = [
-    { key: 'backend', label: 'Backend', value: status.backend === 'connected' ? 'connected' : 'offline', description: descriptions.backend },
+    { key: 'backend', label: 'Bộ xử lý', value: status.backend === 'connected' ? 'connected' : 'offline', description: descriptions.backend },
     { key: 'ffmpeg', label: 'FFmpeg', value: status.ffmpeg, description: descriptions.ffmpeg },
     { key: 'ffprobe', label: 'ffprobe', value: status.ffprobe, description: descriptions.ffprobe },
     { key: 'translation', label: 'Dịch thuật', value: status.translation, description: descriptions.translation },
-    { key: 'ocr', label: 'Nhận diện chữ (OCR)', value: status.ocr, description: descriptions.ocr },
-    { key: 'tts', label: 'Giọng đọc (TTS)', value: status.tts, description: descriptions.tts },
+    { key: 'ocr', label: 'Nhận diện chữ', value: status.ocr, description: descriptions.ocr },
+    { key: 'tts', label: 'Giọng đọc', value: status.tts, description: descriptions.tts },
     { key: 'outputFolder', label: 'Thư mục đầu ra', value: status.outputFolder, description: descriptions.outputFolder },
     {
       key: 'localServer',
@@ -48,35 +48,34 @@ export default function StudioSystemStatus({ status, loading, onRefresh }: Props
   ] as const;
 
   return (
-    <GlassCard strong className="p-5">
+    <GlassCard strong className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-md border border-cyan-300/25 bg-cyan-300/10 text-cyan-200">
+          <div className="grid h-9 w-9 place-items-center rounded-md border border-cyan-300/25 bg-cyan-300/10 text-cyan-200">
             <Server size={18} />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Trạng thái hệ thống</h2>
-            <p className="mt-1 text-sm text-slate-400">Trạng thái hệ thống được chuẩn hóa từ backend health và các phần phụ thuộc.</p>
+            <h2 className="text-base font-semibold text-white">Trạng thái hệ thống</h2>
+            <p className="mt-1 text-xs text-slate-400">Kiểm tra nhanh các thành phần cần để render.</p>
           </div>
         </div>
         {onRefresh ? (
-          <GlassButton variant="secondary" loading={loading} onClick={onRefresh}>
+          <GlassButton variant="secondary" className="min-h-9 px-3 text-xs" loading={loading} onClick={onRefresh}>
             <RefreshCw size={15} />
             Kiểm tra lại
           </GlassButton>
         ) : null}
       </div>
-      <div className="mt-5 grid gap-3 md:grid-cols-2">
+      <div className="mt-4 grid gap-2 md:grid-cols-2">
         {items.map((item) => (
-          <div className="rounded-md border border-white/10 bg-black/15 p-4" key={item.key}>
+          <div className="min-w-0 rounded-md border border-white/10 bg-black/15 p-2.5" key={item.key} title={item.description}>
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 font-semibold text-white">
+              <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-white">
                 <StatusIcon value={item.value} />
-                {item.label}
+                <span className="truncate">{item.label}</span>
               </div>
               <GlassBadge variant={badgeVariant(item.value)}>{labels[item.value] ?? item.value}</GlassBadge>
             </div>
-            <p className="mt-2 text-sm leading-6 text-slate-400">{item.description}</p>
           </div>
         ))}
       </div>

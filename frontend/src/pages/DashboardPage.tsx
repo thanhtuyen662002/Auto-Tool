@@ -1,4 +1,4 @@
-import { ArrowRight, Sparkles, ShoppingBag } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { listProjects } from '../api/client';
@@ -63,13 +63,13 @@ export default function DashboardPage() {
 
   return (
     <main className="studio-page grid gap-6">
-      <section className="py-3 sm:py-6">
+      <section className="py-2 sm:py-4">
         <GlassBadge variant="ready">Auto Tool Studio</GlassBadge>
-        <h1 className="mt-4 max-w-3xl text-3xl font-semibold leading-tight text-white sm:text-4xl">
+        <h1 className="mt-4 max-w-3xl text-2xl font-semibold leading-tight text-white sm:text-3xl">
           Bắt đầu tạo video đầu tiên của bạn
         </h1>
-        <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300">
-          Chọn workflow phù hợp, Auto Tool sẽ lo phần xử lý phía sau và chỉ đưa các quyết định cần thiết ra trước bạn.
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+          Chọn quy trình phù hợp, kiểm tra nhanh hệ thống và mở lại công việc gần đây.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link to="/douyin-reup">
@@ -110,27 +110,6 @@ export default function DashboardPage() {
           </div>
         </GlassCard>
       ) : null}
-
-      <GlassCard hover strong className="p-5 border-purple-500/30">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-purple-300/25 bg-purple-300/10 text-purple-200">
-              <ShoppingBag size={18} />
-            </div>
-            <div>
-              <h2 className="font-semibold text-white">Tạo Video Affiliate</h2>
-              <p className="mt-1 text-sm text-slate-300">
-                Tạo video từ nhiều video nguồn phù hợp Shopee/TikTok Shop
-              </p>
-            </div>
-          </div>
-          <Link to="/projects/new">
-            <GlassButton variant="secondary" className="border-purple-500/30 text-purple-200 hover:text-white hover:bg-purple-500/10">
-              Tạo dự án
-            </GlassButton>
-          </Link>
-        </div>
-      </GlassCard>
 
       <WorkflowGuideCards />
       <StudioQuickActions />

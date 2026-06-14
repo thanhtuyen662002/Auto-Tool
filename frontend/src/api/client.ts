@@ -62,6 +62,14 @@ import type {
   BrowsePathRequest,
   BrowsePathResponse,
   SystemDependencyStatusResponse,
+  DouyinDownloaderCloseResponse,
+  DouyinDownloaderDownloadRequest,
+  DouyinDownloaderHistoryResponse,
+  DouyinDownloaderJobActionResponse,
+  DouyinDownloaderJobResponse,
+  DouyinDownloaderOpenRequest,
+  DouyinDownloaderScanRequest,
+  DouyinDownloaderStatusResponse,
   DouyinApplyPresetRequest,
   DouyinApplyPresetResponse,
   DouyinOneClickBatchRequest,
@@ -265,6 +273,69 @@ export function scanDouyinReupFolder(sourceFolder: string): Promise<DouyinReupSc
   return request<DouyinReupScanResponse>('/api/douyin-reup/scan', {
     method: 'POST',
     body: JSON.stringify({ source_folder: sourceFolder }),
+  });
+}
+
+export function getDouyinDownloaderStatus(): Promise<DouyinDownloaderStatusResponse> {
+  return request<DouyinDownloaderStatusResponse>('/api/douyin-downloader/status');
+}
+
+export function getDouyinDownloaderHistory(): Promise<DouyinDownloaderHistoryResponse> {
+  return request<DouyinDownloaderHistoryResponse>('/api/douyin-downloader/history');
+}
+
+export function openDouyinDownloaderBrowser(
+  payload: DouyinDownloaderOpenRequest = {},
+): Promise<DouyinDownloaderStatusResponse> {
+  return request<DouyinDownloaderStatusResponse>('/api/douyin-downloader/open-browser', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function checkDouyinDownloaderLogin(): Promise<DouyinDownloaderStatusResponse> {
+  return request<DouyinDownloaderStatusResponse>('/api/douyin-downloader/check-login', {
+    method: 'POST',
+  });
+}
+
+export function closeDouyinDownloaderBrowser(): Promise<DouyinDownloaderCloseResponse> {
+  return request<DouyinDownloaderCloseResponse>('/api/douyin-downloader/close-browser', {
+    method: 'POST',
+  });
+}
+
+export function startDouyinDownloaderScan(
+  payload: DouyinDownloaderScanRequest,
+): Promise<DouyinDownloaderJobResponse> {
+  return request<DouyinDownloaderJobResponse>('/api/douyin-downloader/scan', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function startDouyinDownloaderDownload(
+  payload: DouyinDownloaderDownloadRequest,
+): Promise<DouyinDownloaderJobResponse> {
+  return request<DouyinDownloaderJobResponse>('/api/douyin-downloader/download', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getDouyinDownloaderJob(jobId: string): Promise<DouyinDownloaderJobResponse> {
+  return request<DouyinDownloaderJobResponse>(`/api/douyin-downloader/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export function pauseDouyinDownloaderJob(jobId: string): Promise<DouyinDownloaderJobActionResponse> {
+  return request<DouyinDownloaderJobActionResponse>(`/api/douyin-downloader/jobs/${encodeURIComponent(jobId)}/pause`, {
+    method: 'POST',
+  });
+}
+
+export function resumeDouyinDownloaderJob(jobId: string): Promise<DouyinDownloaderJobActionResponse> {
+  return request<DouyinDownloaderJobActionResponse>(`/api/douyin-downloader/jobs/${encodeURIComponent(jobId)}/resume`, {
+    method: 'POST',
   });
 }
 

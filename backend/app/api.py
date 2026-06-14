@@ -30,6 +30,18 @@ from app.modules.douyin_reup.douyin_folder_scanner import DouyinFolderScanner
 from app.modules.douyin_reup.douyin_render_pipeline import DouyinRenderPipeline
 from app.modules.douyin_reup.douyin_reup_service import DouyinReupService, build_retry_cache
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
+from app.modules.douyin_downloader import (
+    DouyinDownloaderCloseResponse,
+    DouyinDownloaderDownloadRequest,
+    DouyinDownloaderHistoryResponse,
+    DouyinDownloaderJobActionResponse,
+    DouyinDownloaderJobResponse,
+    DouyinDownloaderOpenRequest,
+    DouyinDownloaderScanRequest,
+    DouyinDownloaderService,
+    DouyinDownloaderStatusResponse,
+)
+from app.modules.douyin_downloader.downloader_service import DouyinDownloaderError
 from app.modules.douyin_reup_presets import DouyinReupPresetService
 from app.modules.hardsub_ocr import HardSubOCRService
 from app.modules.final_output_qa import (
@@ -366,6 +378,7 @@ def create_app() -> FastAPI:
     queue_control_service = QueueControlService(queue_state_service)
     queue_priority_service = QueuePriorityService(queue_state_service)
     queue_retry_service = QueueRetryService(queue_state_service)
+    douyin_downloader_service = DouyinDownloaderService()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_allowed_cors_origins(),
@@ -395,7 +408,7 @@ def create_app() -> FastAPI:
         return HealthResponse(
             status="ok",
             version=_APP_VERSION,
-            capabilities={"douyin_reup": True, "silent_immersive_mode": True},
+            capabilities={"douyin_reup": True, "douyin_downloader": True, "silent_immersive_mode": True},
             recoverable_jobs_count=job_recovery_service.count_recoverable_jobs(),
         )
 
@@ -840,6 +853,87 @@ def create_app() -> FastAPI:
             if path.exists() and path.is_file():
                 return FileResponse(path, media_type="image/jpeg", filename=path.name)
         raise HTTPException(status_code=404, detail="Chưa có thumbnail cho media này.")
+
+    @app.get("/api/douyin-downloader/status", response_model=DouyinDownloaderStatusResponse)
+    def get_douyin_downloader_status() -> DouyinDownloaderStatusResponse:
+        return douyin_downloader_service.get_status()
+
+    @app.get("/api/douyin-downloader/history", response_model=DouyinDownloaderHistoryResponse)
+    def get_douyin_downloader_history() -> DouyinDownloaderHistoryResponse:
+        return douyin_downloader_service.get_history()
+
+    @app.post("/api/douyin-downloader/open-browser", response_model=DouyinDownloaderStatusResponse)
+    def open_douyin_downloader_browser(request: DouyinDownloaderOpenRequest) -> DouyinDownloaderStatusResponse:
+        try:
+            return douyin_downloader_service.open_browser(request.start_url)
+        except DouyinDownloaderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể mở Chrome Douyin: {exc}") from exc
+
+    @app.post("/api/douyin-downloader/check-login", response_model=DouyinDownloaderStatusResponse)
+    def check_douyin_downloader_login() -> DouyinDownloaderStatusResponse:
+        try:
+            return douyin_downloader_service.check_login()
+        except DouyinDownloaderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể kiểm tra đăng nhập Douyin: {exc}") from exc
+
+    @app.post("/api/douyin-downloader/close-browser", response_model=DouyinDownloaderCloseResponse)
+    def close_douyin_downloader_browser() -> DouyinDownloaderCloseResponse:
+        try:
+            message = douyin_downloader_service.close_browser()
+            return DouyinDownloaderCloseResponse(success=True, message=message)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể đóng Chrome Douyin: {exc}") from exc
+
+    @app.post("/api/douyin-downloader/scan", response_model=DouyinDownloaderJobResponse)
+    def start_douyin_downloader_scan(request: DouyinDownloaderScanRequest) -> DouyinDownloaderJobResponse:
+        try:
+            return douyin_downloader_service.start_scan(request.channel_url, request.max_scrolls)
+        except DouyinDownloaderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể bắt đầu quét đường dẫn Douyin: {exc}") from exc
+
+    @app.post("/api/douyin-downloader/download", response_model=DouyinDownloaderJobResponse)
+    def start_douyin_downloader_download(request: DouyinDownloaderDownloadRequest) -> DouyinDownloaderJobResponse:
+        try:
+            return douyin_downloader_service.start_download(
+                links=request.links,
+                output_folder=request.output_folder,
+                skip_existing=request.skip_existing,
+            )
+        except DouyinDownloaderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể bắt đầu tải video Douyin: {exc}") from exc
+
+    @app.get("/api/douyin-downloader/jobs/{job_id}", response_model=DouyinDownloaderJobResponse)
+    def get_douyin_downloader_job(job_id: str) -> DouyinDownloaderJobResponse:
+        job = douyin_downloader_service.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Không tìm thấy tác vụ tải Douyin.")
+        return job
+
+    @app.post("/api/douyin-downloader/jobs/{job_id}/pause", response_model=DouyinDownloaderJobActionResponse)
+    def pause_douyin_downloader_job(job_id: str) -> DouyinDownloaderJobActionResponse:
+        try:
+            return douyin_downloader_service.pause_job(job_id)
+        except DouyinDownloaderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể dừng tác vụ tải Douyin: {exc}") from exc
+
+    @app.post("/api/douyin-downloader/jobs/{job_id}/resume", response_model=DouyinDownloaderJobActionResponse)
+    def resume_douyin_downloader_job(job_id: str) -> DouyinDownloaderJobActionResponse:
+        try:
+            return douyin_downloader_service.resume_job(job_id)
+        except DouyinDownloaderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể tiếp tục tác vụ tải Douyin: {exc}") from exc
 
     @app.post("/api/douyin-reup/scan", response_model=DouyinReupScanResponse)
     def scan_douyin_reup_folder(request: DouyinReupScanRequest) -> DouyinReupScanResponse:

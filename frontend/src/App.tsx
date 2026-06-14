@@ -3,6 +3,7 @@ import StudioLayout from './layouts/StudioLayout';
 import ContentManagerPage from './pages/ContentManagerPage';
 import CreateProjectPage from './pages/CreateProjectPage';
 import DashboardPage from './pages/DashboardPage';
+import DouyinDownloadPage from './pages/DouyinDownloadPage';
 import DouyinReupPage from './pages/DouyinReupPage';
 import HelpPage from './pages/HelpPage';
 import ImportInboxPage from './pages/ImportInboxPage';
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="projects/:projectId/prompt-pack" element={<PromptPackPage />} />
         <Route path="projects/:projectId/content" element={<ContentManagerPage />} />
         <Route path="import-inbox" element={<ImportInboxPage />} />
+        <Route path="douyin-download" element={<DouyinDownloadPage />} />
         <Route path="douyin-reup" element={<DouyinReupPage initialWorkflow="douyin" />} />
         <Route path="silent-mode" element={<SilentModePage />} />
         <Route path="subtitle-review" element={<SubtitleReviewPage />} />

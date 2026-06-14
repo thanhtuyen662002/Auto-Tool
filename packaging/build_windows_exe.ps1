@@ -192,6 +192,10 @@ try {
     --collect-all torchvision `
     --collect-all scipy `
     --collect-all skimage `
+    --collect-all selenium `
+    --collect-all webdriver_manager `
+    --collect-all yt_dlp `
+    --hidden-import requests `
     --hidden-import huggingface_hub `
     --hidden-import huggingface_hub.utils `
     --hidden-import onnxruntime `

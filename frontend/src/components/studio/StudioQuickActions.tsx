@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import GlassCard from '../glass/GlassCard';
 
 const actions = [
-  { label: 'Video có thoại', detail: 'Dịch và render Douyin Reup', to: '/douyin-reup', icon: Clapperboard },
-  { label: 'Video không thoại', detail: 'Caption immersive', to: '/silent-mode', icon: Waves },
-  { label: 'Sửa phụ đề', detail: 'Review, rút gọn, approve', to: '/subtitle-review', icon: Captions },
-  { label: 'Kết quả gần đây', detail: 'Gallery và export pack', to: '/results', icon: FolderCheck },
-  { label: 'Trợ giúp', detail: 'Chọn workflow phù hợp', to: '/help', icon: HelpCircle },
+  { label: 'Video có thoại', detail: 'Dịch và render Douyin', to: '/douyin-reup', icon: Clapperboard },
+  { label: 'Video không thoại', detail: 'Chú thích theo cảnh', to: '/silent-mode', icon: Waves },
+  { label: 'Sửa phụ đề', detail: 'Xem lại, rút gọn, duyệt', to: '/subtitle-review', icon: Captions },
+  { label: 'Kết quả gần đây', detail: 'Thư viện và gói xuất bản', to: '/results', icon: FolderCheck },
+  { label: 'Trợ giúp', detail: 'Chọn quy trình phù hợp', to: '/help', icon: HelpCircle },
 ];
 
 export default function StudioQuickActions() {

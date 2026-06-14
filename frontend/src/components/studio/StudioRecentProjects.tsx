@@ -18,15 +18,15 @@ export default function StudioRecentProjects({
   onPageChange: (page: number) => void;
 }) {
   return (
-    <GlassCard strong className="p-5 flex flex-col justify-between min-h-[420px]">
+    <GlassCard strong className="flex flex-col p-5">
       <div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-semibold text-white">Tiếp tục công việc gần đây</h2>
-            <p className="mt-1 text-sm text-slate-400">Mở lại project hoặc bắt đầu batch mới nếu chưa có dữ liệu.</p>
+            <p className="mt-1 text-sm text-slate-400">Mở lại dự án hoặc bắt đầu lô mới.</p>
           </div>
           <Link to="/douyin-reup">
-            <GlassButton variant="secondary" className="min-h-9 px-3 text-xs">Tạo batch mới</GlassButton>
+            <GlassButton variant="secondary" className="min-h-9 px-3 text-xs">Tạo lô mới</GlassButton>
           </Link>
         </div>
 
@@ -50,11 +50,11 @@ export default function StudioRecentProjects({
         ) : (
           <div className="mt-4">
             <GlassEmptyState
-              title="Chưa có project gần đây"
-              message="Hãy chạy Video có thoại hoặc Video không thoại để tạo project và kết quả đầu tiên."
+              title="Chưa có dự án gần đây"
+              message="Hãy chạy Video có thoại hoặc Video không thoại để tạo dự án và kết quả đầu tiên."
               action={
                 <Link to="/douyin-reup">
-                  <GlassButton variant="primary">Tạo batch đầu tiên</GlassButton>
+                  <GlassButton variant="primary">Tạo lô đầu tiên</GlassButton>
                 </Link>
               }
             />
@@ -62,12 +62,9 @@ export default function StudioRecentProjects({
         )}
       </div>
 
-      <GlassPagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={onPageChange}
-        className="mt-4"
-      />
+      {totalPages > 1 ? (
+        <GlassPagination currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} className="mt-4" />
+      ) : null}
     </GlassCard>
   );
 }
