@@ -12,6 +12,7 @@ import {
   updateProductDraft,
 } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
+import GlassModal from '../components/glass/GlassModal';
 import ProductDraftDetail from '../components/productDrafts/ProductDraftDetail';
 import type {
   CreateProjectFromDraftRequest,
@@ -23,6 +24,9 @@ import type {
 
 type StatusFilter = 'all' | ProductDraftStatus;
 type SourceFilter = 'all' | 'shopee' | 'manual';
+type DeleteConfirmState =
+  | { kind: 'draft'; draftId: string; title: string }
+  | { kind: 'archived'; count: number };
 
 const STATUS_FILTERS: StatusFilter[] = ['all', 'new', 'reviewed', 'applied', 'archived'];
 const SOURCE_FILTERS: SourceFilter[] = ['all', 'shopee', 'manual'];
@@ -40,6 +44,7 @@ export default function ImportInboxPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -119,19 +124,29 @@ export default function ImportInboxPage() {
     }, 'Đã lưu trữ nháp.');
   }
 
-  async function handleDeleteDraft(draftId: string) {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn bản nháp này?')) return;
-    await runAction(async () => {
-      await deleteProductDraft(draftId);
-      setSelectedDraft((current) => (current?.id === draftId ? null : current));
-    }, 'Đã xóa nháp.');
+  function handleDeleteDraft(draftId: string) {
+    const draft = drafts.find((item) => item.id === draftId);
+    setDeleteConfirm({ kind: 'draft', draftId, title: draft?.title || 'bản nháp này' });
   }
 
-  async function handleClearArchived() {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn tất cả bản nháp đã lưu trữ?')) return;
-    await runAction(async () => {
-      await clearArchivedProductDrafts();
-    }, 'Đã dọn dẹp các bản nháp lưu trữ.');
+  function handleClearArchived() {
+    setDeleteConfirm({ kind: 'archived', count: summary.archived });
+  }
+
+  async function confirmDelete() {
+    if (!deleteConfirm) return;
+    if (deleteConfirm.kind === 'draft') {
+      const draftId = deleteConfirm.draftId;
+      await runAction(async () => {
+        await deleteProductDraft(draftId);
+        setSelectedDraft((current) => (current?.id === draftId ? null : current));
+      }, 'Đã xóa nháp.');
+    } else {
+      await runAction(async () => {
+        await clearArchivedProductDrafts();
+      }, 'Đã dọn dẹp các bản nháp lưu trữ.');
+    }
+    setDeleteConfirm(null);
   }
 
   async function handleApply(projectId: string, selectedAssetIds: string[] = []) {
@@ -243,6 +258,54 @@ export default function ImportInboxPage() {
           </section>
         )}
       </div>
+
+      <GlassModal
+        open={deleteConfirm !== null}
+        title={deleteConfirm?.kind === 'archived' ? 'Xác nhận xóa nháp lưu trữ' : 'Xác nhận xóa bản nháp'}
+        onClose={() => {
+          if (!saving) setDeleteConfirm(null);
+        }}
+      >
+        <div className="space-y-4">
+          {deleteConfirm?.kind === 'archived' ? (
+            <>
+              <p className="text-sm leading-6 text-slate-200">
+                Bạn có chắc chắn muốn xóa vĩnh viễn {deleteConfirm.count} bản nháp đã lưu trữ?
+              </p>
+              <p className="rounded-md border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                Hành động này chỉ xóa các bản nháp đang ở trạng thái lưu trữ và không thể hoàn tác.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm leading-6 text-slate-200">
+                Bạn có chắc chắn muốn xóa vĩnh viễn bản nháp <strong>{deleteConfirm?.title}</strong>?
+              </p>
+              <p className="rounded-md border border-rose-300/25 bg-rose-300/10 px-3 py-2 text-xs leading-5 text-rose-100">
+                Sau khi xóa, dữ liệu sản phẩm đã nhập từ Shopee Extension sẽ không còn trong Hộp thư Nhập.
+              </p>
+            </>
+          )}
+          <div className="flex flex-wrap justify-end gap-3 pt-2">
+            <button
+              className="rounded-md border border-white/15 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              disabled={saving}
+              onClick={() => setDeleteConfirm(null)}
+            >
+              Hủy bỏ
+            </button>
+            <button
+              className="rounded-md bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              disabled={saving}
+              onClick={() => void confirmDelete()}
+            >
+              {saving ? 'Đang xóa...' : 'Xác nhận xóa'}
+            </button>
+          </div>
+        </div>
+      </GlassModal>
     </main>
   );
 }

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 
 export default function GlassModal({
@@ -24,9 +25,9 @@ export default function GlassModal({
 
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-4" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="glass-card-strong max-h-[88vh] w-full max-w-2xl overflow-auto p-5">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] grid place-items-center bg-black/65 p-4" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="glass-card-strong max-h-[88vh] w-full max-w-2xl overflow-auto p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-white">{title}</h2>
           <button className="rounded-md p-2 text-slate-300 hover:bg-white/10 hover:text-white" type="button" onClick={onClose} aria-label="Đóng">
@@ -35,6 +36,7 @@ export default function GlassModal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
