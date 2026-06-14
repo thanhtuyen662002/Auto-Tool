@@ -70,7 +70,7 @@ export default function StudioLayout() {
       <StudioBackground />
       {menuOpen ? <button className="fixed inset-0 z-30 bg-black/60 lg:hidden" type="button" onClick={() => setMenuOpen(false)} aria-label="Đóng menu" /> : null}
       <StudioSidebar open={menuOpen} onClose={() => setMenuOpen(false)} version={version} connected={connected} onStatusClick={() => setStatusOpen(true)} />
-      <div className="min-h-screen lg:pl-[248px]">
+      <div className="min-h-screen studio-content-layout">
         <StudioTopBar
           title={title}
           connected={connected}

@@ -36,3 +36,10 @@ button:disabled {
   color: #071018;
   background: #67e8f9;
 }
+
+@media (min-width: 1024px) {
+  .studio-content-layout {
+    padding-left: 268px;
+  }
+}
+
