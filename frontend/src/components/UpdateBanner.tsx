@@ -81,7 +81,7 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
               <h4 className="font-semibold text-white text-sm md:text-base flex items-center gap-2">
                 🚀 Phát hiện phiên bản mới: v{updateInfo.latest_version}
                 <span className="inline-flex items-center rounded-full bg-purple-400/10 px-2 py-0.5 text-xs font-medium text-purple-300 ring-1 ring-inset ring-purple-400/20">
-                  New
+                  Mới
                 </span>
               </h4>
               <p className="mt-0.5 text-xs md:text-sm text-slate-300">
@@ -91,11 +91,24 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
                     Tải thành công! Vui lòng đóng phần mềm để tự động cài đặt bản cập nhật.
                   </strong>
                 ) : (
-                  ' Bạn có thể cập nhật tự động chỉ với 1 cú click.'
+                  isDownloading
+                    ? ' Auto Tool đang tải bản cập nhật, nếu mạng chập chờn hệ thống sẽ tự thử lại.'
+                    : ' Bạn có thể cập nhật tự động chỉ với 1 cú click.'
                 )}
               </p>
               {error && (
-                <p className="mt-1 text-xs text-rose-400 font-medium">Lỗi: {error}</p>
+                <div className="mt-1 space-y-1 text-xs font-medium text-rose-300">
+                  <p>Lỗi: {error}</p>
+                  {updateInfo.html_url && (
+                    <button
+                      type="button"
+                      className="text-purple-200 underline decoration-purple-300/50 underline-offset-4 hover:text-white"
+                      onClick={() => window.open(updateInfo.html_url || '', '_blank')}
+                    >
+                      Mở trang tải thủ công trên GitHub
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>

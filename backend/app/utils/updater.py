@@ -14,6 +14,8 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+import requests
+
 from app.utils.app_paths import executable_dir
 from app.version import APP_VERSION
 
@@ -23,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_REPO = "thanhtuyen662002/Auto-Tool"
 GITHUB_API_BASE = "https://api.github.com"
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+DOWNLOAD_CONNECT_TIMEOUT_SECONDS = 20
+DOWNLOAD_READ_TIMEOUT_SECONDS = 60
+DOWNLOAD_RETRY_DELAY_SECONDS = 2
 CHECK_INTERVAL_SECONDS = 6 * 3600  # 6 giờ, tránh spam GitHub API
 
 # ─── Data classes ─────────────────────────────────────────────────────────────
@@ -277,22 +283,127 @@ def download_and_prepare_update(info: UpdateInfo) -> DownloadResult:
     )
 
 
-def _download_file(url: str, dest: Path, timeout: int = 180) -> None:
-    """Tải file từ URL về dest, hỗ trợ GitHub token nếu có."""
-    headers = {"User-Agent": f"AutoTool/{APP_VERSION}"}
+def _download_file(url: str, dest: Path, timeout: int = 180, max_attempts: int | None = None) -> None:
+    """Download a release asset with retry and resume support."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        if zipfile.is_zipfile(dest):
+            logger.info("Using existing update archive: %s", dest)
+            return
+        dest.unlink(missing_ok=True)
+
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    legacy_tmp = dest.with_suffix(dest.suffix + ".download")
+    if legacy_tmp.exists() and not tmp.exists():
+        legacy_tmp.replace(tmp)
+
+    attempts = max_attempts or _download_retry_count()
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            _download_file_once(url, tmp, timeout=timeout)
+            if not zipfile.is_zipfile(tmp):
+                raise RuntimeError("File ZIP tải về không hợp lệ hoặc chưa tải đủ dữ liệu.")
+            tmp.replace(dest)
+            return
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Update download attempt %s/%s failed: %s", attempt, attempts, exc)
+            if attempt < attempts:
+                time.sleep(min(DOWNLOAD_RETRY_DELAY_SECONDS * attempt, 10))
+
+    raise RuntimeError(_format_download_error(last_error, attempts))
+
+
+def _download_file_once(url: str, tmp: Path, timeout: int) -> None:
+    resume_from = tmp.stat().st_size if tmp.exists() else 0
+    headers = _download_headers(resume_from if resume_from > 0 else None)
+    request_timeout = (
+        DOWNLOAD_CONNECT_TIMEOUT_SECONDS,
+        max(DOWNLOAD_READ_TIMEOUT_SECONDS, timeout),
+    )
+
+    with requests.get(
+        url,
+        headers=headers,
+        stream=True,
+        timeout=request_timeout,
+        allow_redirects=True,
+    ) as response:
+        if resume_from > 0 and response.status_code == 416:
+            tmp.unlink(missing_ok=True)
+            raise RuntimeError("Máy chủ không chấp nhận phần đã tải trước đó, Auto Tool sẽ tải lại từ đầu.")
+
+        if resume_from > 0 and response.status_code != 206:
+            tmp.unlink(missing_ok=True)
+            raise RuntimeError("Máy chủ không hỗ trợ tải tiếp, Auto Tool sẽ tải lại từ đầu.")
+
+        response.raise_for_status()
+        expected_size = _expected_download_size(response, resume_from)
+        mode = "ab" if resume_from > 0 and response.status_code == 206 else "wb"
+        bytes_written = 0
+        with tmp.open(mode) as file:
+            for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
+                if not chunk:
+                    continue
+                file.write(chunk)
+                bytes_written += len(chunk)
+
+    final_size = tmp.stat().st_size if tmp.exists() else 0
+    if bytes_written <= 0:
+        raise RuntimeError("Máy chủ không gửi dữ liệu cập nhật.")
+    if expected_size is not None and final_size < expected_size:
+        raise RuntimeError(f"Tải chưa đủ dữ liệu ({final_size}/{expected_size} bytes).")
+
+
+def _download_headers(range_start: int | None = None) -> dict[str, str]:
+    headers = {
+        "User-Agent": f"AutoTool/{APP_VERSION} (+https://github.com/{DEFAULT_REPO})",
+        "Accept": "application/octet-stream, application/zip, */*",
+        "Accept-Encoding": "identity",
+    }
     token = _github_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(url, headers=headers)
-    tmp = dest.with_suffix(dest.suffix + ".download")
-    tmp.unlink(missing_ok=True)
+    if range_start is not None and range_start > 0:
+        headers["Range"] = f"bytes={range_start}-"
+    return headers
+
+
+def _expected_download_size(response: requests.Response, resume_from: int) -> int | None:
+    content_range = response.headers.get("Content-Range", "")
+    match = re.search(r"/(\d+)\s*$", content_range)
+    if match:
+        return int(match.group(1))
+    content_length = response.headers.get("Content-Length")
+    if not content_length or not content_length.isdigit():
+        return None
+    length = int(content_length)
+    return resume_from + length if response.status_code == 206 else length
+
+
+def _download_retry_count() -> int:
+    value = os.getenv("AUTO_TOOL_UPDATE_DOWNLOAD_RETRIES", "5").strip()
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp, tmp.open("wb") as f:
-            shutil.copyfileobj(resp, f)
-        tmp.replace(dest)
-    except Exception:
-        tmp.unlink(missing_ok=True)
-        raise
+        return max(1, int(value))
+    except ValueError:
+        return 5
+
+
+def _format_download_error(error: Exception | None, attempts: int) -> str:
+    detail = str(error or "không rõ nguyên nhân")
+    network_reset = "10054" in detail or "forcibly closed" in detail.lower() or isinstance(
+        error,
+        (requests.ConnectionError, requests.Timeout),
+    )
+    if network_reset:
+        return (
+            f"Kết nối tải bản cập nhật bị GitHub/CDN, mạng, VPN/proxy hoặc antivirus đóng giữa chừng. "
+            f"Auto Tool đã thử lại {attempts} lần và giữ file .part để lần sau tải tiếp. "
+            f"Hãy bấm cập nhật lại, đổi mạng/tắt VPN nếu có, hoặc tải ZIP thủ công từ trang GitHub Release. "
+            f"Lỗi cuối: {detail}"
+        )
+    return f"Không thể tải bản cập nhật sau {attempts} lần. Lỗi cuối: {detail}"
 
 
 def _find_autotool_dir(root: Path) -> Path | None:
