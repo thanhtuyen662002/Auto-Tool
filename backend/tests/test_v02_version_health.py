@@ -14,11 +14,12 @@ def test_health_reports_douyin_reup_v1_rc_version() -> None:
 
     assert response.status_code == 200
     assert response.json()["version"] == APP_VERSION
-    assert response.json()["capabilities"] == {
-        "douyin_reup": True,
-        "douyin_downloader": True,
-        "silent_immersive_mode": True,
-    }
+    capabilities = response.json()["capabilities"]
+    assert capabilities["douyin_reup"] is True
+    assert capabilities["douyin_downloader"] is True
+    assert capabilities["silent_immersive_mode"] is True
+    assert isinstance(capabilities["translation"], bool)
+    assert isinstance(capabilities["google_cloud_tts"], bool)
 
 
 def test_browse_path_endpoint_returns_selected_path(monkeypatch) -> None:

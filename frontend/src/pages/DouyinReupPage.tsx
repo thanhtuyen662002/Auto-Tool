@@ -314,7 +314,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     ],
     [results],
   );
-  const usesManualSubtitleReview = settings.review_subtitles_before_render && !settings.auto_render_after_translation;
+  const reviewBeforeRender = workflowMode === 'silent_immersive' ? settings.silent_review_before_render : settings.review_subtitles_before_render;
+  const usesManualSubtitleReview = reviewBeforeRender && !settings.auto_render_after_translation;
+  const currentAutoRender = !usesManualSubtitleReview;
   const isSilentPreset =
     selectedPresetId.startsWith('silent_') || Boolean(settings.enable_silent_immersive_mode && settings.preset_id?.startsWith('silent_'));
   const normalPresets = useMemo(() => presets.filter((preset) => !preset.id.startsWith('silent_')), [presets]);
@@ -332,6 +334,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     () => startPresetCards.find((preset) => preset.id === selectedPresetId),
     [selectedPresetId, startPresetCards],
   );
+  const workflowPreviewPreset = selectedPresetCard
+    ? { ...selectedPresetCard, autoRender: currentAutoRender, reviewRequired: usesManualSubtitleReview }
+    : undefined;
   const recommendedPresetCard = useMemo(
     () => startPresetCards.find((preset) => preset.id === recommendedPresetId),
     [recommendedPresetId, startPresetCards],
@@ -345,16 +350,16 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       scanErrors,
       musicFolder: settings.music_folder || '',
       backendReady: dependencyStatus !== null,
-      autoRender: Boolean(selectedPresetCard?.autoRender),
+      autoRender: currentAutoRender,
     }),
-    [dependencyStatus, outputFolder, scanErrors, scanSummary, selectedPresetCard, settings.music_folder, sourceFolder],
+    [currentAutoRender, dependencyStatus, outputFolder, scanErrors, scanSummary, selectedPresetCard, settings.music_folder, sourceFolder],
   );
   const validationMessages = useMemo(
-    () => buildValidationMessages(checklist, selectedPresetCard, dependencyStatus, scanSummary),
-    [checklist, dependencyStatus, scanSummary, selectedPresetCard],
+    () => buildValidationMessages(checklist, selectedPresetCard, dependencyStatus, scanSummary, currentAutoRender),
+    [checklist, currentAutoRender, dependencyStatus, scanSummary, selectedPresetCard],
   );
   const startDisabled = busy || checklist.some((item) => item.status === 'missing') || Boolean(jobStatus && !done);
-  const riskyPreset = Boolean(selectedPresetCard?.autoRender && selectedPresetCard.id !== 'silent_chill_immersive');
+  const riskyPreset = Boolean(currentAutoRender && selectedPresetId !== 'silent_chill_immersive');
   const jobStartedView: JobStartedView | null = jobId ? { jobId, projectName: projectName.trim() || defaultProjectName(initialWorkflow), jobStatus } : null;
 
   useEffect(() => {
@@ -632,6 +637,20 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     setSilentProductContext((current) => ({ ...current, ...updates }));
   }
 
+  function updateRenderFlow(renderMode: 'review' | 'auto', advanced = false) {
+    const review = renderMode === 'review';
+    const updates: Partial<DouyinReupSettings> = {
+      review_subtitles_before_render: review,
+      silent_review_before_render: review,
+      auto_render_after_translation: !review,
+    };
+    if (advanced) {
+      updateAdvancedSettings(updates);
+      return;
+    }
+    updateSettings(updates);
+  }
+
   async function browseSourceFolder() {
     const path = await browseStartFolder('Chọn folder video', sourceFolder);
     if (path) setSourceFolder(path);
@@ -892,8 +911,12 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               <span className="mb-1.5 block text-sm font-medium text-slate-200">Ngôn ngữ đích</span>
               <input className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.target_language} onChange={(event) => updateAdvancedSettings({ target_language: event.target.value })} />
             </label>
-            <Toggle label="Review subtitle trước render" checked={settings.review_subtitles_before_render} onChange={(value) => updateAdvancedSettings({ review_subtitles_before_render: value })} />
-            <Toggle label="Render ngay sau khi dịch" checked={settings.auto_render_after_translation} onChange={(value) => updateAdvancedSettings({ auto_render_after_translation: value })} />
+            <Toggle
+              label={workflowMode === 'silent_immersive' ? 'Duyệt caption trước khi render' : 'Duyệt phụ đề trước khi render'}
+              checked={usesManualSubtitleReview}
+              onChange={(value) => updateRenderFlow(value ? 'review' : 'auto', true)}
+            />
+            <Toggle label="Render MP4 ngay sau khi dịch" checked={currentAutoRender} onChange={(value) => updateRenderFlow(value ? 'auto' : 'review', true)} />
             <Toggle label="Burn subtitle vào video" checked={settings.burn_subtitle} onChange={(value) => updateAdvancedSettings({ burn_subtitle: value })} />
             <Toggle label="Dùng overlay" checked={settings.add_overlay} onChange={(value) => updateAdvancedSettings({ add_overlay: value })} />
           </div>
@@ -1020,6 +1043,11 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               recommendationReason={recommendation?.reason ?? recommendationReason(workflowMode, sourceFolder, recommendedPresetCard)}
               onSelect={(presetId) => void handlePresetSelect(presetId)}
             />
+            <RenderFlowCard
+              mode={workflowMode}
+              reviewMode={usesManualSubtitleReview}
+              onModeChange={(renderMode) => updateRenderFlow(renderMode)}
+            />
             <OutputFolderCard
               mode={workflowMode}
               outputFolder={outputFolder}
@@ -1072,13 +1100,13 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         }
         side={
           <>
-            <WorkflowPreviewPanel mode={workflowMode} preset={selectedPresetCard} scanSummary={scanSummary} jobStatus={jobStatus} />
+            <WorkflowPreviewPanel mode={workflowMode} preset={workflowPreviewPreset} scanSummary={scanSummary} jobStatus={jobStatus} />
             <StartChecklistCard items={checklist} />
             <StartValidationAlert messages={validationMessages} />
             <StartBatchButton
               disabled={startDisabled}
               loading={busy && !jobStatus}
-              label={selectedPresetCard?.autoRender ? 'Bắt đầu xử lý nhanh' : 'Bắt đầu xử lý'}
+              label={currentAutoRender ? 'Bắt đầu render ngay' : 'Bắt đầu và chờ duyệt'}
               job={jobStartedView}
               onStart={requestStart}
             />
@@ -1663,6 +1691,7 @@ function buildValidationMessages(
   preset: StartPresetViewModel | undefined,
   dependencyStatus: SystemDependencyStatusResponse | null,
   scanSummary: StartScanSummary | null,
+  autoRender: boolean,
 ): StartValidationMessage[] {
   const messages: StartValidationMessage[] = [];
   checklist
@@ -1670,11 +1699,96 @@ function buildValidationMessages(
     .forEach((item) => messages.push({ id: `missing-${item.id}`, tone: 'error', message: item.message || `${item.label} đang thiếu.` }));
   if (!dependencyStatus) messages.push({ id: 'backend', tone: 'warning', message: 'Backend đang offline hoặc chưa phản hồi. Hãy khởi động backend rồi thử lại.' });
   if (scanSummary?.invalid) messages.push({ id: 'scan-invalid', tone: 'warning', message: `Folder có ${scanSummary.invalid} file không đọc được. Tool sẽ bỏ qua hoặc bạn có thể kiểm tra lại.` });
-  if (preset?.autoRender) messages.push({ id: 'auto-render', tone: 'warning', message: `${preset.name} có thể bỏ qua bước review phụ đề.` });
+  if (autoRender) messages.push({ id: 'auto-render', tone: 'warning', message: `${preset?.name ?? 'Chế độ hiện tại'} sẽ render MP4 ngay, không chờ duyệt phụ đề/caption.` });
   if (preset?.id === 'ocr_priority' && dependencyStatus && !dependencyStatus.ocr_available) {
     messages.push({ id: 'ocr', tone: 'warning', message: 'OCR Priority cần OCR provider. Nếu OCR chưa sẵn sàng, tool có thể fallback hoặc báo lỗi.' });
   }
   return messages.slice(0, 4);
+}
+
+function RenderFlowCard({
+  mode,
+  reviewMode,
+  onModeChange,
+}: {
+  mode: StartWorkflowMode;
+  reviewMode: boolean;
+  onModeChange: (mode: 'review' | 'auto') => void;
+}) {
+  const isSilent = mode === 'silent_immersive';
+  const reviewTitle = isSilent ? 'Duyệt caption trước khi render' : 'Duyệt phụ đề trước khi render';
+  const reviewDescription = isSilent
+    ? 'Tool tạo caption trước, bạn kiểm tra trong tab Sửa phụ đề rồi mới render MP4.'
+    : 'Tool dịch phụ đề trước, bạn kiểm tra trong tab Sửa phụ đề rồi mới render MP4.';
+  const autoDescription = isSilent
+    ? 'Tool tạo caption và render MP4 luôn. Phù hợp khi cần xử lý nhanh.'
+    : 'Tool nhận diện, dịch và render MP4 luôn. Phù hợp khi đã tin preset.';
+
+  return (
+    <GlassCard className="grid gap-4 p-5" strong>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Quy trình render</div>
+          <h2 className="mt-2 text-xl font-semibold text-white">{reviewMode ? 'Sẽ chờ bạn duyệt trước' : 'Sẽ render MP4 ngay'}</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Chọn rõ cách tool xử lý sau khi dịch để tránh nhầm là render bị treo.
+          </p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${reviewMode ? 'border-amber-300/35 bg-amber-300/10 text-amber-100' : 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100'}`}>
+          {reviewMode ? 'Cần duyệt' : 'Render ngay'}
+        </span>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <RenderFlowOption
+          active={reviewMode}
+          title={reviewTitle}
+          description={reviewDescription}
+          onClick={() => onModeChange('review')}
+        />
+        <RenderFlowOption
+          active={!reviewMode}
+          title="Render MP4 ngay sau khi dịch"
+          description={autoDescription}
+          onClick={() => onModeChange('auto')}
+        />
+      </div>
+    </GlassCard>
+  );
+}
+
+function RenderFlowOption({
+  active,
+  title,
+  description,
+  onClick,
+}: {
+  active: boolean;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={`min-h-28 rounded-md border p-4 text-left transition ${
+        active
+          ? 'border-cyan-300/70 bg-cyan-300/12 shadow-[0_0_0_1px_rgba(103,232,249,0.16)]'
+          : 'border-white/10 bg-white/5 hover:border-cyan-300/35 hover:bg-white/8'
+      }`}
+      type="button"
+      onClick={onClick}
+    >
+      <div className="flex items-start gap-3">
+        <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border ${active ? 'border-cyan-200 bg-cyan-300 text-slate-950' : 'border-white/25 text-transparent'}`}>
+          <span className="h-2 w-2 rounded-full bg-current" />
+        </span>
+        <span>
+          <span className="block text-sm font-semibold text-white">{title}</span>
+          <span className="mt-1 block text-sm leading-6 text-slate-400">{description}</span>
+        </span>
+      </div>
+    </button>
+  );
 }
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {

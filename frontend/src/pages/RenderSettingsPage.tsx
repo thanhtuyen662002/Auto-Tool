@@ -1036,6 +1036,12 @@ function SimpleSettingsPanel({
             ...(voiceValue === 'custom' ? [{ value: 'custom', label: config.tts?.voice ?? 'Giọng tuỳ chỉnh' }] : []),
           ]}
         />
+        {config.tts?.provider === 'google_cloud_tts' ? (
+          <div className="rounded-md bg-surface p-3 text-xs leading-5 text-muted sm:col-span-2">
+            Google Cloud TTS dùng API key hoặc Service Account trong Cài đặt &gt; API key. Muốn chọn đầy đủ danh sách voice Google,
+            chuyển sang Chế độ nâng cao &gt; Giọng đọc.
+          </div>
+        ) : null}
         <SelectField
           label="Ngôn ngữ"
           value={config.ai.language || 'vi'}

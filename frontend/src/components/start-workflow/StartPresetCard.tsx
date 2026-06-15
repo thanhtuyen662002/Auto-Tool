@@ -26,14 +26,14 @@ export default function StartPresetCard({
           </span>
           <div>
             <div className="font-semibold text-white">{preset.name}</div>
-            <div className="mt-0.5 text-xs text-slate-500">{preset.autoRender ? 'Auto render' : preset.reviewRequired ? 'Review required' : 'No review'}</div>
+            <div className="mt-0.5 text-xs text-slate-500">{preset.autoRender ? 'Render ngay' : preset.reviewRequired ? 'Cần duyệt' : 'Không cần duyệt'}</div>
           </div>
         </div>
         {active ? <CheckCircle2 className="shrink-0 text-cyan-200" size={18} /> : null}
       </div>
       <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-300">{preset.description}</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        {preset.recommended ? <GlassBadge variant="success">Recommended</GlassBadge> : null}
+        {preset.recommended ? <GlassBadge variant="success">Khuyên dùng</GlassBadge> : null}
         {preset.badge ? <GlassBadge variant={preset.autoRender ? 'warning' : 'ready'}>{preset.badge}</GlassBadge> : null}
       </div>
     </button>

@@ -66,7 +66,7 @@ export function normalizeSystemStatus(
     ffprobe: dependencies ? statusFromPath(dependencies.ffprobe_path) : 'unknown',
     translation: inferTranslationStatus(health),
     ocr: dependencies ? (dependencies.ocr_available ? 'ready' : 'optional') : 'unknown',
-    tts: dependencies ? (dependencies.piper_path && dependencies.piper_model_path ? 'ready' : 'optional') : 'unknown',
+    tts: inferTtsStatus(health, dependencies),
     outputFolder: 'unknown',
     localServer: frontendStatus ? (frontendStatus.data.served_by_backend ? 'ready' : 'missing') : 'unknown',
     localServerMode: frontendStatus?.data.mode,
@@ -100,5 +100,15 @@ function inferTranslationStatus(health: HealthResponse | null): SystemStatusValu
   if (health.capabilities && typeof health.capabilities.translation === 'boolean') {
     return health.capabilities.translation ? 'ready' : 'missing';
   }
+  return 'unknown';
+}
+
+function inferTtsStatus(
+  health: HealthResponse | null,
+  dependencies: SystemDependencyStatusResponse | null,
+): SystemStatusValue {
+  if (health?.capabilities?.google_cloud_tts) return 'ready';
+  if (dependencies?.piper_path && dependencies.piper_model_path) return 'ready';
+  if (dependencies) return 'optional';
   return 'unknown';
 }

@@ -110,6 +110,14 @@ export const VOICE_OPTIONS = [
     voice: 'vi-VN-NamMinhNeural',
     language: 'vi',
   },
+  {
+    id: 'google_cloud_vi_female',
+    label: 'Google Cloud TTS - nữ vi-VN',
+    summaryLabel: 'Google Cloud TTS - nữ vi-VN',
+    provider: 'google_cloud_tts',
+    voice: 'vi-VN-Wavenet-A',
+    language: 'vi-VN',
+  },
 ];
 
 export function effectsMatch(a: EffectSettings, b: EffectSettings): boolean {

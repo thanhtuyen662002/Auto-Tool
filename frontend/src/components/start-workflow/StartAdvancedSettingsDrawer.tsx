@@ -26,16 +26,16 @@ export default function StartAdvancedSettingsDrawer({
         onClick={onOpen}
       >
         <Settings2 size={16} />
-        Advanced Settings
-        {custom ? <GlassBadge variant="warning">Custom settings</GlassBadge> : null}
+        Cài đặt nâng cao
+        {custom ? <GlassBadge variant="warning">Đã tùy chỉnh</GlassBadge> : null}
       </button>
       {open ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/55" role="dialog" aria-modal="true" aria-label="Advanced Settings">
-          <button className="hidden flex-1 cursor-default md:block" type="button" aria-label="Đóng Advanced Settings" onClick={onClose} />
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/55" role="dialog" aria-modal="true" aria-label="Cài đặt nâng cao">
+          <button className="hidden flex-1 cursor-default md:block" type="button" aria-label="Đóng cài đặt nâng cao" onClick={onClose} />
           <aside className="h-full w-full max-w-3xl overflow-auto border-l border-white/10 bg-slate-950/95 p-5 shadow-2xl backdrop-blur">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-white">Advanced Settings</h2>
+                <h2 className="text-lg font-semibold text-white">Cài đặt nâng cao</h2>
                 <p className="mt-1 text-sm text-slate-400">Các mục kỹ thuật được để riêng để màn start đơn giản hơn.</p>
               </div>
               <button className="rounded-md p-2 text-slate-300 hover:bg-white/10 hover:text-white" type="button" onClick={onClose} aria-label="Đóng">
@@ -43,14 +43,14 @@ export default function StartAdvancedSettingsDrawer({
               </button>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              {['Subtitle', 'Nhận diện giọng nói', 'Nhận diện chữ', 'Audio', 'Output', 'Kiểm tra cuối', 'Gói xuất bản'].map((item) => (
+              {['Phụ đề', 'Nhận diện giọng nói', 'Nhận diện chữ', 'Âm thanh', 'Đầu ra', 'Kiểm tra cuối', 'Gói xuất bản'].map((item) => (
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-300" key={item}>{item}</span>
               ))}
             </div>
             <div className="mt-5">
               <GlassButton variant="secondary" onClick={onReset}>
                 <RotateCcw size={16} />
-                Reset to preset defaults
+                Khôi phục theo preset
               </GlassButton>
             </div>
             <div className="mt-5 grid gap-5">{children}</div>

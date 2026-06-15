@@ -408,7 +408,13 @@ def create_app() -> FastAPI:
         return HealthResponse(
             status="ok",
             version=_APP_VERSION,
-            capabilities={"douyin_reup": True, "douyin_downloader": True, "silent_immersive_mode": True},
+            capabilities={
+                "douyin_reup": True,
+                "douyin_downloader": True,
+                "silent_immersive_mode": True,
+                "translation": _has_gemini_key(None),
+                "google_cloud_tts": _has_google_tts_auth(),
+            },
             recoverable_jobs_count=job_recovery_service.count_recoverable_jobs(),
         )
 
@@ -3863,6 +3869,10 @@ def _google_tts_auth_values(config: ProjectConfig | None) -> dict[str, str]:
             or ""
         ).strip(),
     }
+
+
+def _has_google_tts_auth() -> bool:
+    return any(_google_tts_auth_values(None).values())
 
 
 def _script_fallback_enabled() -> bool:

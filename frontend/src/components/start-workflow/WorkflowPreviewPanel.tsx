@@ -23,11 +23,11 @@ export default function WorkflowPreviewPanel({
         <div>
           <h2 className="flex items-center gap-2 font-semibold text-white">
             <Route size={18} className="text-cyan-200" />
-            Workflow preview
+            Xem trước quy trình
           </h2>
           <p className="mt-1 text-sm text-slate-400">{preset ? preset.name : 'Chưa chọn preset'}</p>
         </div>
-        {preset ? <GlassBadge variant={preset.autoRender ? 'warning' : 'success'}>{preset.reviewRequired ? 'Có review' : 'Auto render'}</GlassBadge> : null}
+        {preset ? <GlassBadge variant={preset.autoRender ? 'warning' : 'success'}>{preset.reviewRequired ? 'Có duyệt' : 'Render ngay'}</GlassBadge> : null}
       </div>
       <div className="grid gap-2">
         {steps.map((step, index) => (
@@ -38,10 +38,10 @@ export default function WorkflowPreviewPanel({
         ))}
       </div>
       <div className="grid gap-2 border-t border-white/10 pt-4 text-sm">
-        <InfoLine label="Review" value={preset?.reviewRequired ? 'Bắt buộc' : 'Bỏ qua'} />
-        <InfoLine label="Auto render" value={preset?.autoRender ? 'Có' : 'Không'} />
+        <InfoLine label="Duyệt trước" value={preset?.reviewRequired ? 'Bắt buộc' : 'Bỏ qua'} />
+        <InfoLine label="Render tự động" value={preset?.autoRender ? 'Có' : 'Không'} />
         <InfoLine
-          label="Caption source"
+          label="Nguồn caption"
           value={mode === 'silent_immersive' ? 'OCR nếu có chữ, nếu không dùng template theo ngành.' : 'Tự chọn subtitle có sẵn, giọng nói hoặc chữ trên màn hình.'}
         />
       </div>
@@ -51,7 +51,7 @@ export default function WorkflowPreviewPanel({
             <ListChecks size={16} className="text-emerald-300" />
             Đã scan {scanSummary.valid} video
           </div>
-          <div className="mt-1 text-xs text-slate-400">{scanSummary.vertical} vertical, {scanSummary.square} square, {scanSummary.horizontal} horizontal</div>
+          <div className="mt-1 text-xs text-slate-400">{scanSummary.vertical} dọc, {scanSummary.square} vuông, {scanSummary.horizontal} ngang</div>
         </div>
       ) : null}
       {jobStatus ? (
@@ -78,8 +78,8 @@ function InfoLine({ label, value }: { label: string; value: string }) {
 
 function workflowSteps(mode: StartWorkflowMode, preset?: StartPresetViewModel): string[] {
   if (mode === 'silent_immersive') {
-    return ['Detect silent', 'Chia cảnh', 'Tạo caption Việt', preset?.reviewRequired ? 'Review caption' : 'Render', 'Kiểm tra video cuối', 'Gói xuất bản'];
+    return ['Nhận diện video không thoại', 'Chia cảnh', 'Tạo caption tiếng Việt', preset?.reviewRequired ? 'Duyệt caption' : 'Render MP4', 'Kiểm tra video cuối', 'Gói xuất bản'];
   }
-  if (preset?.autoRender) return ['Scan video', 'Nhận diện giọng nói/chữ', 'Dịch phụ đề', 'Render video', 'Kiểm tra video cuối', 'Gói xuất bản'];
-  return ['Scan video', 'Nhận diện giọng nói/chữ', 'Dịch phụ đề', 'Mở review phụ đề', 'Render video', 'Gói xuất bản'];
+  if (preset?.autoRender) return ['Scan video', 'Nhận diện giọng nói/chữ', 'Dịch phụ đề', 'Render MP4', 'Kiểm tra video cuối', 'Gói xuất bản'];
+  return ['Scan video', 'Nhận diện giọng nói/chữ', 'Dịch phụ đề', 'Mở màn duyệt phụ đề', 'Render MP4', 'Gói xuất bản'];
 }
