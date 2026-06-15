@@ -255,18 +255,7 @@ def download_and_prepare_update(info: UpdateInfo) -> DownloadResult:
     # Khởi chạy script cập nhật trong tiến trình độc lập (chỉ Windows)
     if sys.platform == "win32":
         try:
-            flags = 0
-            if hasattr(subprocess, "CREATE_NEW_CONSOLE"):
-                flags |= subprocess.CREATE_NEW_CONSOLE
-            if hasattr(subprocess, "DETACHED_PROCESS"):
-                flags |= subprocess.DETACHED_PROCESS
-            
-            subprocess.Popen(
-                [str(bat_path)],
-                creationflags=flags,
-                shell=True,
-                cwd=str(exe_dir)
-            )
+            _launch_updater_script(bat_path=bat_path, exe_dir=exe_dir)
             logger.info("Updater script launched successfully.")
         except Exception as exc:
             logger.error("Failed to launch updater script: %s", exc)
@@ -280,6 +269,17 @@ def download_and_prepare_update(info: UpdateInfo) -> DownloadResult:
         zip_path=None,
         extract_dir=str(extract_dir),
         updater_script=str(bat_path),
+    )
+
+
+def _launch_updater_script(bat_path: Path, exe_dir: Path) -> None:
+    """Launch the updater batch file in a separate Windows console."""
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+    subprocess.Popen(
+        ["cmd.exe", "/d", "/c", str(bat_path)],
+        cwd=str(exe_dir),
+        creationflags=flags,
+        shell=False,
     )
 
 

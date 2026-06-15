@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import io
+import subprocess
 import zipfile
 
 import requests
 
-from app.utils.updater import _download_file, is_newer
+from app.utils.updater import _download_file, _launch_updater_script, is_newer
 
 
 def test_release_version_is_newer_than_prerelease() -> None:
@@ -84,3 +85,34 @@ def test_update_download_retries_and_resumes_after_connection_reset(tmp_path, mo
     assert not dest.with_suffix(dest.suffix + ".part").exists()
     assert "Range" not in calls[0]
     assert calls[1]["Range"] == f"bytes={split_at}-"
+
+
+def test_launch_updater_script_uses_valid_windows_process_flags(tmp_path, monkeypatch) -> None:
+    calls: list[dict] = []
+    bat_path = tmp_path / "_update.bat"
+    exe_dir = tmp_path / "AutoTool"
+    exe_dir.mkdir()
+    bat_path.write_text("@echo off\n", encoding="utf-8")
+
+    monkeypatch.setattr("app.utils.updater.subprocess.CREATE_NEW_CONSOLE", 0x00000010, raising=False)
+    monkeypatch.setattr("app.utils.updater.subprocess.DETACHED_PROCESS", 0x00000008, raising=False)
+
+    def fake_popen(args, **kwargs):  # noqa: ANN001
+        calls.append({"args": args, **kwargs})
+
+        class FakeProcess:
+            pass
+
+        return FakeProcess()
+
+    monkeypatch.setattr("app.utils.updater.subprocess.Popen", fake_popen)
+
+    _launch_updater_script(bat_path=bat_path, exe_dir=exe_dir)
+
+    assert calls
+    call = calls[0]
+    assert call["args"] == ["cmd.exe", "/d", "/c", str(bat_path)]
+    assert call["cwd"] == str(exe_dir)
+    assert call["shell"] is False
+    assert call["creationflags"] == subprocess.CREATE_NEW_CONSOLE
+    assert call["creationflags"] & subprocess.DETACHED_PROCESS == 0
