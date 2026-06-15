@@ -1,5 +1,22 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.6
+
+### Highlights
+
+- Fixed Douyin Reup jobs appearing stuck at 10% while frontend polling still returned HTTP 200.
+- Made Fast Auto actually faster by using the tiny ASR model, VAD, lower OCR sampling and cached OCR/ASR models.
+- Optimized hard-sub OCR frame sampling and batched EasyOCR recognition.
+- Disabled hidden heavy ASR speech detection in Silent Mode unless explicitly enabled.
+- Added detailed backend progress stages, FFmpeg timeout handling and frontend stale-worker warnings.
+- Rebuilt Windows local app package with bundled FFmpeg, Piper TTS and Vietnamese Piper model.
+
+### QA
+
+- Backend focused test suite passed.
+- Frontend production build passed.
+- Windows EXE smoke test passed: /api/health returned version 1.0.6 and frontend / returned HTTP 200.
+
 ## Silent / Immersive Product Reup v1.0.0-rc1
 
 ### Highlights

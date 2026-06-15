@@ -4,6 +4,11 @@ from app.modules.silent_immersive_reup.speech_presence_detector import SpeechPre
 from app.schemas.media_schema import MediaFile
 
 
+def test_asr_detection_is_opt_in_by_default(monkeypatch):
+    monkeypatch.delenv("AUTO_TOOL_SILENT_SPEECH_ASR", raising=False)
+    assert SpeechPresenceDetector()._should_run_asr() is False
+
+
 def test_video_without_audio_is_silent(monkeypatch):
     monkeypatch.setattr(
         "app.modules.silent_immersive_reup.speech_presence_detector.probe_video",

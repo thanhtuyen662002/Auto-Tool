@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.adapters.ffmpeg_adapter import run_ffmpeg
 from app.modules.douyin_reup.subtitle_timing_guard import SubtitleBlock, write_srt_blocks
@@ -13,6 +14,9 @@ logger = get_logger(__name__)
 
 
 class ASRService:
+    _model_cache_lock = threading.Lock()
+    _model_cache: dict[tuple[str, str], tuple[Any, threading.Lock]] = {}
+
     def __init__(self) -> None:
         self.warnings: list[str] = []
 
@@ -25,6 +29,7 @@ class ASRService:
         model_size: str = "medium",
         device: str = "auto",
         vad_filter: bool = False,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> str:
         self.warnings = []
         if provider.strip().lower() != "faster_whisper":
@@ -42,6 +47,7 @@ class ASRService:
         target = Path(output_srt_path)
         ensure_dir(target.parent)
         audio_path = target.with_name(f"{target.stem}_asr_audio.wav")
+        _progress(progress_callback, "asr_extracting_audio", 10)
         run_ffmpeg(
             [
                 "-y",
@@ -59,13 +65,26 @@ class ASRService:
         model_device = device.strip().lower()
         if model_device not in {"auto", "cpu", "cuda"}:
             model_device = "auto"
-        model = WhisperModel(model_size.strip() or "medium", device=model_device, compute_type="int8")
-        segments = self._transcribe_with_vad_fallback(
-            model=model,
-            audio_path=str(audio_path),
-            language=language.strip() or None,
-            vad_filter=vad_filter,
-        )
+        normalized_size = model_size.strip() or "medium"
+        _progress(progress_callback, "asr_loading_model", 20)
+        cache_key = (normalized_size, model_device)
+        with self._model_cache_lock:
+            cached = self._model_cache.get(cache_key)
+            if cached is None:
+                cached = (
+                    WhisperModel(normalized_size, device=model_device, compute_type="int8"),
+                    threading.Lock(),
+                )
+                self._model_cache[cache_key] = cached
+        model, inference_lock = cached
+        _progress(progress_callback, "asr_transcribing", 35)
+        with inference_lock:
+            segments = self._transcribe_with_vad_fallback(
+                model=model,
+                audio_path=str(audio_path),
+                language=language.strip() or None,
+                vad_filter=vad_filter,
+            )
 
         blocks: list[SubtitleBlock] = []
         for segment in segments:
@@ -85,7 +104,10 @@ class ASRService:
 
         if not blocks:
             raise RuntimeError(f"ASR không nhận diện được subtitle từ video: {video_path}")
-        return write_srt_blocks(blocks, str(target))
+        _progress(progress_callback, "asr_writing_subtitles", 95)
+        result = write_srt_blocks(blocks, str(target))
+        _progress(progress_callback, "asr_completed", 100)
+        return result
 
     def _transcribe_with_vad_fallback(
         self,
@@ -133,3 +155,12 @@ def _is_missing_vad_asset_error(exc: Exception) -> bool:
         or ("vad" in message and "file doesn't exist" in message)
         or ("vad" in message and "file does not exist" in message)
     )
+
+
+def _progress(
+    callback: Callable[[dict[str, Any]], None] | None,
+    step: str,
+    progress: int,
+) -> None:
+    if callback:
+        callback({"current_step": step, "progress": max(0, min(100, int(progress)))})

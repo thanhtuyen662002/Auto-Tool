@@ -12,6 +12,7 @@ __pycache__/
 backend/data/*.db
 logs/launcher/*.log
 !logs/launcher/.gitkeep
+releases/
 
 # Vendor binaries downloaded at build time (FFmpeg, Piper)
 backend/vendor/

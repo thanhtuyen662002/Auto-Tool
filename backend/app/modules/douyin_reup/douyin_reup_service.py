@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 import shutil
 import time
 from collections import Counter
@@ -152,6 +153,28 @@ class DouyinReupService:
                 video = videos[index - 1]
 
             _progress(progress_callback, total, completed, failed, f"douyin_video_{index}", _progress_percent(index - 1, total))
+            last_reported_step: str | None = None
+
+            def step_progress(payload: dict[str, Any]) -> None:
+                nonlocal queue_state, last_reported_step
+                step = str(payload.get("current_step") or "processing")
+                phase_progress = max(0, min(100, int(payload.get("progress", 0))))
+                overall_progress = max(
+                    5,
+                    min(99, int(5 + (((completed + failed) + (phase_progress / 100)) / max(1, total)) * 94)),
+                )
+                _progress(progress_callback, total, completed, failed, f"douyin_video_{index}_{step}", overall_progress)
+                if queue_state_service and job_id and queue_item:
+                    queue_state = queue_state_service.update_item_status(
+                        job_id,
+                        queue_item.id,
+                        QueueItemStatus.running,
+                        current_step=step,
+                        progress_percent=max(10, min(95, 10 + int(phase_progress * 0.85))),
+                    )
+                if step != last_reported_step:
+                    _log(log_callback, "info", f"Video {index}/{total}: {step}")
+                    last_reported_step = step
             _log(log_callback, "info", f"Đang xử lý Douyin video {index}/{total}: {video.filename}")
             if queue_state_service and job_id and queue_item:
                 if resource_guard and queue_state:
@@ -188,6 +211,7 @@ class DouyinReupService:
                     job_id=job_id,
                     cached_output=_cached_retry_output(video, retry_cache),
                     retry_steps=retry_steps or {"asr", "translation", "render"},
+                    step_progress_callback=step_progress,
                 )
                 outputs.append(output)
                 subtitle_sources.update([output.subtitle_source or "none"])
@@ -264,6 +288,7 @@ class DouyinReupService:
         job_id: str | None = None,
         cached_output: dict[str, Any] | None = None,
         retry_steps: set[str] | None = None,
+        step_progress_callback: ProgressCallback | None = None,
     ) -> DouyinOutputResult:
         if is_silent_reup_settings(settings):
             return self._process_one_silent_video(
@@ -274,6 +299,7 @@ class DouyinReupService:
                 output_root=output_root,
                 project_id=project_id,
                 job_id=job_id,
+                step_progress_callback=step_progress_callback,
             )
 
         video_dir = ensure_dir(output_root / f"video_{index:03d}")
@@ -307,7 +333,11 @@ class DouyinReupService:
             else:
                 failed_step = "subtitle_source"
                 source_started = time.perf_counter()
-                source_result = self.source_detector.detect_source(video, settings, str(video_dir))
+                _step_progress(step_progress_callback, "subtitle_source", 5)
+                detector_kwargs: dict[str, Any] = {}
+                if "progress_callback" in inspect.signature(self.source_detector.detect_source).parameters:
+                    detector_kwargs["progress_callback"] = step_progress_callback
+                source_result = self.source_detector.detect_source(video, settings, str(video_dir), **detector_kwargs)
                 if source_result.source_type == "asr":
                     durations["asr_seconds"] = time.perf_counter() - source_started
                     steps["asr"] = "ok"
@@ -338,6 +368,7 @@ class DouyinReupService:
                 steps["translation"] = "reused"
             else:
                 failed_step = "translation"
+                _step_progress(step_progress_callback, "translation", 55)
                 translation_started = time.perf_counter()
                 translation = self.translator.translate_srt(
                     source_result.source_srt_path,
@@ -355,6 +386,7 @@ class DouyinReupService:
             fixed_srt_path = video_dir / f"video_{index:03d}_{settings.target_language}_fixed.srt"
             subtitle_offset = settings.asr_subtitle_offset_seconds if source_result.source_type == "asr" else 0.0
             failed_step = "timing_guard"
+            _step_progress(step_progress_callback, "timing_guard", 65)
             fixed_srt = self.timing_guard.guard_timing(
                 translation.translated_srt_path,
                 target_duration=video.duration,
@@ -421,6 +453,7 @@ class DouyinReupService:
                 )
 
             failed_step = "render"
+            _step_progress(step_progress_callback, "render", 72)
             render_started = time.perf_counter()
             render_payload = self.render_pipeline.render_video_with_translated_subtitle(
                 video=video,
@@ -433,6 +466,7 @@ class DouyinReupService:
             warnings.extend(render_payload.get("warnings") or [])
             errors.extend(render_payload.get("errors") or [])
             steps["render"] = "ok"
+            _step_progress(step_progress_callback, "final_output_qa", 94)
             final_qa_report = FinalOutputQAService().run_qa_for_output(
                 str(render_payload["path"]),
                 PlatformTarget.tiktok,
@@ -559,6 +593,7 @@ class DouyinReupService:
         output_root: Path,
         project_id: str | None = None,
         job_id: str | None = None,
+        step_progress_callback: ProgressCallback | None = None,
     ) -> DouyinOutputResult:
         video_dir = ensure_dir(output_root / f"video_{index:03d}")
         log_path = video_dir / f"video_{index:03d}_log.json"
@@ -578,19 +613,26 @@ class DouyinReupService:
 
         try:
             failed_step = "silent_plan"
+            _step_progress(step_progress_callback, "silent_plan", 5)
             plan_started = time.perf_counter()
-            plan = self.silent_pipeline.build_plan(
-                video_path=video.path,
-                settings=settings,
-                output_dir=str(video_dir),
-                product_context=_product_context(config),
-            )
+            plan_kwargs: dict[str, Any] = {
+                "video_path": video.path,
+                "settings": settings,
+                "output_dir": str(video_dir),
+                "product_context": _product_context(config),
+            }
+            if "progress_callback" in inspect.signature(self.silent_pipeline.build_plan).parameters:
+                plan_kwargs["progress_callback"] = _mapped_progress_callback(
+                    step_progress_callback, 5, 70, "silent_plan"
+                )
+            plan = self.silent_pipeline.build_plan(**plan_kwargs)
             durations["silent_plan_seconds"] = time.perf_counter() - plan_started
             warnings.extend(plan.warnings)
             caption_source = _silent_caption_source(plan)
             steps["silent_plan"] = "ok"
 
             failed_step = "silent_caption_srt"
+            _step_progress(step_progress_callback, "silent_caption_srt", 72)
             caption_srt_path = self.silent_pipeline.write_caption_srt(
                 plan,
                 str(video_dir),
@@ -671,8 +713,14 @@ class DouyinReupService:
                 )
 
             failed_step = "silent_render"
+            _step_progress(step_progress_callback, "silent_render", 78)
             render_started = time.perf_counter()
-            render_result = self.silent_pipeline.render_from_plan(plan, settings, str(video_dir))
+            render_kwargs: dict[str, Any] = {}
+            if "progress_callback" in inspect.signature(self.silent_pipeline.render_from_plan).parameters:
+                render_kwargs["progress_callback"] = _mapped_progress_callback(
+                    step_progress_callback, 78, 94, "silent_render"
+                )
+            render_result = self.silent_pipeline.render_from_plan(plan, settings, str(video_dir), **render_kwargs)
             durations["render_seconds"] = time.perf_counter() - render_started
             warnings.extend(render_result.warnings)
             errors.extend(render_result.errors)
@@ -680,6 +728,7 @@ class DouyinReupService:
                 raise RuntimeError("; ".join(render_result.errors) or "Silent render không tạo được video final.")
             steps["render"] = "ok"
 
+            _step_progress(step_progress_callback, "final_output_qa", 95)
             final_qa_report = FinalOutputQAService().run_qa_for_output(
                 render_result.output_video_path,
                 PlatformTarget.tiktok,
@@ -931,6 +980,34 @@ def _progress(
     if status:
         payload["status"] = status
     callback(payload)
+
+
+def _step_progress(callback: ProgressCallback | None, current_step: str, progress: int) -> None:
+    if callback:
+        callback({"current_step": current_step, "progress": max(0, min(100, int(progress)))})
+
+
+def _mapped_progress_callback(
+    callback: ProgressCallback | None,
+    start: int,
+    end: int,
+    prefix: str,
+) -> ProgressCallback | None:
+    if callback is None:
+        return None
+
+    def mapped(payload: dict[str, Any]) -> None:
+        source_progress = max(0, min(100, int(payload.get("progress", 0))))
+        step = str(payload.get("current_step") or "processing")
+        callback(
+            {
+                **payload,
+                "current_step": f"{prefix}_{step}",
+                "progress": start + int((source_progress / 100) * max(0, end - start)),
+            }
+        )
+
+    return mapped
 
 
 def _log(callback: LogCallback | None, level: str, message: str) -> None:

@@ -78,3 +78,6 @@ def test_douyin_one_click_batch_queues_job_with_preset_settings(tmp_path: Path, 
     assert settings["process_mode"] == "first_n"
     assert settings["music_folder"] == str(music_dir.resolve())
     assert settings["bgm_volume"] == 0.2
+    assert settings["asr_model_size"] == "tiny"
+    assert settings["asr_vad_filter"] is True
+    assert settings["ocr_sample_fps"] == 1.0

@@ -2574,6 +2574,8 @@ def create_app() -> FastAPI:
             failed_outputs=job["failed_outputs"],
             logs=logs,
             cache_summary=job.get("results", {}).get("cache_summary"),
+            created_at=job.get("created_at"),
+            updated_at=job.get("updated_at"),
         )
 
     @app.delete("/api/jobs/{job_id}")
@@ -3083,6 +3085,22 @@ def run_silent_reup_plan_job(
     job = database.get_job(job_id)
     if not job:
         return
+    last_reported_step: str | None = None
+
+    def progress_callback(payload: dict[str, Any]) -> None:
+        nonlocal last_reported_step
+        step = str(payload.get("current_step") or "silent_render")
+        phase_progress = max(0, min(100, int(payload.get("progress", 0))))
+        database.update_job(
+            job_id,
+            status="running",
+            current_step=f"silent_{step}",
+            progress=max(10, min(95, 10 + int(phase_progress * 0.85))),
+        )
+        checkpoint_service.update_job_status(job_id, JobRunStatus.running, step)
+        if step != last_reported_step:
+            database.add_job_log(job_id, "info", f"Silent render: {step}")
+            last_reported_step = step
     try:
         database.update_job(job_id, status="running", current_step="silent_render", progress=10)
         _ensure_job_checkpoint(checkpoint_service, job_id, "silent_immersive", job.get("project_id"), {"plan": plan_payload, "settings": settings_payload}, output_dir)
@@ -3090,10 +3108,11 @@ def run_silent_reup_plan_job(
         plan = SilentReupPlan.model_validate(plan_payload)
         settings = DouyinReupSettings.model_validate(settings_payload)
         pipeline = SilentReupPipeline()
-        result = pipeline.render_from_plan(plan, settings, output_dir)
+        result = pipeline.render_from_plan(plan, settings, output_dir, progress_callback=progress_callback)
         success = result.status == "success" and bool(result.output_video_path)
         qa_summary = None
         if success and result.output_video_path:
+            progress_callback({"current_step": "final_output_qa", "progress": 98})
             qa_report = FinalOutputQAService().run_qa_for_output(
                 result.output_video_path,
                 PlatformTarget.tiktok,

@@ -29,10 +29,12 @@ def test_hardsub_ocr_service_creates_srt_and_debug_json(tmp_path: Path, monkeypa
     )
     provider = MockOCRProvider({0: ("这个真的很好用", 0.9), 500: ("这个真的很好用", 0.88), 1000: ("价格也很便宜", 0.86)})
 
+    progress_events = []
     result = HardSubOCRService(frame_sampler=FakeSampler(), provider=provider).extract_hardsub_to_srt(
         str(video),
         str(tmp_path / "out"),
         DouyinReupSettings(enabled=True, ocr_provider="mock_ocr"),
+        progress_callback=progress_events.append,
     )
 
     assert result.source_srt_path
@@ -40,3 +42,6 @@ def test_hardsub_ocr_service_creates_srt_and_debug_json(tmp_path: Path, monkeypa
     assert result.debug_json_path
     assert Path(result.debug_json_path).exists()
     assert result.detected_line_count == 2
+    assert progress_events[0]["current_step"] == "ocr_probe"
+    assert any(event["current_step"] == "ocr_recognizing" for event in progress_events)
+    assert progress_events[-1]["progress"] == 100

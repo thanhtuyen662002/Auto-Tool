@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,9 @@ class BaseOCRProvider:
 
     def recognize(self, image_path: str, region: OCRRegion) -> OCRFrameResult:
         raise NotImplementedError
+
+    def recognize_batch(self, image_paths: list[str], region: OCRRegion) -> list[OCRFrameResult]:
+        return [self.recognize(image_path, region) for image_path in image_paths]
 
 
 class PaddleOCRProvider(BaseOCRProvider):
@@ -57,6 +61,8 @@ class PaddleOCRProvider(BaseOCRProvider):
 
 class EasyOCRProvider(BaseOCRProvider):
     provider_name = "easyocr"
+    _cache_lock = threading.Lock()
+    _reader_cache: dict[str, tuple[Any, threading.Lock]] = {}
 
     def __init__(self, language: str = "ch_sim") -> None:
         report = ensure_ocr_dependency("easyocr", auto_install=None, warmup_models=False, language=language)
@@ -67,20 +73,20 @@ class EasyOCRProvider(BaseOCRProvider):
         except ImportError as exc:
             raise RuntimeError("Không tìm thấy EasyOCR. Hãy cài easyocr hoặc đổi OCR provider.") from exc
         lang = "ch_sim" if language in {"ch", "zh", "zh-cn"} else language
-        self.reader = easyocr.Reader([lang], gpu=False)
+        with self._cache_lock:
+            cached = self._reader_cache.get(lang)
+            if cached is None:
+                cached = (easyocr.Reader([lang], gpu=False), threading.Lock())
+                self._reader_cache[lang] = cached
+        self.reader, self._reader_lock = cached
 
     def recognize(self, image_path: str, region: OCRRegion) -> OCRFrameResult:
         crop_path = crop_region(image_path, region)
         warnings: list[str] = []
         try:
-            raw = self.reader.readtext(str(crop_path))
-            blocks = [
-                {"box": item[0], "text": str(item[1]), "confidence": float(item[2])}
-                for item in raw
-                if len(item) >= 3
-            ]
-            text = " ".join(block["text"] for block in blocks if block.get("text")).strip()
-            confidence = _average([float(block.get("confidence", 0.0)) for block in blocks])
+            with self._reader_lock:
+                raw = self.reader.readtext(str(crop_path))
+            blocks, text, confidence = _parse_easyocr_blocks(raw)
         except Exception as exc:
             blocks = []
             text = ""
@@ -95,6 +101,35 @@ class EasyOCRProvider(BaseOCRProvider):
             raw_blocks=blocks,
             warnings=warnings,
         )
+
+    def recognize_batch(self, image_paths: list[str], region: OCRRegion) -> list[OCRFrameResult]:
+        if not image_paths:
+            return []
+        crop_paths = [crop_region(image_path, region) for image_path in image_paths]
+        try:
+            with self._reader_lock:
+                raw_batch = self.reader.readtext_batched(
+                    [str(path) for path in crop_paths],
+                    batch_size=min(4, len(crop_paths)),
+                    decoder="greedy",
+                )
+        except Exception:
+            return [self.recognize(image_path, region) for image_path in image_paths]
+
+        results: list[OCRFrameResult] = []
+        for image_path, raw in zip(image_paths, raw_batch):
+            blocks, text, confidence = _parse_easyocr_blocks(raw)
+            results.append(
+                OCRFrameResult(
+                    timestamp_ms=_timestamp_from_frame_name(image_path),
+                    frame_path=image_path,
+                    region=region,
+                    text=text,
+                    confidence=confidence,
+                    raw_blocks=blocks,
+                )
+            )
+        return results
 
 
 class MockOCRProvider(BaseOCRProvider):
@@ -165,6 +200,17 @@ def _parse_paddle_blocks(raw: Any) -> list[dict[str, Any]]:
         except Exception:
             continue
     return blocks
+
+
+def _parse_easyocr_blocks(raw: Any) -> tuple[list[dict[str, Any]], str, float]:
+    blocks = [
+        {"box": item[0], "text": str(item[1]), "confidence": float(item[2])}
+        for item in (raw or [])
+        if len(item) >= 3
+    ]
+    text = " ".join(block["text"] for block in blocks if block.get("text")).strip()
+    confidence = _average([float(block.get("confidence", 0.0)) for block in blocks])
+    return blocks, text, confidence
 
 
 def _average(values: list[float]) -> float:

@@ -402,6 +402,8 @@ class JobStatusResponse(BaseModel):
     failed_outputs: int
     logs: list[JobLogItem]
     cache_summary: dict[str, Any] | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class JobOutputItem(BaseModel):

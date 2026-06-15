@@ -4,6 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 from time import perf_counter
+from typing import Any, Callable
 
 from app.adapters.ffmpeg_adapter import probe_video
 from app.modules.douyin_reup.douyin_render_pipeline import DouyinRenderPipeline
@@ -80,6 +81,7 @@ class SilentReupPipeline:
         settings: DouyinReupSettings,
         output_dir: str,
         product_context: dict | None = None,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> SilentReupPlan:
         started = perf_counter()
         self.last_plan_path = None
@@ -97,6 +99,7 @@ class SilentReupPipeline:
         target_dir = ensure_dir(output_dir)
         warnings: list[str] = []
 
+        _progress(progress_callback, "speech_detection", 5)
         detector = self.speech_detector or SpeechPresenceDetector(threshold=settings.speech_detection_threshold)
         if hasattr(detector, "threshold"):
             detector.threshold = settings.speech_detection_threshold
@@ -119,12 +122,21 @@ class SilentReupPipeline:
         if speech.has_speech:
             warnings.append("Video có dấu hiệu lời thoại rõ; nên cân nhắc dùng flow ASR bình thường nếu cần dịch lời thoại.")
 
+        _progress(progress_callback, "visual_segmentation", 20)
         segments = []
         if settings.use_visual_segments_for_silent_video:
             segments = self.visual_analyzer.analyze_video(video_path, settings, str(target_dir))
 
-        ocr_translated_srt_path = self._try_ocr_translate(video_path, settings, target_dir, warnings)
+        _progress(progress_callback, "ocr", 38)
+        ocr_translated_srt_path = self._try_ocr_translate(
+            video_path,
+            settings,
+            target_dir,
+            warnings,
+            progress_callback=_mapped_progress_callback(progress_callback, 38, 70, "ocr"),
+        )
         segments = self._attach_ocr_text_to_segments(segments)
+        _progress(progress_callback, "visual_tagging", 72)
         segments = self.scene_classifier.classify_segments(segments, product_context)
         visual_tag_report = self.visual_tag_service.tag_video_segments(
             video_path,
@@ -142,6 +154,7 @@ class SilentReupPipeline:
             warnings.append(f"Không thể lưu visual tag report: {exc}")
         if settings.visual_caption_language.casefold() not in {"vi", "vi-vn"}:
             warnings.append("Visual caption templates are Vietnamese; visual_caption_language was normalized to vi.")
+        _progress(progress_callback, "caption_generation", 82)
         if ocr_translated_srt_path or settings.generate_visual_captions:
             captions = self.caption_generator.generate_captions(
                 video_path=video_path,
@@ -180,6 +193,7 @@ class SilentReupPipeline:
             script_path.write_text(voiceover_script, encoding="utf-8")
             self.last_voiceover_script_path = str(script_path)
 
+        _progress(progress_callback, "quality_scoring", 92)
         quality_scores = [caption.quality_score for caption in captions if caption.quality_score is not None]
         industry = visual_tag_report.recommended_industry or normalize_silent_industry(product_context)
         template_count = len(
@@ -275,6 +289,7 @@ class SilentReupPipeline:
         )
         if plan.generate_voiceover and plan.voiceover_script:
             self.last_voiceover_subtitle_path = self._write_voiceover_subtitle(plan, target_dir)
+        _progress(progress_callback, "plan_completed", 100)
         return plan
 
     def regenerate_captions(
@@ -369,6 +384,7 @@ class SilentReupPipeline:
         plan: SilentReupPlan,
         settings: DouyinReupSettings,
         output_dir: str,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> SilentReupResult:
         target_dir = ensure_dir(output_dir)
         warnings = list(plan.warnings)
@@ -376,10 +392,12 @@ class SilentReupPipeline:
         plan_path = target_dir / "silent_reup_plan.json"
         write_json(plan_path, plan.model_dump(mode="json"))
         self.last_plan_path = str(plan_path)
+        _progress(progress_callback, "caption_export", 5)
         caption_srt = self.write_caption_srt(plan, str(target_dir), "silent_reup_caption_vi.srt")
         voiceover_path = None
         try:
             if plan.generate_voiceover and plan.voiceover_script:
+                _progress(progress_callback, "voiceover", 20)
                 if not self.last_voiceover_script_path:
                     script_path = target_dir / f"{Path(plan.video_path).stem}_voiceover_script.txt"
                     script_path.write_text(plan.voiceover_script, encoding="utf-8")
@@ -388,6 +406,7 @@ class SilentReupPipeline:
                 voiceover_path = self._generate_voiceover(plan, settings, str(target_dir))
                 warnings.extend(self.voice_generator.warnings)
 
+            _progress(progress_callback, "video_probe", 40)
             media = probe_video(plan.video_path)
             video = DouyinVideoItem(
                 path=plan.video_path,
@@ -399,6 +418,7 @@ class SilentReupPipeline:
                 has_audio=media.has_audio,
             )
             render_settings = _render_settings_for_silent(settings)
+            _progress(progress_callback, "ffmpeg_render", 50)
             render_payload = self.render_pipeline.render_video_with_srt(
                 video=video,
                 subtitle_srt_path=caption_srt,
@@ -422,6 +442,7 @@ class SilentReupPipeline:
                 warnings=_dedupe(render_payload.get("warnings") or warnings),
                 errors=_dedupe(render_payload.get("errors") or []),
             )
+            _progress(progress_callback, "render_completed", 100)
         except Exception as exc:
             errors.append(str(exc))
             result = SilentReupResult(
@@ -540,11 +561,20 @@ class SilentReupPipeline:
         settings: DouyinReupSettings,
         target_dir: Path,
         warnings: list[str],
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> str | None:
         if not settings.use_ocr_if_no_subtitle:
             return None
         try:
-            ocr_result = self.ocr_service.extract_hardsub_to_srt(video_path, str(target_dir / "ocr"), settings)
+            if progress_callback is None:
+                ocr_result = self.ocr_service.extract_hardsub_to_srt(video_path, str(target_dir / "ocr"), settings)
+            else:
+                ocr_result = self.ocr_service.extract_hardsub_to_srt(
+                    video_path,
+                    str(target_dir / "ocr"),
+                    settings,
+                    progress_callback=progress_callback,
+                )
         except Exception as exc:
             warnings.append(f"OCR hard-sub cho silent mode thất bại: {exc}")
             return None
@@ -734,6 +764,38 @@ def _dedupe(values: list[str]) -> list[str]:
             cleaned.append(text)
             seen.add(text)
     return cleaned
+
+
+def _progress(
+    callback: Callable[[dict[str, Any]], None] | None,
+    step: str,
+    progress: int,
+) -> None:
+    if callback:
+        callback({"current_step": step, "progress": max(0, min(100, int(progress)))})
+
+
+def _mapped_progress_callback(
+    callback: Callable[[dict[str, Any]], None] | None,
+    start: int,
+    end: int,
+    prefix: str,
+) -> Callable[[dict[str, Any]], None] | None:
+    if callback is None:
+        return None
+
+    def mapped(payload: dict[str, Any]) -> None:
+        source_progress = max(0, min(100, int(payload.get("progress", 0))))
+        step = str(payload.get("current_step") or "processing")
+        callback(
+            {
+                **payload,
+                "current_step": f"{prefix}_{step}",
+                "progress": start + int((source_progress / 100) * max(0, end - start)),
+            }
+        )
+
+    return mapped
 
 
 def _standard_silent_log(

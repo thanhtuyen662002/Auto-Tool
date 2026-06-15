@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Callable
+
+from PIL import Image
 
 from app.adapters.ffmpeg_adapter import probe_video
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
@@ -33,26 +36,78 @@ class HardSubOCRService:
         video_path: str,
         output_dir: str,
         settings: DouyinReupSettings,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> HardSubOCRResult:
         warnings: list[str] = []
         errors: list[str] = []
         target_dir = ensure_dir(output_dir)
+        _progress(progress_callback, "ocr_probe", 2)
         media = probe_video(video_path)
-        region = self.region_detector.detect_region(
-            media.width,
-            media.height,
-            mode=settings.ocr_region_mode,
-            manual_region=settings.ocr_manual_region,
-        )
+        _progress(progress_callback, "ocr_loading_model", 5)
         provider = self.provider or build_ocr_provider(settings.ocr_provider, settings.ocr_language)
 
+        _progress(progress_callback, "ocr_sampling_frames", 10)
         frames = self.frame_sampler.sample_frames(
             video_path,
             str(target_dir / "ocr_frames"),
             sample_fps=settings.ocr_sample_fps,
         )
+        frame_width, frame_height = media.width, media.height
+        if frames:
+            try:
+                with Image.open(frames[0][1]) as image:
+                    frame_width, frame_height = image.size
+            except OSError:
+                pass
+        manual_region = settings.ocr_manual_region
+        if manual_region and (frame_width != media.width or frame_height != media.height):
+            scale_x = frame_width / max(1, media.width)
+            scale_y = frame_height / max(1, media.height)
+            manual_region = {
+                "x": int(float(manual_region.get("x", 0)) * scale_x),
+                "y": int(float(manual_region.get("y", 0)) * scale_y),
+                "width": int(float(manual_region.get("width", media.width)) * scale_x),
+                "height": int(float(manual_region.get("height", media.height)) * scale_y),
+            }
+        region = self.region_detector.detect_region(
+            frame_width,
+            frame_height,
+            mode=settings.ocr_region_mode,
+            manual_region=manual_region,
+        )
+        _progress(progress_callback, "ocr_recognizing", 20)
         frame_results: list[OCRFrameResult] = []
-        for timestamp_ms, frame_path in frames:
+        total_frames = max(1, len(frames))
+        frames_to_process = frames
+        if type(provider).recognize_batch is not BaseOCRProvider.recognize_batch:
+            batch_size = 4
+            for batch_start in range(0, len(frames), batch_size):
+                batch = frames[batch_start : batch_start + batch_size]
+                try:
+                    recognized = provider.recognize_batch([frame_path for _timestamp, frame_path in batch], region)
+                except Exception as exc:
+                    recognized = [
+                        OCRFrameResult(
+                            timestamp_ms=timestamp_ms,
+                            frame_path=frame_path,
+                            region=region,
+                            text="",
+                            confidence=0.0,
+                            warnings=[f"OCR frame error: {exc}"],
+                        )
+                        for timestamp_ms, frame_path in batch
+                    ]
+                for (timestamp_ms, _frame_path), result in zip(batch, recognized):
+                    if result.timestamp_ms != timestamp_ms:
+                        result = result.model_copy(update={"timestamp_ms": timestamp_ms})
+                    frame_results.append(result)
+                    warnings.extend(result.warnings)
+                completed_frames = min(len(frames), batch_start + len(batch))
+                percent = 20 + int((completed_frames / total_frames) * 72)
+                _progress(progress_callback, "ocr_recognizing", min(92, percent), completed_frames, total_frames)
+            frames_to_process = []
+
+        for frame_index, (timestamp_ms, frame_path) in enumerate(frames_to_process, start=1):
             try:
                 result = provider.recognize(frame_path, region)
                 if result.timestamp_ms != timestamp_ms:
@@ -72,6 +127,11 @@ class HardSubOCRService:
                 )
                 warnings.append(f"OCR frame lỗi: {exc}")
 
+            if frame_index == total_frames or frame_index % max(1, total_frames // 15) == 0:
+                percent = 20 + int((frame_index / total_frames) * 72)
+                _progress(progress_callback, "ocr_recognizing", min(92, percent), frame_index, total_frames)
+
+        _progress(progress_callback, "ocr_merging_lines", 95, len(frames), len(frames))
         lines = self.line_merger.merge_frames_to_lines(frame_results, settings)
         average_confidence = sum(line.confidence for line in lines) / len(lines) if lines else 0.0
         source_srt_path = None
@@ -111,6 +171,7 @@ class HardSubOCRService:
             "errors": errors,
         }
         write_json(debug_path, payload)
+        _progress(progress_callback, "ocr_completed", 100, len(frames), len(frames))
 
         return HardSubOCRResult(
             video_path=video_path,
@@ -125,4 +186,22 @@ class HardSubOCRService:
             lines=lines,
             warnings=warnings,
             errors=errors,
+        )
+
+
+def _progress(
+    callback: Callable[[dict[str, Any]], None] | None,
+    step: str,
+    progress: int,
+    completed_frames: int = 0,
+    total_frames: int = 0,
+) -> None:
+    if callback:
+        callback(
+            {
+                "current_step": step,
+                "progress": max(0, min(100, int(progress))),
+                "completed_frames": completed_frames,
+                "total_frames": total_frames,
+            }
         )

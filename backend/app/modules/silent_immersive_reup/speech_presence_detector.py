@@ -4,7 +4,6 @@ import os
 import re
 import subprocess
 import tempfile
-from importlib.util import find_spec
 from pathlib import Path
 
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_video
@@ -81,7 +80,7 @@ class SpeechPresenceDetector:
             return False
         if configured in {"1", "true", "yes", "on"}:
             return True
-        return find_spec("faster_whisper") is not None
+        return False
 
     @staticmethod
     def _audio_energy_score(video_path: str, max_duration: float, warnings: list[str]) -> float:
@@ -106,7 +105,19 @@ class SpeechPresenceDetector:
             "null",
             "NUL" if os.name == "nt" else "/dev/null",
         ]
-        result = subprocess.run(command, check=False, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        try:
+            result = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            warnings.append("FFmpeg audio-energy check timed out after 120 seconds.")
+            return 0.0
         output = "\n".join([result.stdout or "", result.stderr or ""])
         if result.returncode != 0:
             warnings.append("FFmpeg không đo được audio energy cho video.")

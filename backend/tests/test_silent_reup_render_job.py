@@ -48,6 +48,9 @@ def test_standalone_silent_render_job_runs_final_qa(tmp_path):
     assert output["final_output_qa"]["status"] in {"passed", "passed_with_warnings"}
     assert output["log_file"]
     assert job["results"]["summary"]["final_output_qa"]["total_checked"] == 1
+    log_messages = [item["message"] for item in database.get_job_logs(job_id)]
+    assert any("ffmpeg_render" in message for message in log_messages)
+    assert any("final_output_qa" in message for message in log_messages)
     DouyinReupSummary.model_validate(job["results"]["summary"])
     pack = ExportPackService().create_export_pack_for_job(job_id, PlatformTarget.tiktok)
     assert pack.items

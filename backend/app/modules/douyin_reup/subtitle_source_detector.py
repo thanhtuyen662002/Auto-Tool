@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Any, Callable
 
 from app.adapters.ffmpeg_adapter import FFmpegError, run_ffmpeg
 from app.modules.douyin_reup.asr_service import ASRService
@@ -21,7 +22,9 @@ class SubtitleSourceDetector:
         video: DouyinVideoItem,
         settings: DouyinReupSettings,
         work_dir: str,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> SubtitleSourceResult:
+        self._progress_callback = progress_callback
         target_dir = ensure_dir(work_dir)
         warnings: list[str] = []
         errors: list[str] = []
@@ -56,6 +59,7 @@ class SubtitleSourceDetector:
                         model_size=settings.asr_model_size,
                         device=settings.asr_device,
                         vad_filter=settings.asr_vad_filter,
+                        progress_callback=progress_callback,
                     )
                     asr_result = SubtitleSourceResult(
                         video_path=video.path,
@@ -138,9 +142,19 @@ class SubtitleSourceDetector:
         target_dir: Path,
         reason: str,
         error_sink: list[str] | None = None,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> SubtitleSourceResult | None:
+        progress_callback = progress_callback or getattr(self, "_progress_callback", None)
         try:
-            result = self.ocr_service.extract_hardsub_to_srt(video.path, str(target_dir), settings)
+            if progress_callback is None:
+                result = self.ocr_service.extract_hardsub_to_srt(video.path, str(target_dir), settings)
+            else:
+                result = self.ocr_service.extract_hardsub_to_srt(
+                    video.path,
+                    str(target_dir),
+                    settings,
+                    progress_callback=progress_callback,
+                )
         except Exception as exc:
             if error_sink is not None:
                 error_sink.append(f"OCR hard-sub thất bại cho {video.filename}: {exc}")

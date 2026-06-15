@@ -6,6 +6,7 @@ interface RenderProgressProps {
 
 export default function RenderProgress({ job }: RenderProgressProps) {
   const progress = Math.max(0, Math.min(100, job?.progress ?? 0));
+  const stalledMinutes = staleMinutes(job);
   return (
     <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
       <div className="mb-3 flex items-center justify-between gap-4">
@@ -18,6 +19,11 @@ export default function RenderProgress({ job }: RenderProgressProps) {
       <div className="h-3 overflow-hidden rounded-full bg-surface">
         <div className="h-full bg-brand transition-all" style={{ width: `${progress}%` }} />
       </div>
+      {stalledMinutes !== null ? (
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Không có cập nhật xử lý trong {stalledMinutes} phút. API vẫn có thể trả 200 khi worker nền đã bị kẹt; hãy xem bước hiện tại và nhật ký bên dưới.
+        </div>
+      ) : null}
       <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
         <Metric label="Đã hoàn thành" value={job?.completed_outputs ?? 0} />
         <Metric label="Bị lỗi" value={job?.failed_outputs ?? 0} />
@@ -74,6 +80,24 @@ function formatStatus(status: string): string {
 
 function formatStep(step: string): string {
   const normalized = step.toLowerCase();
+  const detailedLabels: Record<string, string> = {
+    subtitle_source: 'Đang xác định nguồn phụ đề',
+    asr_extracting_audio: 'Đang tách âm thanh cho nhận diện thoại',
+    asr_loading_model: 'Đang nạp model nhận diện thoại',
+    asr_transcribing: 'Đang nhận diện lời thoại',
+    asr_writing_subtitles: 'Đang ghi phụ đề nhận diện',
+    ocr_probe: 'Đang kiểm tra video cho OCR',
+    ocr_loading_model: 'Đang nạp model OCR',
+    ocr_sampling_frames: 'Đang lấy frame phụ đề',
+    ocr_recognizing: 'Đang nhận diện chữ trên video',
+    ocr_merging_lines: 'Đang ghép dòng OCR',
+    translation: 'Đang dịch phụ đề',
+    timing_guard: 'Đang căn thời gian phụ đề',
+    ffmpeg_render: 'Đang render video bằng FFmpeg',
+    final_output_qa: 'Đang kiểm tra video đầu ra',
+  };
+  const detailedStep = Object.keys(detailedLabels).find((key) => normalized === key || normalized.endsWith(`_${key}`));
+  if (detailedStep) return detailedLabels[detailedStep];
   const labels: Record<string, string> = {
     queued: 'Đang chờ',
     starting: 'Đang bắt đầu',
@@ -90,4 +114,12 @@ function formatStep(step: string): string {
   if (normalized.startsWith('douyin_video_')) return `Đang xử lý Douyin video ${normalized.replace('douyin_video_', '').replace('_done', '')}`;
   if (normalized.startsWith('retry_')) return `Retry: ${formatStep(normalized.replace('retry_', ''))}`;
   return labels[normalized] ?? step;
+}
+
+function staleMinutes(job: JobStatus | null): number | null {
+  if (!job || job.status !== 'running' || !job.updated_at) return null;
+  const updatedAt = new Date(job.updated_at).getTime();
+  if (!Number.isFinite(updatedAt)) return null;
+  const minutes = Math.floor((Date.now() - updatedAt) / 60_000);
+  return minutes >= 5 ? minutes : null;
 }

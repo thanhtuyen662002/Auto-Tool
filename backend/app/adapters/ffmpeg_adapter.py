@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from fractions import Fraction
 from pathlib import Path
@@ -31,9 +32,14 @@ def _run_process(command: list[str]) -> subprocess.CompletedProcess[str]:
             text=True,
             encoding="utf-8",
             errors="replace",
+            timeout=_process_timeout_seconds(),
         )
     except FileNotFoundError as exc:
         raise MissingFFmpegError(f"Command not found: {command[0]}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise FFmpegError(
+            f"Command timed out after {_process_timeout_seconds()} seconds: {' '.join(command)}"
+        ) from exc
 
     if result.returncode != 0:
         stderr = result.stderr.strip()
@@ -41,6 +47,14 @@ def _run_process(command: list[str]) -> subprocess.CompletedProcess[str]:
         details = stderr or stdout or "No process output was captured."
         raise FFmpegError(f"Command failed ({' '.join(command)}):\n{details}")
     return result
+
+
+def _process_timeout_seconds() -> float:
+    raw = os.getenv("AUTO_TOOL_FFMPEG_TIMEOUT_SECONDS", "1800").strip()
+    try:
+        return max(30.0, float(raw))
+    except ValueError:
+        return 1800.0
 
 
 def _parse_fps(value: str | None) -> float:
