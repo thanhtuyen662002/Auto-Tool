@@ -76,7 +76,13 @@ class FinalOutputQAService:
         )
         for warning in subtitle.warnings:
             issue_type = "subtitle_missing" if "subtitle file is missing" in warning.casefold() else "overlay_missing" if "overlay" in warning.casefold() else "subtitle_unsafe_zone"
-            issues.append(_issue(issue_type, "warning", warning, "Review subtitle and overlay placement before posting."))
+            severity = "critical" if issue_type == "subtitle_missing" and subtitle_expected else "warning"
+            suggestion = (
+                "Render again with burn_subtitle enabled and inspect the subtitle artifact."
+                if issue_type == "subtitle_missing"
+                else "Review subtitle and overlay placement before posting."
+            )
+            issues.append(_issue(issue_type, severity, warning, suggestion))
 
         score = _score(issues)
         status = "failed" if any(item.severity == QASeverity.critical for item in issues) else "passed_with_warnings" if any(item.severity == QASeverity.warning for item in issues) else "passed"

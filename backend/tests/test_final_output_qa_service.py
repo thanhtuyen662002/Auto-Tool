@@ -47,6 +47,20 @@ def test_required_audio_missing_is_critical_but_optional_audio_passes(tmp_path):
     assert optional.status == "passed"
 
 
+def test_required_subtitle_missing_is_critical(tmp_path):
+    video = make_video(tmp_path / "with_audio.mp4")
+
+    report = FinalOutputQAService().run_qa_for_output(
+        str(video),
+        PlatformTarget.tiktok,
+        subtitle_expected=True,
+        audio_expected=True,
+    )
+
+    assert report.status == "failed"
+    assert any(issue.issue_type == "subtitle_missing" and issue.severity.value == "critical" for issue in report.issues)
+
+
 def test_non_preferred_video_codec_warns(tmp_path):
     video = make_video(tmp_path / "mpeg4.mp4", video_codec="mpeg4")
 
