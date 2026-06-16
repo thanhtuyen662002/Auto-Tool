@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import threading
+import os
 from pathlib import Path
 from typing import Any, Callable
 
-from app.adapters.ffmpeg_adapter import run_ffmpeg
+from app.adapters.ffmpeg_adapter import probe_video, run_ffmpeg
 from app.modules.douyin_reup.subtitle_timing_guard import SubtitleBlock, write_srt_blocks
 from app.utils.file_utils import ensure_dir
 from app.utils.logger import get_logger
@@ -47,12 +48,15 @@ class ASRService:
         target = Path(output_srt_path)
         ensure_dir(target.parent)
         audio_path = target.with_name(f"{target.stem}_asr_audio.wav")
+        audio_limit = _asr_audio_limit_seconds(video_path)
+        trim_args = ["-t", f"{audio_limit:.3f}"] if audio_limit else []
         _progress(progress_callback, "asr_extracting_audio", 10)
         run_ffmpeg(
             [
                 "-y",
                 "-i",
                 str(Path(video_path).expanduser().resolve()),
+                *trim_args,
                 "-vn",
                 "-ac",
                 "1",
@@ -145,6 +149,21 @@ class ASRService:
             condition_on_previous_text=True,
         )
         return list(segments)
+
+
+def _asr_audio_limit_seconds(video_path: str) -> float | None:
+    raw = os.getenv("AUTO_TOOL_ASR_MAX_AUDIO_SECONDS", "180").strip()
+    try:
+        limit = float(raw)
+    except ValueError:
+        limit = 180.0
+    if limit <= 0:
+        return None
+    try:
+        duration = probe_video(video_path).duration
+    except Exception:
+        return limit
+    return min(max(1.0, duration), limit)
 
 
 def _is_missing_vad_asset_error(exc: Exception) -> bool:
