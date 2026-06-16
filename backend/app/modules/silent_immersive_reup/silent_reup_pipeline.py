@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 from collections import Counter
 from pathlib import Path
 from time import perf_counter
@@ -26,6 +27,7 @@ from app.modules.silent_immersive_reup.silent_schema import (
 from app.modules.silent_immersive_reup.speech_presence_detector import SpeechPresenceDetector
 from app.modules.silent_immersive_reup.visual_segment_analyzer import VisualSegmentAnalyzer
 from app.modules.subtitle_review.subtitle_review_schema import SubtitleReviewDocument
+from app.modules.tts.settings_builder import voiceover_tts_settings
 from app.modules.tts.tts_schema import TTSSettings
 from app.modules.voice_generator.voice_generator import VoiceGenerator
 from app.modules.silent_visual_tagging.visual_tag_repository import VisualTagRepository
@@ -387,6 +389,7 @@ class SilentReupPipeline:
         settings: DouyinReupSettings,
         output_dir: str,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
+        tts_settings: TTSSettings | None = None,
     ) -> SilentReupResult:
         target_dir = ensure_dir(output_dir)
         warnings = list(plan.warnings)
@@ -405,7 +408,7 @@ class SilentReupPipeline:
                     script_path.write_text(plan.voiceover_script, encoding="utf-8")
                     self.last_voiceover_script_path = str(script_path)
                 self.last_voiceover_subtitle_path = self._write_voiceover_subtitle(plan, target_dir)
-                voiceover_path = self._generate_voiceover(plan, settings, str(target_dir))
+                voiceover_path = self._generate_voiceover(plan, settings, str(target_dir), tts_settings=tts_settings)
                 warnings.extend(self.voice_generator.warnings)
 
             _progress(progress_callback, "video_probe", 40)
@@ -421,15 +424,18 @@ class SilentReupPipeline:
             )
             render_settings = _render_settings_for_silent(settings)
             _progress(progress_callback, "ffmpeg_render", 50)
-            render_payload = self.render_pipeline.render_video_with_srt(
-                video=video,
-                subtitle_srt_path=caption_srt,
-                settings=render_settings,
-                output_dir=str(target_dir),
-                output_name=f"{Path(plan.video_path).stem}_silent_reup.mp4",
-                warnings=warnings,
-                voiceover_path=voiceover_path,
-            )
+            render_kwargs: dict[str, Any] = {
+                "video": video,
+                "subtitle_srt_path": caption_srt,
+                "settings": render_settings,
+                "output_dir": str(target_dir),
+                "output_name": f"{Path(plan.video_path).stem}_silent_reup.mp4",
+                "warnings": warnings,
+                "voiceover_path": voiceover_path,
+            }
+            if "tts_settings" in inspect.signature(self.render_pipeline.render_video_with_srt).parameters:
+                render_kwargs["tts_settings"] = tts_settings
+            render_payload = self.render_pipeline.render_video_with_srt(**render_kwargs)
             result = SilentReupResult(
                 input_video_path=plan.video_path,
                 output_video_path=render_payload.get("path"),
@@ -484,6 +490,7 @@ class SilentReupPipeline:
         document: SubtitleReviewDocument,
         settings: DouyinReupSettings,
         output_dir: str,
+        tts_settings: TTSSettings | None = None,
     ) -> dict:
         target_dir = ensure_dir(output_dir)
         context = document.context or {}
@@ -518,18 +525,21 @@ class SilentReupPipeline:
             script_path.write_text(script, encoding="utf-8")
             self.last_voiceover_script_path = str(script_path)
             self.last_voiceover_subtitle_path = self._write_voiceover_subtitle(plan, target_dir)
-            voiceover_path = self._generate_voiceover(plan, settings, str(target_dir))
+            voiceover_path = self._generate_voiceover(plan, settings, str(target_dir), tts_settings=tts_settings)
 
         plan_path = target_dir / "silent_reup_plan.json"
         write_json(plan_path, plan.model_dump(mode="json"))
         self.last_plan_path = str(plan_path)
         render_settings = _render_settings_for_silent(settings)
-        result = self.render_pipeline.render_from_review_document(
-            document.id,
-            render_settings,
-            str(target_dir),
-            voiceover_path=voiceover_path,
-        )
+        render_kwargs: dict[str, Any] = {
+            "document_id": document.id,
+            "settings": render_settings,
+            "output_dir": str(target_dir),
+            "voiceover_path": voiceover_path,
+        }
+        if "tts_settings" in inspect.signature(self.render_pipeline.render_from_review_document).parameters:
+            render_kwargs["tts_settings"] = tts_settings
+        result = self.render_pipeline.render_from_review_document(**render_kwargs)
         result.update(
             {
                 "reup_mode": "silent_immersive",
@@ -678,7 +688,13 @@ class SilentReupPipeline:
         write_srt_blocks(blocks, str(path))
         return str(path)
 
-    def _generate_voiceover(self, plan: SilentReupPlan, settings: DouyinReupSettings, output_dir: str) -> str:
+    def _generate_voiceover(
+        self,
+        plan: SilentReupPlan,
+        settings: DouyinReupSettings,
+        output_dir: str,
+        tts_settings: TTSSettings | None = None,
+    ) -> str:
         lines = _voice_lines_from_script(plan)
         subtitles = [
             SubtitleLine(start_hint=line.start, end_hint=line.end, text=line.text)
@@ -692,9 +708,9 @@ class SilentReupPipeline:
             caption=" ".join(line.text for line in subtitles[:2]),
             hashtags=["#review", "#douyin", "#sanpham"],
         )
-        tts_settings = TTSSettings(
+        merged_tts_settings = voiceover_tts_settings(
+            tts_settings,
             provider=settings.silent_voiceover_provider,
-            fallback_provider="piper",
             voice=settings.silent_voiceover_voice,
             language=settings.target_language,
             output_format="mp3",
@@ -706,7 +722,7 @@ class SilentReupPipeline:
             text_filename="silent_voiceover_text.txt",
             language=settings.target_language,
             target_duration=_plan_duration(plan),
-            tts_settings=tts_settings,
+            tts_settings=merged_tts_settings,
         )
 
 

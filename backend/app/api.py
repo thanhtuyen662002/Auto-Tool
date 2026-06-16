@@ -161,6 +161,7 @@ from app.modules.source_media import (
 )
 from app.modules.timeline_templates.template_registry import list_timeline_templates
 from app.modules.tts.tts_manager import list_tts_providers
+from app.modules.tts.tts_schema import TTSSettings
 from app.modules.tts.providers.google_cloud_tts_provider import list_google_cloud_voices
 from app.modules.tts.providers.base import TTSProviderError
 from app.modules.visual_style.style_registry import get_visual_style_preset, list_visual_style_presets
@@ -1353,7 +1354,13 @@ def create_app() -> FastAPI:
             database.create_job(job_id, project_id, preview_only=False, total_outputs=1)
             threading.Thread(
                 target=run_silent_reup_plan_job,
-                args=(job_id, plan.model_dump(mode="json"), settings.model_dump(mode="json"), stored["output_dir"]),
+                args=(
+                    job_id,
+                    plan.model_dump(mode="json"),
+                    settings.model_dump(mode="json"),
+                    stored["output_dir"],
+                    config.tts.model_dump(mode="json"),
+                ),
                 daemon=True,
             ).start()
             return SilentReupRenderResponse(success=True, job_id=job_id)
@@ -3120,6 +3127,7 @@ def run_silent_reup_plan_job(
     plan_payload: dict[str, Any],
     settings_payload: dict[str, Any],
     output_dir: str,
+    tts_settings_payload: dict[str, Any] | None = None,
 ) -> None:
     database.init_db()
     checkpoint_service = JobCheckpointService()
@@ -3148,8 +3156,15 @@ def run_silent_reup_plan_job(
         checkpoint_service.update_job_status(job_id, JobRunStatus.running, "render")
         plan = SilentReupPlan.model_validate(plan_payload)
         settings = DouyinReupSettings.model_validate(settings_payload)
+        tts_settings = TTSSettings.model_validate(tts_settings_payload or {})
         pipeline = SilentReupPipeline()
-        result = pipeline.render_from_plan(plan, settings, output_dir, progress_callback=progress_callback)
+        result = pipeline.render_from_plan(
+            plan,
+            settings,
+            output_dir,
+            progress_callback=progress_callback,
+            tts_settings=tts_settings,
+        )
         success = result.status == "success" and bool(result.output_video_path)
         qa_summary = None
         if success and result.output_video_path:
@@ -3403,6 +3418,7 @@ def run_subtitle_review_render_job(
     pipeline = DouyinRenderPipeline()
     silent_pipeline = SilentReupPipeline(render_pipeline=pipeline)
     review_service = SubtitleReviewService()
+    tts_settings = _tts_settings_from_app_settings()
 
     try:
         database.update_job(job_id, status="running", current_step="render_approved_subtitles", progress=1)
@@ -3439,9 +3455,19 @@ def run_subtitle_review_render_job(
                         }
                     )
                 result = (
-                    silent_pipeline.render_review_document(document, document_settings, str(document_dir))
+                    silent_pipeline.render_review_document(
+                        document,
+                        document_settings,
+                        str(document_dir),
+                        tts_settings=tts_settings,
+                    )
                     if is_silent
-                    else pipeline.render_from_review_document(document_id, document_settings, str(document_dir))
+                    else pipeline.render_from_review_document(
+                        document_id,
+                        document_settings,
+                        str(document_dir),
+                        tts_settings=tts_settings,
+                    )
                 )
                 qa_report = FinalOutputQAService().run_qa_for_output(
                     str(result["path"]),
@@ -4391,6 +4417,18 @@ def _apply_app_settings(config: ProjectConfig) -> ProjectConfig:
     if tts_updates:
         updates["tts"] = config.tts.model_copy(update=tts_updates)
     return config.model_copy(update=updates) if updates else config
+
+
+def _tts_settings_from_app_settings() -> TTSSettings:
+    settings = _get_app_settings()
+    updates: dict[str, Any] = {}
+    if settings.google_tts_api_key:
+        updates["api_key"] = settings.google_tts_api_key
+    if settings.google_tts_credentials_json_path:
+        updates["credentials_json_path"] = settings.google_tts_credentials_json_path
+    if settings.google_tts_access_token:
+        updates["access_token"] = settings.google_tts_access_token
+    return TTSSettings().model_copy(update=updates) if updates else TTSSettings()
 
 
 def _validation_error_safety_result(exc: ValidationError) -> SafetyCheckResult:

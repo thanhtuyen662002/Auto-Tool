@@ -474,13 +474,16 @@ class DouyinReupService:
             failed_step = "render"
             _step_progress(step_progress_callback, "render", 72)
             render_started = time.perf_counter()
-            render_payload = self.render_pipeline.render_video_with_translated_subtitle(
-                video=video,
-                translation_result=translation,
-                settings=settings,
-                output_dir=str(video_dir),
-                output_name=f"douyin_{index:03d}.mp4",
-            )
+            render_kwargs: dict[str, Any] = {
+                "video": video,
+                "translation_result": translation,
+                "settings": settings,
+                "output_dir": str(video_dir),
+                "output_name": f"douyin_{index:03d}.mp4",
+            }
+            if "tts_settings" in inspect.signature(self.render_pipeline.render_video_with_translated_subtitle).parameters:
+                render_kwargs["tts_settings"] = config.tts
+            render_payload = self.render_pipeline.render_video_with_translated_subtitle(**render_kwargs)
             durations["render_seconds"] = time.perf_counter() - render_started
             warnings.extend(render_payload.get("warnings") or [])
             errors.extend(render_payload.get("errors") or [])
@@ -754,6 +757,8 @@ class DouyinReupService:
                 render_kwargs["progress_callback"] = _mapped_progress_callback(
                     step_progress_callback, 78, 94, "silent_render"
                 )
+            if "tts_settings" in inspect.signature(self.silent_pipeline.render_from_plan).parameters:
+                render_kwargs["tts_settings"] = config.tts
             render_result = self.silent_pipeline.render_from_plan(plan, settings, str(video_dir), **render_kwargs)
             durations["render_seconds"] = time.perf_counter() - render_started
             warnings.extend(render_result.warnings)

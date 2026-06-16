@@ -10,6 +10,7 @@ from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVide
 from app.modules.douyin_reup.subtitle_timing_guard import parse_srt_blocks
 from app.modules.script_writer.script_writer import ProductVideoScript, SubtitleLine, VoiceoverLine
 from app.modules.subtitle_review import ApproveSubtitleDocumentRequest, SubtitleReviewService, SubtitleReviewStatus
+from app.modules.tts.settings_builder import voiceover_tts_settings
 from app.modules.tts.tts_schema import TTSSettings
 from app.modules.visual_style.overlay_asset_builder import build_overlay_asset
 from app.modules.visual_style.style_schema import VisualStyleSettings
@@ -31,6 +32,7 @@ class DouyinRenderPipeline:
         settings: DouyinReupSettings,
         output_dir: str,
         output_name: str,
+        tts_settings: TTSSettings | None = None,
     ) -> dict:
         return self._render_video_with_subtitle(
             video=video,
@@ -41,6 +43,7 @@ class DouyinRenderPipeline:
             output_dir=output_dir,
             output_name=output_name,
             voiceover_path=None,
+            tts_settings=tts_settings,
         )
 
     def render_video_with_srt(
@@ -52,6 +55,7 @@ class DouyinRenderPipeline:
         output_name: str,
         warnings: list[str] | None = None,
         voiceover_path: str | None = None,
+        tts_settings: TTSSettings | None = None,
     ) -> dict:
         return self._render_video_with_subtitle(
             video=video,
@@ -62,6 +66,7 @@ class DouyinRenderPipeline:
             output_dir=output_dir,
             output_name=output_name,
             voiceover_path=voiceover_path,
+            tts_settings=tts_settings,
         )
 
     def render_from_review_document(
@@ -70,6 +75,7 @@ class DouyinRenderPipeline:
         settings: DouyinReupSettings,
         output_dir: str,
         voiceover_path: str | None = None,
+        tts_settings: TTSSettings | None = None,
     ) -> dict:
         service = SubtitleReviewService()
         document = service.get_document(document_id)
@@ -102,6 +108,7 @@ class DouyinRenderPipeline:
             output_dir=output_dir,
             output_name=f"{Path(document.video_path).stem}_reviewed.mp4",
             voiceover_path=voiceover_path,
+            tts_settings=tts_settings,
         )
         result.update(
             {
@@ -123,6 +130,7 @@ class DouyinRenderPipeline:
         output_dir: str,
         output_name: str,
         voiceover_path: str | None,
+        tts_settings: TTSSettings | None,
     ) -> dict:
         target_dir = ensure_dir(output_dir)
         width, height = parse_resolution(settings.resolution)
@@ -171,6 +179,7 @@ class DouyinRenderPipeline:
                 output_name=output_name,
                 settings=settings,
                 target_duration=video.duration,
+                tts_settings=tts_settings,
             )
             warnings.extend(self.voice_generator.warnings)
 
@@ -288,6 +297,7 @@ class DouyinRenderPipeline:
         output_name: str,
         settings: DouyinReupSettings,
         target_duration: float,
+        tts_settings: TTSSettings | None = None,
     ) -> str:
         blocks = [block for block in parse_srt_blocks(subtitle_srt_path) if block.text.strip()]
         if not blocks:
@@ -308,9 +318,9 @@ class DouyinRenderPipeline:
             caption=" ".join(line.text for line in voiceover[:2]),
             hashtags=["#douyin", "#review", "#sanpham"],
         )
-        tts_settings = TTSSettings(
+        merged_tts_settings = voiceover_tts_settings(
+            tts_settings,
             provider=settings.silent_voiceover_provider,
-            fallback_provider="piper",
             voice=settings.silent_voiceover_voice,
             language=settings.target_language,
             output_format="mp3",
@@ -322,7 +332,7 @@ class DouyinRenderPipeline:
             text_filename=f"{Path(output_name).stem}_voiceover_text.txt",
             language=settings.target_language,
             target_duration=target_duration,
-            tts_settings=tts_settings,
+            tts_settings=merged_tts_settings,
         )
         result = self.voice_generator.last_tts_result
         if not result or result.provider == "silent":
