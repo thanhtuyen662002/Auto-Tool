@@ -14,6 +14,7 @@ from app.modules.queue_control.queue_control_schema import (
 )
 from app.modules.queue_control.queue_control_service import QueueControlService
 from app.modules.queue_control.batch_resource_planner import BatchResourcePlanner
+from app.modules.queue_control.stage_gate import StageGate
 from app.modules.queue_control.queue_event_logger import QueueEventLogger
 from app.modules.queue_control.queue_priority_service import QueuePriorityService
 from app.modules.queue_control.queue_retry_service import QueueRetryService
@@ -25,6 +26,7 @@ __all__ = [
     "QueueActionResult",
     "BatchResourcePlan",
     "BatchResourcePlanner",
+    "StageGate",
     "QueueControlAction",
     "QueueControlService",
     "QueueEventLogger",

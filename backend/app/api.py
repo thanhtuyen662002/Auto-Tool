@@ -799,6 +799,8 @@ def create_app() -> FastAPI:
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         report = ResourceGuardService(state.output_dir).check_resources(state.settings or QueueSettings())
+        if state.concurrency_plan:
+            report["concurrency_plan"] = state.concurrency_plan.model_dump(mode="json")
         return ResourceStatusResponse(success=True, data=report, warnings=list(report.get("warnings") or []), errors=[])
 
     @app.post("/api/source-media/scan", response_model=SourceFolderScanResult)

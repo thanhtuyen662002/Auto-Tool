@@ -38,13 +38,6 @@ class QueueStateService:
         project_id: str | None = None,
     ) -> QueueState:
         limited_paths = video_paths[: settings.max_videos_per_batch] if settings.max_videos_per_batch else video_paths
-        warnings: list[str] = []
-        normalized_settings = settings
-        if settings.max_concurrent_videos > 1 and not (
-            settings.allow_parallel_asr or settings.allow_parallel_ocr or settings.allow_parallel_render
-        ):
-            normalized_settings = settings.model_copy(update={"max_concurrent_videos": 1})
-            warnings.append("Concurrency được fallback về 1 vì pipeline hiện tại chưa bật parallel an toàn.")
         normalized_settings, concurrency_plan = BatchResourcePlanner().build_plan(
             mode=mode,
             settings=settings,
