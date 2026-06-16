@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import datetime
 from pathlib import Path
+import threading
 import time
 from typing import Any
 
@@ -25,6 +27,7 @@ from app.modules.queue_control import (
     QueueState,
     QueueStateService,
     ResourceGuardService,
+    StageGate,
 )
 from app.modules.segment_scoring.segment_scorer import SegmentScorer, build_scoring_report
 from app.modules.script_variants.script_variant_generator import ScriptVariantGenerator
@@ -243,7 +246,7 @@ def render_project(
                     job_id=job_id,
                     mode="product_render",
                     video_paths=_timeline_queue_paths(timelines),
-                    settings=QueueSettings(),
+                    settings=_queue_settings_for_product_render(working_config, preview_only),
                     output_dir=str(output_dir),
                     project_id=active_project_id,
                 )
@@ -267,7 +270,39 @@ def render_project(
             summary["script_variants_file"] = str(output_dir / "script_variants.json")
 
         timeline_by_video_id = {f"video_{timeline.output_index:03d}": timeline for timeline in timelines}
-        while True:
+        parallel_queue_enabled = bool(
+            queue_state_service
+            and queue_control
+            and job_id
+            and queue_state
+            and _queue_worker_pool_enabled(queue_state)
+        )
+        if parallel_queue_enabled and queue_state_service and queue_control and job_id and queue_state:
+            outputs.extend(
+                _render_product_queue_parallel(
+                    timelines=timelines,
+                    timeline_by_video_id=timeline_by_video_id,
+                    config=working_config,
+                    output_dir=output_dir,
+                    custom_script=custom_script,
+                    script_variants=script_variants,
+                    preview_only=preview_only,
+                    job_id=job_id,
+                    queue_state=queue_state,
+                    queue_state_service=queue_state_service,
+                    queue_control=queue_control,
+                    resource_guard=resource_guard,
+                    source_filter_summary=media_filter.last_summary,
+                    progress_callback=progress_callback,
+                    log_callback=log_callback,
+                )
+            )
+            if queue_control.should_cancel(job_id):
+                summary["queue_status"] = "cancelled"
+            elif queue_control.should_pause(job_id):
+                summary["queue_status"] = "paused"
+
+        while not parallel_queue_enabled:
             queue_item = None
             if queue_state_service and job_id:
                 queue_state = queue_state_service.load_queue_state(job_id) or queue_state
@@ -376,6 +411,8 @@ def render_project(
                 if queue_state.settings.cooldown_seconds_between_renders > 0:
                     time.sleep(queue_state.settings.cooldown_seconds_between_renders)
 
+        outputs.sort(key=lambda item: int(item.get("index") or 0))
+
         if job_id and "queue_status" not in summary and queue_state_service:
             final_queue_state = queue_state_service.load_queue_state(job_id)
             if final_queue_state:
@@ -442,6 +479,222 @@ def _timeline_queue_paths(timelines: list[Any]) -> list[str]:
         first_clip = timeline.clips[0] if getattr(timeline, "clips", None) else None
         paths.append(str(getattr(first_clip, "source_path", "") or f"video_{timeline.output_index:03d}"))
     return paths
+
+
+def _queue_settings_for_product_render(config: ProjectConfig, preview_only: bool) -> QueueSettings:
+    if preview_only or config.render.output_count <= 1:
+        return QueueSettings()
+    return QueueSettings(max_concurrent_videos=2, allow_parallel_render=True)
+
+
+def _queue_worker_pool_enabled(queue_state: QueueState) -> bool:
+    plan = queue_state.concurrency_plan
+    return bool(
+        plan
+        and plan.worker_pool_enabled
+        and queue_state.settings.allow_parallel_render
+        and queue_state.settings.max_concurrent_videos > 1
+        and queue_state.total_items > 1
+    )
+
+
+def _render_product_queue_parallel(
+    *,
+    timelines: list[Any],
+    timeline_by_video_id: dict[str, Any],
+    config: ProjectConfig,
+    output_dir: Path,
+    custom_script: ProductVideoScript | None,
+    script_variants: list[ProductVideoScript] | None,
+    preview_only: bool,
+    job_id: str,
+    queue_state: QueueState,
+    queue_state_service: QueueStateService,
+    queue_control: QueueControlService,
+    resource_guard: ResourceGuardService | None,
+    source_filter_summary: dict[str, Any],
+    progress_callback: ProgressCallback | None,
+    log_callback: LogCallback | None,
+) -> list[dict[str, Any]]:
+    max_workers = max(1, min(2, int(queue_state.settings.max_concurrent_videos)))
+    stage_gate = StageGate(queue_state.concurrency_plan)
+    known_video_ids = set(timeline_by_video_id)
+    outputs: list[dict[str, Any]] = []
+    state_lock = threading.RLock()
+    stop_reason: str | None = None
+    pause_reason = "Job đã tạm dừng sau các video đang chạy."
+    _log(log_callback, "info", f"Bật worker pool product render: {max_workers} video song song.")
+
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="product-render") as executor:
+        futures: dict[Future[dict[str, Any]], tuple[Any, int]] = {}
+        while True:
+            if stop_reason is None:
+                if queue_control.should_cancel(job_id):
+                    stop_reason = "cancelled"
+                elif queue_control.should_pause(job_id):
+                    stop_reason = "paused"
+
+            while stop_reason is None and len(futures) < max_workers:
+                with state_lock:
+                    current_state = queue_state_service.load_queue_state(job_id) or queue_state
+                queue_item = _next_queue_item(current_state, known_video_ids)
+                if queue_item is None:
+                    break
+
+                if resource_guard:
+                    has_resource_warning, resource_warnings = resource_guard.should_warn_before_next_item(current_state.settings)
+                    if has_resource_warning:
+                        for warning in resource_warnings:
+                            _log(log_callback, "warning", warning)
+                        if _has_low_disk_warning(resource_warnings):
+                            pause_reason = resource_warnings[0]
+                            with state_lock:
+                                queue_state_service.update_item_status(
+                                    job_id,
+                                    queue_item.id,
+                                    QueueItemStatus.paused,
+                                    current_step="resource_guard",
+                                    progress_percent=0,
+                                )
+                            stop_reason = "paused"
+                            break
+
+                timeline = timeline_by_video_id[queue_item.video_id]
+                index = timeline.output_index
+                _emit_queue_progress(
+                    outputs,
+                    futures,
+                    len(timelines),
+                    progress_callback,
+                    f"rendering_video_{index}",
+                )
+                _log(log_callback, "info", f"Đang render video {index:03d} bằng worker pool")
+                with state_lock:
+                    queue_state_service.update_item_status(
+                        job_id,
+                        queue_item.id,
+                        QueueItemStatus.running,
+                        current_step=f"rendering_video_{index}",
+                        progress_percent=10,
+                    )
+                future = executor.submit(
+                    _render_one_output_isolated,
+                    index=index,
+                    timeline=timeline,
+                    config=config,
+                    output_dir=output_dir,
+                    custom_script=custom_script,
+                    script_variants=script_variants,
+                    preview_only=preview_only,
+                    log_callback=log_callback,
+                    source_filter_summary=source_filter_summary,
+                    stage_gate=stage_gate,
+                )
+                futures[future] = (queue_item, index)
+
+            if not futures:
+                break
+
+            done, _ = wait(futures.keys(), timeout=0.5, return_when=FIRST_COMPLETED)
+            if not done:
+                continue
+
+            for future in done:
+                queue_item, index = futures.pop(future)
+                try:
+                    output_record = future.result()
+                except Exception as exc:
+                    output_record = _failed_single_output(index, output_dir, str(exc), preview_only=preview_only)
+                    _log(log_callback, "error", f"Render thất bại cho video {index:03d}: {exc}")
+                outputs.append(output_record)
+                with state_lock:
+                    latest_state = queue_state_service.update_item_status(
+                        job_id,
+                        queue_item.id,
+                        _queue_status_from_output(output_record),
+                        current_step="completed" if output_record.get("status") != "failed" else "failed",
+                        progress_percent=100,
+                        error_message=_queue_error_from_output(output_record),
+                        output_video_path=output_record.get("path"),
+                    )
+                _emit_queue_progress(
+                    outputs,
+                    futures,
+                    len(timelines),
+                    progress_callback,
+                    f"completed_video_{index}",
+                )
+                cooldown = int(latest_state.settings.cooldown_seconds_between_renders or 0)
+                if cooldown > 0:
+                    time.sleep(cooldown)
+
+    if stop_reason == "cancelled":
+        queue_control.mark_cancelled(job_id)
+    elif stop_reason == "paused":
+        queue_control.mark_paused(job_id, pause_reason)
+    return outputs
+
+
+def _render_one_output_isolated(
+    *,
+    index: int,
+    timeline: Any,
+    config: ProjectConfig,
+    output_dir: Path,
+    custom_script: ProductVideoScript | None,
+    script_variants: list[ProductVideoScript] | None,
+    preview_only: bool,
+    log_callback: LogCallback | None,
+    source_filter_summary: dict[str, Any],
+    stage_gate: StageGate,
+) -> dict[str, Any]:
+    worker_cache = CacheService.for_project(config, log_callback=log_callback)
+    return render_one_output(
+        index=index,
+        timeline=timeline,
+        config=config,
+        output_dir=output_dir,
+        renderer=Renderer(),
+        voice_generator=VoiceGenerator(
+            cache_service=worker_cache,
+            cache_enabled=config.cache.cache_tts,
+        ),
+        subtitle_generator=SubtitleGenerator(),
+        music_selector=MusicSelector(),
+        custom_script=custom_script,
+        script_override=_script_for_output(index, custom_script, script_variants),
+        preview_only=preview_only,
+        log_callback=log_callback,
+        cache_service=worker_cache,
+        source_media_filter_summary=summarize_timeline_source_filter(
+            timeline,
+            source_filter_summary,
+        ),
+        stage_gate=stage_gate,
+    )
+
+
+def _emit_queue_progress(
+    outputs: list[dict[str, Any]],
+    futures: dict[Future[dict[str, Any]], tuple[Any, int]],
+    total_outputs: int,
+    progress_callback: ProgressCallback | None,
+    current_step: str,
+) -> None:
+    completed_outputs = sum(1 for item in outputs if item.get("status") in {"success", "warning"})
+    failed_outputs = sum(1 for item in outputs if item.get("status") == "failed")
+    processed_outputs = completed_outputs + failed_outputs
+    base_progress = 30 + int((processed_outputs / max(1, total_outputs)) * 65)
+    if futures and processed_outputs < total_outputs:
+        base_progress = min(94, base_progress + 1)
+    _progress(
+        progress_callback,
+        current_step=current_step,
+        progress=base_progress,
+        total_outputs=total_outputs,
+        completed_outputs=completed_outputs,
+        failed_outputs=failed_outputs,
+    )
 
 
 def _next_queue_item(queue_state: QueueState | None, known_video_ids: set[str]):

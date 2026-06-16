@@ -19,15 +19,19 @@ class QueueRetryService:
         item_ids: list[str],
         action: QueueControlAction = QueueControlAction.retry_selected,
     ) -> QueueActionResult:
-        state = self.state_service.load_queue_state(job_id) or self.state_service.rebuild_from_checkpoints(job_id)
         affected = 0
-        items: list[QueueItem] = []
-        for item in state.items:
-            if item.id in item_ids and item.status in {QueueItemStatus.failed, QueueItemStatus.cancelled, QueueItemStatus.skipped, QueueItemStatus.paused}:
-                item = self.reset_item_for_retry(item)
-                affected += 1
-            items.append(item)
-        self.state_service.save_queue_state(state.model_copy(update={"items": items}))
+
+        def mutate(state):
+            nonlocal affected
+            items: list[QueueItem] = []
+            for item in state.items:
+                if item.id in item_ids and item.status in {QueueItemStatus.failed, QueueItemStatus.cancelled, QueueItemStatus.skipped, QueueItemStatus.paused}:
+                    item = self.reset_item_for_retry(item)
+                    affected += 1
+                items.append(item)
+            return state.model_copy(update={"items": items})
+
+        self.state_service.update_queue_state(job_id, mutate)
         return QueueActionResult(
             success=True,
             job_id=job_id,

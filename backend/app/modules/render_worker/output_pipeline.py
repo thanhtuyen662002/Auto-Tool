@@ -14,6 +14,7 @@ from app.modules.crop_safety.crop_safety_service import summarize_crop_safety_fo
 from app.modules.industry_presets.industry_preset_service import IndustryPresetService
 from app.modules.music_selector.music_selector import MusicSelector
 from app.modules.qa_checker.qa_checker import check_output_video
+from app.modules.queue_control.stage_gate import StageGate
 from app.modules.renderer.overlay_renderer import OverlayRenderer
 from app.modules.renderer.renderer import Renderer
 from app.modules.render_worker.output_log import (
@@ -53,6 +54,7 @@ def render_one_output(
     script_override: ProductVideoScript | None = None,
     cache_service: CacheService | None = None,
     source_media_filter_summary: dict[str, Any] | None = None,
+    stage_gate: StageGate | None = None,
 ) -> dict[str, Any]:
     name = base_name(index, preview_only)
     final_path = output_dir / f"{name}.mp4"
@@ -161,14 +163,18 @@ def render_one_output(
         generated_voice_path = run_step(
             output_log,
             "generate_voice",
-            lambda: voice_generator.generate_voiceover(
-                script,
-                str(output_dir),
-                filename=voice_path.name,
-                text_filename=voice_text_path.name,
-                language=config.ai.language,
-                target_duration=config.render.duration,
-                tts_settings=config.tts,
+            lambda: _with_stage_gate(
+                stage_gate,
+                "tts",
+                lambda: voice_generator.generate_voiceover(
+                    script,
+                    str(output_dir),
+                    filename=voice_path.name,
+                    text_filename=voice_text_path.name,
+                    language=config.ai.language,
+                    target_duration=config.render.duration,
+                    tts_settings=config.tts,
+                ),
             ),
         )
         output_log["voice_file"] = generated_voice_path
@@ -200,11 +206,15 @@ def render_one_output(
         normalized_voice_for_render, normalized_voice_duration = run_step(
             output_log,
             "normalize_voice",
-            lambda: _normalize_voice_for_render(
-                raw_voice_path=generated_voice_path,
-                normalized_voice_path=str(normalized_voice_path),
-                target_duration=config.render.duration,
-                output_log=output_log,
+            lambda: _with_stage_gate(
+                stage_gate,
+                "render",
+                lambda: _normalize_voice_for_render(
+                    raw_voice_path=generated_voice_path,
+                    normalized_voice_path=str(normalized_voice_path),
+                    target_duration=config.render.duration,
+                    output_log=output_log,
+                ),
             ),
         )
         output_log["normalized_voice_file"] = normalized_voice_for_render
@@ -245,7 +255,11 @@ def render_one_output(
         rendered_visual_path = run_step(
             output_log,
             "render_visual",
-            lambda: renderer.render_timeline(sese_timeline, config, str(output_dir), base_name=name),
+            lambda: _with_stage_gate(
+                stage_gate,
+                "render",
+                lambda: renderer.render_timeline(sese_timeline, config, str(output_dir), base_name=name),
+            ),
         )
 
         def generate_subtitles() -> str:
@@ -300,15 +314,19 @@ def render_one_output(
         output_path = run_step(
             output_log,
             "render_final",
-            lambda: overlay_renderer.render_final_video(
-                visual_video_path=rendered_visual_path,
-                voice_path=normalized_voice_for_render,
-                subtitle_path=str(subtitle_ass_path),
-                script=script,
-                config=config,
-                output_path=str(final_path),
-                music_path=music_path,
-                fallback_subtitle_path=str(subtitle_path),
+            lambda: _with_stage_gate(
+                stage_gate,
+                "render",
+                lambda: overlay_renderer.render_final_video(
+                    visual_video_path=rendered_visual_path,
+                    voice_path=normalized_voice_for_render,
+                    subtitle_path=str(subtitle_ass_path),
+                    script=script,
+                    config=config,
+                    output_path=str(final_path),
+                    music_path=music_path,
+                    fallback_subtitle_path=str(subtitle_path),
+                ),
             ),
         )
         extend_warnings(output_log, overlay_renderer.warnings)
@@ -409,6 +427,13 @@ def render_one_output(
         output_log["duration_seconds"] = round(perf_counter() - started_seconds, 3)
         output_log["performance"]["total_seconds"] = output_log["duration_seconds"]
         write_json(log_path, output_log)
+
+
+def _with_stage_gate(stage_gate: StageGate | None, stage: str, action: Callable[[], Any]) -> Any:
+    if stage_gate is None:
+        return action()
+    with stage_gate.acquire(stage):
+        return action()
 
 
 def _timeline_report(timeline: Any, fallback_template_id: str) -> dict[str, Any]:

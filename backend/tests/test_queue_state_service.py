@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.modules.queue_control import QueueItemStatus, QueueSettings, QueueStateService
+from app.modules.queue_control import BatchResourcePlanner, QueueItemStatus, QueueSettings, QueueStateService
 
 
 def test_queue_state_service_creates_updates_and_mirrors_files(tmp_path: Path):
@@ -71,3 +71,61 @@ def test_queue_state_service_clamps_parallel_request_until_worker_pool_is_safe(t
     assert state.concurrency_plan.effective_concurrency == 1
     assert state.concurrency_plan.worker_pool_enabled is False
     assert state.warnings
+
+
+def test_batch_resource_planner_enables_product_render_worker_pool_when_safe(tmp_path: Path, monkeypatch):
+    planner = BatchResourcePlanner()
+    monkeypatch.setattr(
+        planner,
+        "_resource_snapshot",
+        lambda output_dir: {
+            "cpu_count": 8,
+            "disk_free_gb": 100,
+            "disk_total_gb": 200,
+            "memory_available": True,
+            "memory_total_gb": 32,
+            "memory_available_gb": 16,
+        },
+    )
+
+    settings, plan = planner.build_plan(
+        mode="product_render",
+        settings=QueueSettings(max_concurrent_videos=2, allow_parallel_render=True),
+        output_dir=str(tmp_path),
+        total_items=4,
+    )
+
+    assert settings.max_concurrent_videos == 2
+    assert plan.worker_pool_enabled is True
+    assert plan.effective_concurrency == 2
+    assert plan.execution_mode == "parallel_ready"
+    assert plan.stage_limits["render"] == 2
+    assert plan.stage_limits["tts"] == 1
+
+
+def test_batch_resource_planner_keeps_douyin_pipeline_sequential(tmp_path: Path, monkeypatch):
+    planner = BatchResourcePlanner()
+    monkeypatch.setattr(
+        planner,
+        "_resource_snapshot",
+        lambda output_dir: {
+            "cpu_count": 16,
+            "disk_free_gb": 200,
+            "disk_total_gb": 400,
+            "memory_available": True,
+            "memory_total_gb": 64,
+            "memory_available_gb": 32,
+        },
+    )
+
+    settings, plan = planner.build_plan(
+        mode="douyin_reup",
+        settings=QueueSettings(max_concurrent_videos=2, allow_parallel_asr=True, allow_parallel_ocr=True, allow_parallel_render=True),
+        output_dir=str(tmp_path),
+        total_items=4,
+    )
+
+    assert settings.max_concurrent_videos == 1
+    assert plan.worker_pool_enabled is False
+    assert plan.effective_concurrency == 1
+    assert plan.warnings

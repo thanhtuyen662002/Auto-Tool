@@ -9,12 +9,7 @@ from app.modules.queue_control.queue_control_schema import BatchResourcePlan, Qu
 
 
 class BatchResourcePlanner:
-    """Builds a truthful concurrency plan for long-running render queues.
-
-    The current render engines are stateful and execute one video at a time.
-    This planner records that fact explicitly while still computing a future
-    worker-pool recommendation from machine resources.
-    """
+    """Build a conservative concurrency plan for long-running render queues."""
 
     def build_plan(
         self,
@@ -27,32 +22,52 @@ class BatchResourcePlanner:
         resources = self._resource_snapshot(output_dir)
         requested = max(1, int(settings.max_concurrent_videos))
         recommended = self._recommended_concurrency(resources)
-        reasons = [
-            "Engine render hiện tại vẫn chạy tuần tự để tránh xung đột ASR/OCR/FFmpeg/TTS trong batch lớn.",
-        ]
-        warnings: list[str] = []
-        if requested > 1 or settings.allow_parallel_asr or settings.allow_parallel_ocr or settings.allow_parallel_render:
-            warnings.append(
-                "Đã khóa concurrency hiệu dụng về 1 vì worker pool song song chưa được bật an toàn cho pipeline hiện tại."
-            )
-        if recommended > 1:
-            reasons.append(
-                f"Máy này có thể là ứng viên cho worker pool tối đa {recommended} video song song sau khi bật scheduler an toàn."
-            )
+        can_use_product_pool = (
+            mode == "product_render"
+            and total_items > 1
+            and settings.allow_parallel_render
+            and requested > 1
+            and recommended > 1
+        )
 
-        effective_settings = settings.model_copy(update={"max_concurrent_videos": 1})
+        warnings: list[str] = []
+        if can_use_product_pool:
+            effective = min(requested, recommended, 2)
+            worker_pool_enabled = True
+            execution_mode = "parallel_ready"
+            reasons = [
+                f"Product render được phép chạy tối đa {effective} video song song trên máy hiện tại.",
+                "ASR/OCR/dịch thuật vẫn khóa 1 luồng; worker pool chỉ mở cho bước render product.",
+            ]
+        else:
+            effective = 1
+            worker_pool_enabled = False
+            execution_mode = "clamped" if requested > 1 else "sequential"
+            reasons = [
+                "Pipeline hiện tại chạy tuần tự để tránh xung đột ASR/OCR/FFmpeg/TTS trong batch lớn.",
+            ]
+            if requested > 1 or settings.allow_parallel_asr or settings.allow_parallel_ocr or settings.allow_parallel_render:
+                warnings.append(
+                    "Đã khóa concurrency hiệu dụng về 1 vì pipeline này chưa đủ điều kiện chạy song song an toàn."
+                )
+            if recommended > 1:
+                reasons.append(
+                    f"Máy này có thể chạy tối đa {recommended} worker sau khi pipeline tương ứng được bật an toàn."
+                )
+
+        effective_settings = settings.model_copy(update={"max_concurrent_videos": effective})
         plan = BatchResourcePlan(
             requested_concurrency=requested,
-            effective_concurrency=1,
+            effective_concurrency=effective,
             recommended_concurrency=recommended,
-            worker_pool_enabled=False,
-            execution_mode="clamped" if requested > 1 else "sequential",
+            worker_pool_enabled=worker_pool_enabled,
+            execution_mode=execution_mode,
             mode=mode,
             total_items=total_items,
             stage_limits={
                 "asr": 1,
                 "ocr": 1,
-                "render": 1,
+                "render": effective,
                 "tts": 1,
                 "translation": 1,
             },

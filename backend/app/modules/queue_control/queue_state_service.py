@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import ValidationError
 
@@ -20,6 +21,10 @@ from app.modules.queue_control.queue_control_schema import (
 from app.modules.queue_control.batch_resource_planner import BatchResourcePlanner
 from app.modules.queue_control.queue_event_logger import QueueEventLogger
 from app.utils.app_paths import app_data_dir
+
+
+_QUEUE_LOCKS: dict[str, threading.RLock] = {}
+_QUEUE_LOCKS_LOCK = threading.Lock()
 
 
 class QueueStateService:
@@ -88,11 +93,17 @@ class QueueStateService:
             return None
 
     def save_queue_state(self, state: QueueState) -> QueueState:
-        state = self.recalculate_summary(state.model_copy(update={"updated_at": _now()}))
-        _atomic_write_json(self.queue_state_path(state.job_id), state.model_dump(mode="json"))
-        _atomic_write_json(self.queue_items_path(state.job_id), {"items": [item.model_dump(mode="json") for item in state.items]})
-        self._mirror_to_output_dir(state)
-        return state
+        with _queue_lock_for_job(state.job_id):
+            return self._save_queue_state_unlocked(state)
+
+    def update_queue_state(
+        self,
+        job_id: str,
+        updater: Callable[[QueueState], QueueState],
+    ) -> QueueState:
+        with _queue_lock_for_job(job_id):
+            state = self.load_queue_state(job_id) or self.rebuild_from_checkpoints(job_id)
+            return self._save_queue_state_unlocked(updater(state))
 
     def update_item_status(
         self,
@@ -104,36 +115,37 @@ class QueueStateService:
         error_message: str | None = None,
         output_video_path: str | None = None,
     ) -> QueueState:
-        state = self.load_queue_state(job_id) or self.rebuild_from_checkpoints(job_id)
-        now = _now()
-        items: list[QueueItem] = []
-        for item in state.items:
-            if item.id != item_id and item.video_id != item_id:
-                items.append(item)
-                continue
-            update: dict[str, Any] = {
-                "status": status,
-                "current_step": current_step if current_step is not None else item.current_step,
-                "progress_percent": progress_percent if progress_percent is not None else item.progress_percent,
-                "updated_at": now,
-            }
-            if status == QueueItemStatus.running and not item.started_at:
-                update["started_at"] = now
-            if status in {QueueItemStatus.completed, QueueItemStatus.failed, QueueItemStatus.cancelled, QueueItemStatus.skipped, QueueItemStatus.rendered, QueueItemStatus.needs_review}:
-                update["completed_at"] = now
-            if error_message is not None:
-                update["error_message"] = error_message
-            if output_video_path is not None:
-                update["output_video_path"] = output_video_path
-            items.append(item.model_copy(update=update))
-        state = state.model_copy(
-            update={
-                "items": items,
-                "current_item_id": item_id if status == QueueItemStatus.running else state.current_item_id,
-                "current_step": current_step if current_step is not None else state.current_step,
-            }
-        )
-        saved = self.save_queue_state(state)
+        def mutate(state: QueueState) -> QueueState:
+            now = _now()
+            items: list[QueueItem] = []
+            for item in state.items:
+                if item.id != item_id and item.video_id != item_id:
+                    items.append(item)
+                    continue
+                update: dict[str, Any] = {
+                    "status": status,
+                    "current_step": current_step if current_step is not None else item.current_step,
+                    "progress_percent": progress_percent if progress_percent is not None else item.progress_percent,
+                    "updated_at": now,
+                }
+                if status == QueueItemStatus.running and not item.started_at:
+                    update["started_at"] = now
+                if status in {QueueItemStatus.completed, QueueItemStatus.failed, QueueItemStatus.cancelled, QueueItemStatus.skipped, QueueItemStatus.rendered, QueueItemStatus.needs_review}:
+                    update["completed_at"] = now
+                if error_message is not None:
+                    update["error_message"] = error_message
+                if output_video_path is not None:
+                    update["output_video_path"] = output_video_path
+                items.append(item.model_copy(update=update))
+            return state.model_copy(
+                update={
+                    "items": items,
+                    "current_item_id": item_id if status == QueueItemStatus.running else state.current_item_id,
+                    "current_step": current_step if current_step is not None else state.current_step,
+                }
+            )
+
+        saved = self.update_queue_state(job_id, mutate)
         self.events.log_event(job_id, f"item_{status.value}", {"item_id": item_id, "current_step": current_step}, output_dir=saved.output_dir)
         return saved
 
@@ -228,12 +240,28 @@ class QueueStateService:
         except OSError:
             return
 
+    def _save_queue_state_unlocked(self, state: QueueState) -> QueueState:
+        state = self.recalculate_summary(state.model_copy(update={"updated_at": _now()}))
+        _atomic_write_json(self.queue_state_path(state.job_id), state.model_dump(mode="json"))
+        _atomic_write_json(self.queue_items_path(state.job_id), {"items": [item.model_dump(mode="json") for item in state.items]})
+        self._mirror_to_output_dir(state)
+        return state
+
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + ".tmp")
     temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     temp.replace(path)
+
+
+def _queue_lock_for_job(job_id: str) -> threading.RLock:
+    with _QUEUE_LOCKS_LOCK:
+        lock = _QUEUE_LOCKS.get(job_id)
+        if lock is None:
+            lock = threading.RLock()
+            _QUEUE_LOCKS[job_id] = lock
+        return lock
 
 
 def _now() -> str:
