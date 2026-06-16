@@ -17,6 +17,7 @@ from app.modules.queue_control.queue_control_schema import (
     QueueSettings,
     QueueState,
 )
+from app.modules.queue_control.batch_resource_planner import BatchResourcePlanner
 from app.modules.queue_control.queue_event_logger import QueueEventLogger
 from app.utils.app_paths import app_data_dir
 
@@ -44,6 +45,13 @@ class QueueStateService:
         ):
             normalized_settings = settings.model_copy(update={"max_concurrent_videos": 1})
             warnings.append("Concurrency được fallback về 1 vì pipeline hiện tại chưa bật parallel an toàn.")
+        normalized_settings, concurrency_plan = BatchResourcePlanner().build_plan(
+            mode=mode,
+            settings=settings,
+            output_dir=output_dir,
+            total_items=len(limited_paths),
+        )
+        warnings = list(concurrency_plan.warnings)
         now = _now()
         items = [
             QueueItem(
@@ -63,6 +71,7 @@ class QueueStateService:
             mode=_normalize_mode(mode),
             status=QueueRunStatus.running,
             settings=normalized_settings,
+            concurrency_plan=concurrency_plan,
             total_items=len(items),
             items=items,
             created_at=now,
@@ -292,4 +301,3 @@ def _status_from_output(output: dict[str, Any]) -> QueueItemStatus:
     if status == "skipped":
         return QueueItemStatus.skipped
     return QueueItemStatus.queued
-

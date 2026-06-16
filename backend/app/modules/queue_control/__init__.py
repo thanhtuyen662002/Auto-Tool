@@ -1,6 +1,7 @@
 from app.modules.queue_control.queue_control_schema import (
     QueueActionRequest,
     QueueActionResult,
+    BatchResourcePlan,
     QueueControlAction,
     QueueItem,
     QueueItemPriority,
@@ -12,6 +13,7 @@ from app.modules.queue_control.queue_control_schema import (
     ResourceStatusResponse,
 )
 from app.modules.queue_control.queue_control_service import QueueControlService
+from app.modules.queue_control.batch_resource_planner import BatchResourcePlanner
 from app.modules.queue_control.queue_event_logger import QueueEventLogger
 from app.modules.queue_control.queue_priority_service import QueuePriorityService
 from app.modules.queue_control.queue_retry_service import QueueRetryService
@@ -21,6 +23,8 @@ from app.modules.queue_control.resource_guard_service import ResourceGuardServic
 __all__ = [
     "QueueActionRequest",
     "QueueActionResult",
+    "BatchResourcePlan",
+    "BatchResourcePlanner",
     "QueueControlAction",
     "QueueControlService",
     "QueueEventLogger",

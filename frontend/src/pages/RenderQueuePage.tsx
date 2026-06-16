@@ -153,6 +153,7 @@ export default function RenderQueuePage() {
           onMoveToTop={() => jobId && runAction('top', () => moveQueueItemsToTop(jobId, selectedList))}
           onMoveToBottom={() => jobId && runAction('bottom', () => moveQueueItemsToBottom(jobId, selectedList))}
         />
+        <BatchResourcePlanCard queue={queue} />
         <QueueItemList
           queue={queue}
           selectedIds={selectedIds}
@@ -179,6 +180,57 @@ export default function RenderQueuePage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function BatchResourcePlanCard({ queue }: { queue: QueueState | null }) {
+  const plan = queue?.concurrency_plan;
+  if (!plan) return null;
+  const resources = plan.resources || {};
+  const cpu = typeof resources.cpu_count === 'number' ? resources.cpu_count : null;
+  const ram = typeof resources.memory_total_gb === 'number' ? resources.memory_total_gb : null;
+  const disk = typeof resources.disk_free_gb === 'number' ? resources.disk_free_gb : null;
+  return (
+    <section className="rounded-lg border border-line bg-white p-5 shadow-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-ink">Kế hoạch tài nguyên batch</h2>
+          <p className="mt-1 text-sm text-muted">
+            Tool đang ưu tiên chạy ổn định cho batch lớn. Worker pool song song sẽ chỉ được bật khi scheduler an toàn sẵn sàng.
+          </p>
+        </div>
+        <span className="rounded-full border border-line bg-surface px-3 py-1 text-xs font-semibold text-muted">
+          {plan.worker_pool_enabled ? 'Đa luồng' : 'Tuần tự an toàn'}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <ResourceMetric label="Yêu cầu" value={`${plan.requested_concurrency} luồng`} />
+        <ResourceMetric label="Đang dùng" value={`${plan.effective_concurrency} luồng`} />
+        <ResourceMetric label="Khuyến nghị máy" value={`${plan.recommended_concurrency} luồng`} />
+        <ResourceMetric label="Tổng item" value={plan.total_items} />
+      </div>
+      <div className="mt-4 grid gap-2 text-sm text-muted md:grid-cols-3">
+        <div>CPU: {cpu ?? 'Không rõ'}</div>
+        <div>RAM: {ram ? `${ram} GB` : 'Không rõ'}</div>
+        <div>Ổ đĩa trống: {disk ? `${disk} GB` : 'Không rõ'}</div>
+      </div>
+      {plan.warnings.length || plan.reasons.length ? (
+        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {[...plan.warnings, ...plan.reasons].slice(0, 4).map((item, index) => (
+            <div key={`${item}-${index}`}>{item}</div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ResourceMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-md bg-surface p-3">
+      <div className="text-xs text-muted">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-ink">{value}</div>
+    </div>
   );
 }
 

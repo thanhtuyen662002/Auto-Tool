@@ -72,6 +72,20 @@ class QueueSettings(BaseModel):
         return max(1, min(value, 2))
 
 
+class BatchResourcePlan(BaseModel):
+    requested_concurrency: int = 1
+    effective_concurrency: int = 1
+    recommended_concurrency: int = 1
+    worker_pool_enabled: bool = False
+    execution_mode: Literal["sequential", "parallel_ready", "clamped"] = "sequential"
+    mode: str = "product_render"
+    total_items: int = 0
+    stage_limits: dict[str, int] = Field(default_factory=dict)
+    resources: dict[str, Any] = Field(default_factory=dict)
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class QueueItem(BaseModel):
     id: str
     job_id: str
@@ -99,6 +113,7 @@ class QueueState(BaseModel):
     mode: Literal["douyin_reup", "silent_immersive", "subtitle_render", "export_pack", "product_render"] = "product_render"
     status: QueueRunStatus
     settings: QueueSettings
+    concurrency_plan: BatchResourcePlan | None = None
     total_items: int = 0
     queued_items: int = 0
     running_items: int = 0

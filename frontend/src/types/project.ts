@@ -2020,12 +2020,27 @@ export interface QueueItem {
   previous_errors: string[];
 }
 
+export interface BatchResourcePlan {
+  requested_concurrency: number;
+  effective_concurrency: number;
+  recommended_concurrency: number;
+  worker_pool_enabled: boolean;
+  execution_mode: string;
+  mode: string;
+  total_items: number;
+  stage_limits: Record<string, number>;
+  resources: Record<string, unknown>;
+  reasons: string[];
+  warnings: string[];
+}
+
 export interface QueueState {
   job_id: string;
   project_id?: string | null;
   mode: string;
   status: QueueRunStatus;
   settings: QueueSettings;
+  concurrency_plan?: BatchResourcePlan | null;
   total_items: number;
   queued_items: number;
   running_items: number;
