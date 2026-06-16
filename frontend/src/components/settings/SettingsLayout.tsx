@@ -1,17 +1,28 @@
 import type { ReactNode } from 'react';
 import GlassTabs from '../glass/GlassTabs';
 
-export type SettingsTab = 'general' | 'api_keys' | 'paths' | 'local_app' | 'data_management' | 'providers' | 'appearance' | 'advanced' | 'about';
+export type SettingsTab =
+  | 'general'
+  | 'api_keys'
+  | 'voice_music'
+  | 'paths'
+  | 'local_app'
+  | 'data_management'
+  | 'providers'
+  | 'appearance'
+  | 'advanced'
+  | 'about';
 
 const tabs: Array<{ value: SettingsTab; label: string }> = [
   { value: 'general', label: 'Cấu hình chung' },
   { value: 'api_keys', label: 'Khóa API' },
+  { value: 'voice_music', label: 'Giọng & Nhạc' },
   { value: 'paths', label: 'Thư mục & Đường dẫn' },
   { value: 'local_app', label: 'Ứng dụng Local' },
-  { value: 'data_management', label: 'Quản lý Dữ liệu' },
+  { value: 'data_management', label: 'Quản lý dữ liệu' },
   { value: 'providers', label: 'Dịch thuật & TTS' },
   { value: 'appearance', label: 'Giao diện & Theme' },
-  { value: 'advanced', label: 'Cấu hình Nâng cao' },
+  { value: 'advanced', label: 'Cấu hình nâng cao' },
   { value: 'about', label: 'Giới thiệu' },
 ];
 

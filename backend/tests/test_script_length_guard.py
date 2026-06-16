@@ -39,6 +39,16 @@ def test_script_too_long_is_shortened_before_tts():
     assert estimate_voice_duration(" ".join(line.text for line in shortened.voiceover), "vi") <= 8.0
 
 
+def test_script_can_skip_shortening_for_subtitle_locked_reup():
+    script = _script_with_long_voiceover()
+
+    preserved, warnings = prepare_script_for_tts(script, target_duration=6.0, language="vi", allow_shortening=False)
+
+    assert warnings == []
+    assert len(preserved.voiceover) == len(script.voiceover)
+    assert preserved.voiceover[1].text
+
+
 def test_caption_is_not_included_in_voiceover():
     shortened, _ = prepare_script_for_tts(_script_with_long_voiceover(), target_duration=20.0, language="vi")
 

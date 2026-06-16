@@ -34,7 +34,8 @@ class ImmersiveCaptionGenerator:
         video_recommended_industry: str | None = None,
         use_visual_tags: bool = True,
     ) -> list[ImmersiveCaptionLine]:
-        if ocr_translated_srt_path and Path(ocr_translated_srt_path).exists():
+        product_locked = _product_lock_enabled(product_context)
+        if ocr_translated_srt_path and Path(ocr_translated_srt_path).exists() and not product_locked:
             captions = self._captions_from_ocr(ocr_translated_srt_path, video_path)
             scored = self._score_captions(captions)
             if scored and _average_quality(scored) >= 0.7:
@@ -269,6 +270,12 @@ def _product_name(product_context: dict | None) -> str:
     if not product_context:
         return ""
     return str(product_context.get("product_name") or product_context.get("name") or "").strip()
+
+
+def _product_lock_enabled(product_context: dict | None) -> bool:
+    if not product_context:
+        return False
+    return bool(product_context.get("product_context_lock_enabled") or product_context.get("lock_product_context"))
 
 
 def _has_product_context(product_context: dict | None) -> bool:

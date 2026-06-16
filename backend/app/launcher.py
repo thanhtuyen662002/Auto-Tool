@@ -5,6 +5,7 @@ import threading
 import time
 import webbrowser
 import os
+import multiprocessing as mp
 
 import uvicorn
 
@@ -107,4 +108,5 @@ def _strict_port_enabled() -> bool:
 
 
 if __name__ == "__main__":
+    mp.freeze_support()
     raise SystemExit(main())

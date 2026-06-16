@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.modules.script_writer.script_writer import SubtitleLine
+from app.modules.script_writer.script_writer import ProductVideoScript, SubtitleLine
 from app.modules.tts.tts_schema import TTSResult, TTSSettings
 from app.modules.voice_generator import voice_generator
 from app.modules.voice_generator.voice_generator import VoiceGenerator
@@ -86,3 +86,74 @@ def test_timed_voiceover_caps_long_pauses_between_lines(tmp_path, monkeypatch):
     assert second in sequence
     assert silence_durations[0] == 0.28
     assert any("voice_timing_gap_compressed" in warning for warning in generator.warnings)
+
+
+def test_subtitle_locked_voiceover_keeps_original_timing(tmp_path, monkeypatch):
+    generator = VoiceGenerator()
+    first = tmp_path / "first.wav"
+    second = tmp_path / "second.wav"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    silence_durations: list[float] = []
+    fitted_calls: list[float] = []
+
+    def fake_generate_silence(output_path: Path, duration: float) -> None:
+        silence_durations.append(round(duration, 3))
+        output_path.write_bytes(b"silence")
+
+    def fake_fit(
+        self,
+        *,
+        input_path: Path,
+        output_path: Path,
+        measured_duration: float,
+        slot_duration: float,
+        max_speedup: float,
+    ) -> tuple[Path, float]:
+        fitted_calls.append(round(slot_duration, 3))
+        output_path.write_bytes(input_path.read_bytes())
+        return output_path, min(measured_duration, slot_duration)
+
+    monkeypatch.setattr(VoiceGenerator, "_generate_silence", staticmethod(fake_generate_silence))
+    monkeypatch.setattr(VoiceGenerator, "_fit_audio_to_subtitle_slot", fake_fit)
+
+    sequence = generator._compose_subtitle_locked_audio_sequence(
+        measured_segments=[
+            (SubtitleLine(start_hint=0, end_hint=1, text="Cau mot"), first, 0.6),
+            (SubtitleLine(start_hint=5, end_hint=6, text="Cau hai"), second, 0.7),
+        ],
+        temp_dir=tmp_path,
+        target_duration=8.0,
+    )
+
+    assert sequence
+    assert silence_durations[0] == 4.4
+    assert silence_durations[-1] == 2.3
+    assert fitted_calls == [1.0, 1.0]
+    assert [(line.start_hint, line.end_hint) for line in generator.last_subtitle_timeline] == [(0.0, 1.0), (5.0, 6.0)]
+
+
+def test_subtitle_locked_chunks_do_not_redistribute_to_full_video():
+    script = ProductVideoScript.model_validate(
+        {
+            "hook": "Hook",
+            "voiceover": [
+                {"time_hint": "0-3s", "text": "Cau mot"},
+                {"time_hint": "7-10s", "text": "Cau hai"},
+            ],
+            "subtitles": [
+                {"start_hint": 0, "end_hint": 3, "text": "Cau mot"},
+                {"start_hint": 7, "end_hint": 10, "text": "Cau hai"},
+            ],
+            "cta": "Cau hai",
+            "caption": "Caption",
+            "hashtags": [],
+        }
+    )
+
+    chunks = VoiceGenerator._subtitle_locked_chunks(script, target_duration=30.0)
+
+    assert [(line.start_hint, line.end_hint, line.text) for line in chunks] == [
+        (0.0, 3.0, "Cau mot"),
+        (7.0, 10.0, "Cau hai"),
+    ]

@@ -43,7 +43,13 @@ def test_asr_fail_falls_back_to_ocr(tmp_path: Path):
         has_audio=True,
         embedded_subtitle_found=False,
     )
-    settings = DouyinReupSettings(enabled=True, use_ocr_if_asr_failed=True, ocr_provider="mock_ocr")
+    settings = DouyinReupSettings(
+        enabled=True,
+        use_ocr_if_asr_failed=True,
+        ocr_provider="mock_ocr",
+        asr_subprocess_isolation=False,
+        ocr_subprocess_isolation=False,
+    )
 
     result = SubtitleSourceDetector(asr_service=FailingASR(), ocr_service=FakeOCR()).detect_source(video, settings, str(tmp_path / "work"))
 

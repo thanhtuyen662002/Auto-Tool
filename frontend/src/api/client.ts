@@ -18,8 +18,10 @@ import type {
   ScriptVariantStylesResponse,
   TimelineTemplatesResponse,
   TTSProvidersResponse,
+  TTSPreviewResponse,
   TTSVoicesResponse,
   AppSettings,
+  MusicLibraryResponse,
   ApplyIndustryPresetOptions,
   ApplyIndustryPresetResponse,
   ContentExportResponse,
@@ -136,6 +138,10 @@ export function assetFileUrl(pathOrUrl: string): string {
 
 export function thumbnailFileUrl(path: string): string {
   return backendUrl(`/api/files/thumbnail?path=${encodeURIComponent(path)}`);
+}
+
+export function audioFileUrl(path: string): string {
+  return backendUrl(`/api/files/audio?path=${encodeURIComponent(path)}`);
 }
 
 export function productAssetFileUrl(assetId: string): string {
@@ -774,6 +780,34 @@ export function getGoogleCloudTTSVoices(
       language_code: languageCode,
     }),
   });
+}
+
+export function previewTTSVoice(payload: {
+  provider?: string;
+  voice: string;
+  text?: string;
+  language?: string;
+  apiKey?: string | null;
+  credentialsJsonPath?: string | null;
+  accessToken?: string | null;
+}): Promise<TTSPreviewResponse> {
+  return request<TTSPreviewResponse>('/api/tts/preview', {
+    method: 'POST',
+    body: JSON.stringify({
+      provider: payload.provider ?? 'google_cloud_tts',
+      voice: payload.voice,
+      text: payload.text ?? 'Xin chào, đây là giọng đọc thử của Auto Tool.',
+      language: payload.language ?? 'vi',
+      api_key: payload.apiKey || null,
+      credentials_json_path: payload.credentialsJsonPath || null,
+      access_token: payload.accessToken || null,
+    }),
+  });
+}
+
+export function getMusicLibrary(folderPath?: string | null): Promise<MusicLibraryResponse> {
+  const query = folderPath ? `?folder_path=${encodeURIComponent(folderPath)}` : '';
+  return request<MusicLibraryResponse>(`/api/music/library${query}`);
 }
 
 export function generateScriptVariants(

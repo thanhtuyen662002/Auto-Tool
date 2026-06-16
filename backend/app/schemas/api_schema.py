@@ -68,6 +68,9 @@ class AppSettings(BaseModel):
     google_tts_credentials_json_path: str | None = None
     google_tts_api_key: str | None = None
     google_tts_access_token: str | None = None
+    google_tts_favorite_voices: list[str] = Field(default_factory=list)
+    google_tts_preview_text: str = "Xin chào, đây là giọng đọc thử của Auto Tool."
+    favorite_music_paths: list[str] = Field(default_factory=list)
 
     @field_validator("gemini_api_keys")
     @classmethod
@@ -81,6 +84,25 @@ class AppSettings(BaseModel):
             cleaned.append(key)
             seen.add(key)
         return cleaned
+
+    @field_validator("google_tts_favorite_voices", "favorite_music_paths")
+    @classmethod
+    def clean_unique_strings(cls, value: list[str]) -> list[str]:
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for item in value:
+            text = str(item).strip()
+            if not text or text in seen:
+                continue
+            cleaned.append(text)
+            seen.add(text)
+        return cleaned
+
+    @field_validator("google_tts_preview_text")
+    @classmethod
+    def clean_google_tts_preview_text(cls, value: str) -> str:
+        cleaned = (value or "").strip()
+        return cleaned or "Xin chào, đây là giọng đọc thử của Auto Tool."
 
     @field_validator("google_tts_credentials_json_path", "google_tts_api_key", "google_tts_access_token")
     @classmethod
@@ -524,6 +546,40 @@ class TTSVoiceItem(BaseModel):
 
 class TTSVoicesResponse(BaseModel):
     voices: list[TTSVoiceItem]
+
+
+class TTSPreviewRequest(BaseModel):
+    provider: str = "google_cloud_tts"
+    voice: str = Field(min_length=1)
+    text: str = "Xin chào, đây là giọng đọc thử của Auto Tool."
+    language: str = "vi"
+    api_key: str | None = None
+    credentials_json_path: str | None = None
+    access_token: str | None = None
+
+
+class TTSPreviewResponse(BaseModel):
+    success: bool
+    path: str
+    url: str
+    provider: str
+    voice: str
+    warnings: list[str] = Field(default_factory=list)
+
+
+class MusicLibraryTrack(BaseModel):
+    path: str
+    filename: str
+    size_bytes: int = 0
+    duration: float | None = None
+    favorite: bool = False
+
+
+class MusicLibraryResponse(BaseModel):
+    folder_path: str | None = None
+    tracks: list[MusicLibraryTrack] = Field(default_factory=list)
+    favorite_music_paths: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class GenerateScriptVariantsRequest(BaseModel):

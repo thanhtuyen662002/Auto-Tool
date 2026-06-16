@@ -8,6 +8,7 @@ import {
   finalOutputQAReportUrl,
   getDouyinExportPack,
   getDouyinReupJobResults,
+  getAppSettings,
   getJobStatus,
   getSilentVisualTagVocabulary,
   getVisualStyles,
@@ -147,12 +148,16 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   asr_device: 'auto',
   asr_vad_filter: false,
   asr_max_audio_seconds: 180,
+  asr_subprocess_isolation: true,
+  asr_timeout_seconds: 1200,
   asr_subtitle_offset_seconds: -0.25,
   use_ocr_if_asr_failed: true,
   use_ocr_if_no_subtitle: true,
   ocr_provider: 'easyocr',
   ocr_language: 'ch',
   ocr_sample_fps: 2.0,
+  ocr_subprocess_isolation: true,
+  ocr_timeout_seconds: 1200,
   ocr_region_mode: 'bottom_auto',
   ocr_manual_region: null,
   ocr_min_confidence: 0.55,
@@ -168,6 +173,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   keep_original_audio: true,
   add_bgm: true,
   music_folder: '',
+  favorite_music_paths: [],
   bgm_volume: 0.16,
   original_audio_volume: 0.85,
   duck_bgm_when_voice: false,
@@ -215,6 +221,10 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   add_bgm_for_silent_video: true,
   immersive_bgm_volume: 0.18,
   silent_review_before_render: true,
+  product_context_lock_enabled: true,
+  locked_product_name: null,
+  locked_industry: null,
+  locked_product_keywords: [],
 };
 
 const RECENT_SOURCE_KEY = 'auto-tool.recentSourceFolders';
@@ -733,7 +743,16 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
 
   function updateVoiceChoice(value: string) {
     const match = VIETNAMESE_TTS_VOICES.find((item) => `${item.provider}:${item.voice}` === value);
-    if (!match) return;
+    if (!match) {
+      const [provider, ...voiceParts] = value.split(':');
+      const voice = voiceParts.join(':');
+      if (!provider || !voice) return;
+      updateSettings({
+        silent_voiceover_provider: provider,
+        silent_voiceover_voice: voice,
+      });
+      return;
+    }
     updateSettings({
       silent_voiceover_provider: match.provider,
       silent_voiceover_voice: match.voice,
@@ -2218,6 +2237,36 @@ function VoiceoverCard({
 }) {
   const isSilent = mode === 'silent_immersive';
   const selectedValue = `${provider}:${voice}`;
+  const [favoriteGoogleVoices, setFavoriteGoogleVoices] = useState<string[]>([]);
+  useEffect(() => {
+    let mounted = true;
+    getAppSettings()
+      .then((settings) => {
+        if (mounted) setFavoriteGoogleVoices(settings.google_tts_favorite_voices ?? []);
+      })
+      .catch(() => {
+        if (mounted) setFavoriteGoogleVoices([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  const voiceOptions = useMemo(() => {
+    const options = [...VIETNAMESE_TTS_VOICES];
+    const existing = new Set(options.map((item) => `${item.provider}:${item.voice}`));
+    for (const favoriteVoice of favoriteGoogleVoices) {
+      const value = favoriteVoice.trim();
+      const key = `google_cloud_tts:${value}`;
+      if (!value || existing.has(key)) continue;
+      options.push({
+        provider: 'google_cloud_tts',
+        voice: value,
+        label: `Google Cloud - ${value} (đã đánh dấu sao)`,
+      });
+      existing.add(key);
+    }
+    return options;
+  }, [favoriteGoogleVoices]);
   return (
     <GlassCard className="grid gap-4 p-5" strong>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2246,7 +2295,7 @@ function VoiceoverCard({
           value={selectedValue}
           onChange={(event) => onVoiceChange(event.target.value)}
         >
-          {VIETNAMESE_TTS_VOICES.map((item) => (
+          {voiceOptions.map((item) => (
             <option key={`${item.provider}:${item.voice}`} value={`${item.provider}:${item.voice}`}>
               {item.label}
             </option>
@@ -2336,15 +2385,20 @@ function formatCaptionSource(source?: string | null): string {
 }
 
 function buildSilentProductContext(context: SilentProductContext): Record<string, unknown> {
+  const features = context.features
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
   return {
     product_name: context.product_name.trim(),
     category: context.industry,
     industry: context.industry,
-    features: context.features
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean),
+    features,
     cta: context.cta.trim(),
+    product_context_lock_enabled: true,
+    locked_product_name: context.product_name.trim() || null,
+    locked_industry: context.industry || null,
+    locked_product_keywords: features,
   };
 }
 

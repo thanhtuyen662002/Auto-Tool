@@ -8,6 +8,7 @@ from app.modules.silent_immersive_reup.silent_schema import SilentVisualSegment
 from app.modules.silent_visual_tagging.keyword_tag_mapper import KeywordTagMapper
 from app.modules.silent_visual_tagging.visual_tag_rules import VisualTagRules
 from app.modules.silent_visual_tagging.visual_tag_schema import (
+    INDUSTRY_TAGS,
     SegmentVisualTagResult,
     VideoVisualTagReport,
     VisualTag,
@@ -39,11 +40,13 @@ class VisualTagService:
         product_text = _product_context_text(product_context)
         folder_text = folder_name if folder_name is not None else path.parent.name
         filename_text = filename if filename is not None else path.stem
+        lock_enabled = _product_lock_enabled(product_context)
         global_tags = [
             *self.keyword_mapper.tags_from_text(product_text, "product_context"),
-            *self.keyword_mapper.tags_from_text(folder_text, "folder_name"),
-            *self.keyword_mapper.tags_from_text(filename_text, "filename"),
         ]
+        if not lock_enabled:
+            global_tags.extend(self.keyword_mapper.tags_from_text(folder_text, "folder_name"))
+            global_tags.extend(self.keyword_mapper.tags_from_text(filename_text, "filename"))
         results: list[SegmentVisualTagResult] = []
         for index, segment in enumerate(segments):
             ocr_text = (ocr_text_by_segment or {}).get(segment.id) or segment.ocr_text or ""
@@ -58,7 +61,7 @@ class VisualTagService:
                 )
             )
         video_tags = _aggregate_video_tags(results, global_tags)
-        recommended_industry = _primary(video_tags, VisualTagCategory.industry) or "general_product"
+        recommended_industry = _locked_industry(product_context) or _primary(video_tags, VisualTagCategory.industry) or "general_product"
         average_confidence = (
             sum(result.confidence for result in results) / len(results)
             if results
@@ -89,11 +92,11 @@ class VisualTagService:
     ) -> SegmentVisualTagResult:
         tags = [
             *(inherited_tags or self.keyword_mapper.tags_from_text(_product_context_text(product_context), "product_context")),
-            *self.keyword_mapper.tags_from_text(text_context or segment.ocr_text or "", "ocr_text"),
+            *([] if _product_lock_enabled(product_context) else self.keyword_mapper.tags_from_text(text_context or segment.ocr_text or "", "ocr_text")),
             *self.rules.tags_from_segment_features(segment, segment_index, total_segments),
         ]
         deduped = _merge_tags(tags)
-        primary_industry = _primary(deduped, VisualTagCategory.industry)
+        primary_industry = _locked_industry(product_context) or _primary(deduped, VisualTagCategory.industry)
         primary_scene = _primary(deduped, VisualTagCategory.scene)
         primary_action = _primary(deduped, VisualTagCategory.action)
         relevant = [tag.confidence for tag in deduped if tag.category != VisualTagCategory.quality]
@@ -143,6 +146,7 @@ def _product_context_text(context: dict | None) -> str:
         context.get("name"),
         context.get("description"),
         context.get("features"),
+        context.get("locked_product_keywords"),
     ]
     parts: list[str] = []
     for value in values:
@@ -151,6 +155,22 @@ def _product_context_text(context: dict | None) -> str:
         elif value:
             parts.append(str(value))
     return " ".join(parts)
+
+
+def _product_lock_enabled(context: dict | None) -> bool:
+    if not context:
+        return False
+    return bool(context.get("product_context_lock_enabled") or context.get("lock_product_context"))
+
+
+def _locked_industry(context: dict | None) -> str | None:
+    if not _product_lock_enabled(context):
+        return None
+    for key in ("locked_industry", "industry", "category"):
+        value = str((context or {}).get(key) or "").strip()
+        if value in INDUSTRY_TAGS:
+            return value
+    return None
 
 
 def _merge_tags(tags: list[VisualTag]) -> list[VisualTag]:

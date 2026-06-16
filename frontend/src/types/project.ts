@@ -47,6 +47,7 @@ export interface MusicSettings {
   enabled: boolean;
   source_folder?: string | null;
   source_file?: string | null;
+  favorite_music_paths?: string[];
   volume: number;
   fade_in: number;
   fade_out: number;
@@ -133,12 +134,16 @@ export interface DouyinReupSettings {
   asr_device: string;
   asr_vad_filter: boolean;
   asr_max_audio_seconds: number;
+  asr_subprocess_isolation: boolean;
+  asr_timeout_seconds: number;
   asr_subtitle_offset_seconds: number;
   use_ocr_if_asr_failed: boolean;
   use_ocr_if_no_subtitle: boolean;
   ocr_provider: string;
   ocr_language: string;
   ocr_sample_fps: number;
+  ocr_subprocess_isolation: boolean;
+  ocr_timeout_seconds: number;
   ocr_region_mode: 'bottom_auto' | 'middle_lower' | 'full_frame' | 'manual' | string;
   ocr_manual_region?: { x: number; y: number; width: number; height: number } | null;
   ocr_min_confidence: number;
@@ -154,6 +159,7 @@ export interface DouyinReupSettings {
   keep_original_audio: boolean;
   add_bgm: boolean;
   music_folder?: string | null;
+  favorite_music_paths: string[];
   bgm_volume: number;
   original_audio_volume: number;
   duck_bgm_when_voice: boolean;
@@ -201,6 +207,10 @@ export interface DouyinReupSettings {
   add_bgm_for_silent_video: boolean;
   immersive_bgm_volume: number;
   silent_review_before_render: boolean;
+  product_context_lock_enabled: boolean;
+  locked_product_name?: string | null;
+  locked_industry?: string | null;
+  locked_product_keywords: string[];
 }
 
 export interface IndustrySettings {
@@ -276,6 +286,9 @@ export interface AppSettings {
   google_tts_credentials_json_path?: string | null;
   google_tts_api_key?: string | null;
   google_tts_access_token?: string | null;
+  google_tts_favorite_voices?: string[];
+  google_tts_preview_text?: string;
+  favorite_music_paths?: string[];
 }
 
 export interface ConfigRequirementIssue {
@@ -1535,6 +1548,30 @@ export interface TTSVoiceInfo {
 
 export interface TTSVoicesResponse {
   voices: TTSVoiceInfo[];
+}
+
+export interface TTSPreviewResponse {
+  success: boolean;
+  path: string;
+  url: string;
+  provider: string;
+  voice: string;
+  warnings: string[];
+}
+
+export interface MusicLibraryTrack {
+  path: string;
+  filename: string;
+  size_bytes: number;
+  duration?: number | null;
+  favorite: boolean;
+}
+
+export interface MusicLibraryResponse {
+  folder_path?: string | null;
+  tracks: MusicLibraryTrack[];
+  favorite_music_paths: string[];
+  warnings: string[];
 }
 
 export type PublishStatus = 'draft' | 'copied' | 'posted' | 'skipped';

@@ -7,7 +7,16 @@ SUPPORTED_BGM_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".o
 
 
 class BGMMixer:
-    def pick_bgm(self, music_folder: str | None) -> str | None:
+    def pick_bgm(self, music_folder: str | None, favorite_paths: list[str] | None = None) -> str | None:
+        folder_hint = Path(music_folder).expanduser() if music_folder else None
+        favorite_candidates = [
+            path
+            for path in _valid_audio_paths(favorite_paths or [])
+            if folder_hint is None or not folder_hint.exists() or not folder_hint.is_dir() or _is_inside_folder(path, folder_hint)
+        ]
+        if favorite_candidates:
+            return str(random.choice(favorite_candidates))
+
         if not music_folder:
             return None
         folder = Path(music_folder).expanduser().resolve()
@@ -55,3 +64,23 @@ class BGMMixer:
 
 def _clamp_volume(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+def _valid_audio_paths(paths: list[str]) -> list[Path]:
+    candidates: list[Path] = []
+    for item in paths:
+        try:
+            path = Path(item).expanduser().resolve()
+        except OSError:
+            continue
+        if path.is_file() and path.suffix.lower() in SUPPORTED_BGM_EXTENSIONS and path.stat().st_size > 0:
+            candidates.append(path)
+    return sorted(candidates)
+
+
+def _is_inside_folder(path: Path, folder: Path) -> bool:
+    try:
+        path.resolve().relative_to(folder.resolve())
+        return True
+    except ValueError:
+        return False

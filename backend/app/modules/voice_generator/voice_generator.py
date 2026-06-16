@@ -20,6 +20,8 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 MAX_INTER_LINE_SILENCE = 0.28
+MAX_SUBTITLE_LOCKED_SPEEDUP = 1.25
+MIN_SUBTITLE_SLOT_DURATION = 0.18
 
 
 class VoiceGenerator:
@@ -47,6 +49,9 @@ class VoiceGenerator:
         language: str = "vi",
         target_duration: float | None = None,
         tts_settings: TTSSettings | None = None,
+        allow_script_shortening: bool = True,
+        lock_subtitle_timing: bool = False,
+        max_subtitle_speedup: float = MAX_SUBTITLE_LOCKED_SPEEDUP,
     ) -> str:
         self.warnings = []
         self.last_subtitle_timeline = []
@@ -54,11 +59,19 @@ class VoiceGenerator:
         self.last_voice_duration = None
         self.last_cache_hit = False
         settings = self._settings(tts_settings, language, filename)
-        script, guard_warnings = prepare_script_for_tts(script, target_duration, language)
+        script, guard_warnings = prepare_script_for_tts(
+            script,
+            target_duration,
+            language,
+            allow_shortening=allow_script_shortening,
+        )
         self.warnings.extend(guard_warnings)
 
         target_dir = ensure_dir(output_dir)
-        voice_chunks = build_subtitle_timeline(script, target_duration) if target_duration else []
+        if target_duration and lock_subtitle_timing:
+            voice_chunks = self._subtitle_locked_chunks(script, target_duration)
+        else:
+            voice_chunks = build_subtitle_timeline(script, target_duration) if target_duration else []
         voice_text = "\n".join(
             f"[{line.start_hint:.2f}-{line.end_hint:.2f}s] {line.text}"
             for line in voice_chunks
@@ -70,7 +83,8 @@ class VoiceGenerator:
         text_path.write_text(voice_text, encoding="utf-8")
 
         voice_path = target_dir / filename
-        cache_key = self._cache_key(voice_text, settings, target_duration)
+        timing_mode = "subtitle_locked" if lock_subtitle_timing else "default"
+        cache_key = self._cache_key(voice_text, settings, target_duration, timing_mode=timing_mode)
         if cache_key and self._restore_from_cache(cache_key, voice_path):
             return str(voice_path)
 
@@ -82,6 +96,8 @@ class VoiceGenerator:
                 output_path=voice_path,
                 settings=settings,
                 target_duration=target_duration,
+                lock_subtitle_timing=lock_subtitle_timing,
+                max_subtitle_speedup=max_subtitle_speedup,
             )
         else:
             plain_voice_text = "\n".join(line.text for line in script.voiceover)
@@ -94,12 +110,34 @@ class VoiceGenerator:
         self._store_cache(cache_key, generated_path, settings)
         return generated_path
 
+    @staticmethod
+    def _subtitle_locked_chunks(script: ProductVideoScript, target_duration: float) -> list[SubtitleLine]:
+        chunks: list[SubtitleLine] = []
+        previous_end = 0.0
+        for line in script.subtitles:
+            if line.start_hint is None or line.end_hint is None:
+                return []
+            start = max(0.0, min(float(line.start_hint), target_duration))
+            end = max(0.0, min(float(line.end_hint), target_duration))
+            if start < previous_end:
+                start = previous_end
+            if end <= start:
+                continue
+            text = line.text.strip()
+            if not text:
+                continue
+            chunks.append(SubtitleLine(start_hint=round(start, 3), end_hint=round(end, 3), text=text))
+            previous_end = end
+        return chunks
+
     def _generate_timed_voiceover(
         self,
         voice_chunks: list[SubtitleLine],
         output_path: Path,
         settings: TTSSettings,
         target_duration: float,
+        lock_subtitle_timing: bool = False,
+        max_subtitle_speedup: float = MAX_SUBTITLE_LOCKED_SPEEDUP,
     ) -> str:
         temp_dir = ensure_dir(output_path.parent / f"_{output_path.stem}_voice_parts")
 
@@ -111,11 +149,19 @@ class VoiceGenerator:
             )
 
             raw_concat_path = temp_dir / "voice_concat_raw.wav"
-            sequence_paths = self._compose_timed_audio_sequence(
-                measured_segments=measured_segments,
-                temp_dir=temp_dir,
-                target_duration=target_duration,
-            )
+            if lock_subtitle_timing:
+                sequence_paths = self._compose_subtitle_locked_audio_sequence(
+                    measured_segments=measured_segments,
+                    temp_dir=temp_dir,
+                    target_duration=target_duration,
+                    max_speedup=max_subtitle_speedup,
+                )
+            else:
+                sequence_paths = self._compose_timed_audio_sequence(
+                    measured_segments=measured_segments,
+                    temp_dir=temp_dir,
+                    target_duration=target_duration,
+                )
             self._concat_audio_segments(sequence_paths, raw_concat_path)
             timeline_scale = self._fit_voice_duration(str(raw_concat_path), str(output_path), target_duration)
             self._read_final_voice_duration(str(output_path))
@@ -128,7 +174,7 @@ class VoiceGenerator:
                         "warnings": list(dict.fromkeys([*self.warnings, *self.last_tts_result.warnings])),
                     }
                 )
-            if timeline_scale != 1.0:
+            if timeline_scale != 1.0 and not lock_subtitle_timing:
                 self.last_subtitle_timeline = self._scale_timeline(
                     self.last_subtitle_timeline,
                     scale=timeline_scale,
@@ -250,6 +296,112 @@ class VoiceGenerator:
         self.last_subtitle_timeline = timeline
 
         return sequence
+
+    def _compose_subtitle_locked_audio_sequence(
+        self,
+        measured_segments: list[tuple[SubtitleLine, Path, float]],
+        temp_dir: Path,
+        target_duration: float,
+        max_speedup: float = MAX_SUBTITLE_LOCKED_SPEEDUP,
+    ) -> list[Path]:
+        if not measured_segments:
+            return []
+
+        sequence: list[Path] = []
+        timeline: list[SubtitleLine] = []
+        cursor = 0.0
+        silence_index = 1
+
+        for index, (planned_line, audio_path, measured_duration) in enumerate(measured_segments, start=1):
+            planned_start = max(0.0, float(planned_line.start_hint or 0.0))
+            planned_end = float(planned_line.end_hint or planned_start)
+            planned_end = min(target_duration, max(planned_start + MIN_SUBTITLE_SLOT_DURATION, planned_end))
+            if planned_start >= target_duration:
+                break
+
+            if planned_start > cursor:
+                silence_path = temp_dir / f"locked_silence_{silence_index:03d}.wav"
+                silence_index += 1
+                self._generate_silence(silence_path, planned_start - cursor)
+                sequence.append(silence_path)
+                cursor = planned_start
+
+            slot_duration = max(MIN_SUBTITLE_SLOT_DURATION, planned_end - planned_start)
+            fitted_path = temp_dir / f"locked_part_{index:03d}.wav"
+            segment_path, segment_duration = self._fit_audio_to_subtitle_slot(
+                input_path=audio_path,
+                output_path=fitted_path,
+                measured_duration=measured_duration,
+                slot_duration=slot_duration,
+                max_speedup=max_speedup,
+            )
+            sequence.append(segment_path)
+            cursor = min(target_duration, planned_start + min(slot_duration, max(0.0, segment_duration)))
+            timeline.append(
+                SubtitleLine(
+                    start_hint=round(planned_start, 3),
+                    end_hint=round(planned_end, 3),
+                    text=planned_line.text,
+                )
+            )
+
+        if cursor < target_duration:
+            silence_path = temp_dir / f"locked_silence_{silence_index:03d}.wav"
+            self._generate_silence(silence_path, target_duration - cursor)
+            sequence.append(silence_path)
+
+        self.last_subtitle_timeline = timeline
+        return sequence
+
+    def _fit_audio_to_subtitle_slot(
+        self,
+        *,
+        input_path: Path,
+        output_path: Path,
+        measured_duration: float,
+        slot_duration: float,
+        max_speedup: float,
+    ) -> tuple[Path, float]:
+        if measured_duration <= 0 or slot_duration <= 0:
+            return input_path, max(0.0, measured_duration)
+
+        if measured_duration <= slot_duration + 0.03:
+            return input_path, measured_duration
+
+        required_speed = measured_duration / max(slot_duration, MIN_SUBTITLE_SLOT_DURATION)
+        applied_speed = min(max(required_speed, 1.0), max(1.0, float(max_speedup)))
+        if required_speed > applied_speed + 0.01:
+            self._add_warning_once(
+                "voice_line_too_dense_for_subtitle: Một số câu tiếng Việt dài hơn thời lượng subtitle, "
+                "đã giới hạn tốc độ đọc và cắt trong đúng khung subtitle để tránh lệch tiếng."
+            )
+
+        audio_filter_parts: list[str] = []
+        if applied_speed > 1.001:
+            audio_filter_parts.append(self._atempo_filter(applied_speed))
+        audio_filter_parts.append(f"atrim=0:{slot_duration:.3f}")
+        audio_filter_parts.append("asetpts=PTS-STARTPTS")
+        run_ffmpeg(
+            [
+                "-y",
+                "-i",
+                str(input_path),
+                "-af",
+                ",".join(audio_filter_parts),
+                "-ac",
+                "1",
+                "-ar",
+                "44100",
+                "-acodec",
+                "pcm_s16le",
+                str(output_path),
+            ]
+        )
+        try:
+            fitted_duration = min(slot_duration, probe_media_duration(str(output_path)))
+        except Exception:
+            fitted_duration = slot_duration
+        return output_path, fitted_duration
 
     def _fit_voice_duration(self, input_path: str, output_path: str, target_duration: float) -> float:
         try:
@@ -459,6 +611,16 @@ class VoiceGenerator:
             return f"atrim=0:{target_duration:.3f},asetpts=PTS-STARTPTS"
         return "asetpts=PTS-STARTPTS"
 
+    @staticmethod
+    def _atempo_filter(speed: float) -> str:
+        remaining = max(0.5, float(speed))
+        parts: list[str] = []
+        while remaining > 2.0:
+            parts.append("atempo=2.000")
+            remaining /= 2.0
+        parts.append(f"atempo={remaining:.3f}")
+        return ",".join(parts)
+
     def _generate_voice(self, text: str, output_path: Path, settings: TTSSettings) -> TTSResult:
         cleaned_text = clean_text_for_tts(text)
         if not cleaned_text:
@@ -482,11 +644,20 @@ class VoiceGenerator:
         self.last_tts_result = tts_result
         return tts_result
 
-    def _cache_key(self, voice_text: str, settings: TTSSettings, target_duration: float | None) -> str | None:
+    def _cache_key(
+        self,
+        voice_text: str,
+        settings: TTSSettings,
+        target_duration: float | None,
+        timing_mode: str = "default",
+    ) -> str | None:
         if not self.cache_service or not self.cache_service.enabled or not self.cache_enabled:
             return None
+        cache_text = voice_text
+        if timing_mode != "default":
+            cache_text = f"[timing_mode:{timing_mode}]\n{voice_text}"
         return self.cache_service.keys.build_tts_key(
-            voice_text,
+            cache_text,
             settings.voice,
             settings.provider,
             settings.rate,

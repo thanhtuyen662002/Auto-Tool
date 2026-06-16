@@ -30,12 +30,16 @@ class DouyinReupSettings(BaseModel):
     asr_device: str = "auto"
     asr_vad_filter: bool = False
     asr_max_audio_seconds: int = Field(default=180, ge=0, le=7200)
+    asr_subprocess_isolation: bool = True
+    asr_timeout_seconds: int = Field(default=1200, ge=60, le=24 * 60 * 60)
     asr_subtitle_offset_seconds: float = Field(default=-0.25, ge=-2.0, le=2.0)
     use_ocr_if_asr_failed: bool = True
     use_ocr_if_no_subtitle: bool = True
     ocr_provider: str = "easyocr"
     ocr_language: str = "ch"
     ocr_sample_fps: float = Field(default=2.0, gt=0, le=10)
+    ocr_subprocess_isolation: bool = True
+    ocr_timeout_seconds: int = Field(default=1200, ge=60, le=24 * 60 * 60)
     ocr_region_mode: str = "bottom_auto"
     ocr_manual_region: dict | None = None
     ocr_min_confidence: float = Field(default=0.55, ge=0, le=1)
@@ -51,6 +55,7 @@ class DouyinReupSettings(BaseModel):
     keep_original_audio: bool = True
     add_bgm: bool = True
     music_folder: str | None = None
+    favorite_music_paths: list[str] = Field(default_factory=list)
     bgm_volume: float = Field(default=0.16, ge=0, le=1)
     original_audio_volume: float = Field(default=0.85, ge=0, le=1)
     duck_bgm_when_voice: bool = False
@@ -98,6 +103,10 @@ class DouyinReupSettings(BaseModel):
     add_bgm_for_silent_video: bool = True
     immersive_bgm_volume: float = Field(default=0.18, ge=0, le=1)
     silent_review_before_render: bool = True
+    product_context_lock_enabled: bool = True
+    locked_product_name: str | None = None
+    locked_industry: str | None = None
+    locked_product_keywords: list[str] = Field(default_factory=list)
 
     @field_validator(
         "source_language",
@@ -194,6 +203,40 @@ class DouyinReupSettings(BaseModel):
                 continue
             cleaned.append(path)
             seen.add(path)
+        return cleaned
+
+    @field_validator("favorite_music_paths")
+    @classmethod
+    def clean_favorite_music_paths(cls, value: list[str]) -> list[str]:
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for item in value:
+            path = str(item).strip()
+            if not path or path in seen:
+                continue
+            cleaned.append(path)
+            seen.add(path)
+        return cleaned
+
+    @field_validator("locked_product_name", "locked_industry")
+    @classmethod
+    def clean_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+    @field_validator("locked_product_keywords")
+    @classmethod
+    def clean_locked_product_keywords(cls, value: list[str]) -> list[str]:
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for item in value:
+            text = " ".join(str(item).split()).strip()
+            if not text or text in seen:
+                continue
+            cleaned.append(text)
+            seen.add(text)
         return cleaned
 
     @field_validator("source_selection_id")

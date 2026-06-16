@@ -25,8 +25,18 @@ class MusicSelector:
         if config.music.source_file:
             return self._validate_file(Path(config.music.source_file))
 
+        favorite_candidates = self._favorite_candidates(
+            config.music.favorite_music_paths,
+            Path(config.music.source_folder) if config.music.source_folder else None,
+        )
+        if favorite_candidates:
+            rng = random.Random(90_000 + output_index)
+            return str(rng.choice(favorite_candidates).resolve())
+
         if not config.music.source_folder:
-            self._warn("Music is enabled but neither music.source_file nor music.source_folder is configured.")
+            self._warn(
+                "Music is enabled but neither music.source_file, music.source_folder nor valid favorite music is configured."
+            )
             return None
 
         folder = Path(config.music.source_folder)
@@ -46,6 +56,24 @@ class MusicSelector:
 
         rng = random.Random(90_000 + output_index)
         return str(rng.choice(valid_candidates).resolve())
+
+    def _favorite_candidates(self, favorite_paths: list[str], source_folder: Path | None) -> list[Path]:
+        folder = source_folder.expanduser().resolve() if source_folder else None
+        candidates: list[Path] = []
+        for item in favorite_paths:
+            path = Path(item).expanduser()
+            if not self._is_valid_favorite(path, folder):
+                continue
+            candidates.append(path.resolve())
+        return sorted(candidates)
+
+    def _is_valid_favorite(self, path: Path, folder: Path | None) -> bool:
+        if folder is not None:
+            try:
+                path.expanduser().resolve().relative_to(folder)
+            except ValueError:
+                return False
+        return self._validate_file(path) is not None
 
     def _validate_file(self, path: Path) -> str | None:
         if not path.exists() or not path.is_file():

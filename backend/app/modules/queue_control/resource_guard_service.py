@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.modules.queue_control.queue_control_schema import QueueSettings
+from app.modules.queue_control.system_resources import cpu_percent, memory_snapshot
 
 
 class ResourceGuardService:
@@ -41,15 +42,21 @@ class ResourceGuardService:
         return {"free_gb": free_gb, "total_gb": total_gb, "min_free_disk_gb": min_free_disk_gb, "warning": warning}
 
     def check_memory_cpu(self, settings: QueueSettings) -> dict[str, Any]:
-        try:
-            import psutil  # type: ignore
-        except ImportError:
-            return {"available": False, "warnings": []}
         warnings = []
-        cpu = float(psutil.cpu_percent(interval=0))
-        memory = float(psutil.virtual_memory().percent)
-        if cpu >= settings.max_cpu_percent_warning:
+        cpu = cpu_percent()
+        memory = memory_snapshot()
+        memory_percent = float(memory["memory_percent"]) if memory and "memory_percent" in memory else None
+
+        if cpu is not None and cpu >= settings.max_cpu_percent_warning:
             warnings.append(f"CPU đang cao: {cpu:.1f}%, ngưỡng cảnh báo {settings.max_cpu_percent_warning:.1f}%.")
-        if memory >= settings.max_memory_percent_warning:
-            warnings.append(f"RAM đang cao: {memory:.1f}%, ngưỡng cảnh báo {settings.max_memory_percent_warning:.1f}%.")
-        return {"available": True, "cpu_percent": cpu, "memory_percent": memory, "warnings": warnings}
+        if memory_percent is not None and memory_percent >= settings.max_memory_percent_warning:
+            warnings.append(f"RAM đang cao: {memory_percent:.1f}%, ngưỡng cảnh báo {settings.max_memory_percent_warning:.1f}%.")
+
+        return {
+            "available": bool(cpu is not None or memory),
+            "cpu_percent": cpu,
+            "memory_percent": memory_percent,
+            "memory_total_gb": memory.get("memory_total_gb") if memory else None,
+            "memory_available_gb": memory.get("memory_available_gb") if memory else None,
+            "warnings": warnings,
+        }

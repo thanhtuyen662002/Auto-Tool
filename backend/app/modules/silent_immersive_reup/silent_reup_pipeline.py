@@ -13,6 +13,7 @@ from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVide
 from app.modules.douyin_reup.subtitle_timing_guard import SubtitleBlock, parse_srt_blocks, write_srt_blocks
 from app.modules.douyin_reup.subtitle_translator import SubtitleTranslator
 from app.modules.hardsub_ocr import HardSubOCRService
+from app.modules.hardsub_ocr.hardsub_ocr_schema import HardSubOCRResult
 from app.modules.script_writer.script_writer import ProductVideoScript, SubtitleLine, VoiceoverLine
 from app.modules.silent_immersive_reup.immersive_caption_generator import ImmersiveCaptionGenerator
 from app.modules.silent_immersive_reup.immersive_scene_classifier import ImmersiveSceneClassifier
@@ -34,6 +35,7 @@ from app.modules.silent_visual_tagging.visual_tag_repository import VisualTagRep
 from app.modules.silent_visual_tagging.visual_tag_schema import SilentVisualTaggingMetadata
 from app.modules.silent_visual_tagging.visual_tag_service import VisualTagService
 from app.utils.file_utils import ensure_dir, write_json
+from app.utils.process_isolation import run_in_isolated_process
 from app.version import APP_VERSION
 
 
@@ -579,7 +581,17 @@ class SilentReupPipeline:
         if not settings.use_ocr_if_no_subtitle:
             return None
         try:
-            if progress_callback is None:
+            if settings.ocr_subprocess_isolation:
+                payload = run_in_isolated_process(
+                    _silent_ocr_worker,
+                    video_path,
+                    str(target_dir / "ocr"),
+                    settings.model_dump(mode="json"),
+                    timeout_seconds=settings.ocr_timeout_seconds,
+                    stage_name=f"OCR silent {Path(video_path).name}",
+                )
+                ocr_result = HardSubOCRResult.model_validate(payload)
+            elif progress_callback is None:
                 ocr_result = self.ocr_service.extract_hardsub_to_srt(video_path, str(target_dir / "ocr"), settings)
             else:
                 ocr_result = self.ocr_service.extract_hardsub_to_srt(
@@ -863,3 +875,9 @@ def normalize_silent_industry(product_context: dict | None) -> str:
 
     context = product_context or {}
     return normalize_industry(context.get("industry") or context.get("category"))
+
+
+def _silent_ocr_worker(video_path: str, output_dir: str, settings_payload: dict[str, Any]) -> dict[str, Any]:
+    settings = DouyinReupSettings.model_validate(settings_payload)
+    result = HardSubOCRService().extract_hardsub_to_srt(video_path, output_dir, settings, progress_callback=None)
+    return result.model_dump(mode="json")

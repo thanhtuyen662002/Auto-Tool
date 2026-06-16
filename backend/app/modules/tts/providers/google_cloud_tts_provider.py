@@ -10,6 +10,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
+from app.modules.provider_quota import ProviderQuotaCoolingDown, get_provider_quota_manager
 from app.modules.tts.providers.base import BaseTTSProvider, TTSProviderError
 from app.modules.tts.tts_schema import TTSResult, TTSSettings, TTSVoiceInfo
 
@@ -35,6 +36,7 @@ class GoogleCloudTTSProvider(BaseTTSProvider):
             credentials_json_path=settings.credentials_json_path,
             api_key=settings.api_key,
         )
+        quota_key = _quota_key(settings.api_key, settings.credentials_json_path, settings.access_token)
 
         extension = "wav" if settings.output_format == "wav" else "mp3"
         target = self._target_path(output_path, extension)
@@ -52,7 +54,7 @@ class GoogleCloudTTSProvider(BaseTTSProvider):
             },
         }
 
-        response = _post_json(f"{GOOGLE_TTS_BASE_URL}/text:synthesize", headers, payload)
+        response = _post_json(f"{GOOGLE_TTS_BASE_URL}/text:synthesize", headers, payload, quota_key=quota_key)
         audio_content = response.get("audioContent")
         if not isinstance(audio_content, str) or not audio_content:
             raise TTSProviderError("Google Cloud TTS response did not contain audioContent.")
@@ -76,8 +78,9 @@ class GoogleCloudTTSProvider(BaseTTSProvider):
             credentials_json_path=credentials_json_path,
             api_key=api_key,
         )
+        quota_key = _quota_key(api_key, credentials_json_path, access_token)
         params = {"languageCode": language_code} if language_code else {}
-        response = _get_json(f"{GOOGLE_TTS_BASE_URL}/voices", headers, params)
+        response = _get_json(f"{GOOGLE_TTS_BASE_URL}/voices", headers, params, quota_key=quota_key)
         voices = response.get("voices")
         if not isinstance(voices, list):
             raise TTSProviderError("Google Cloud TTS voices response was invalid.")
@@ -220,14 +223,42 @@ def _api_key(api_key: str | None) -> str:
     )
 
 
-def _get_json(url: str, headers: dict[str, str], params: dict[str, str] | None = None) -> dict[str, Any]:
+def _quota_key(api_key: str | None, credentials_json_path: str | None, access_token: str | None) -> str:
+    return (
+        (api_key or "").strip()
+        or (credentials_json_path or "").strip()
+        or os.getenv("GOOGLE_TTS_CREDENTIALS_JSON_PATH", "").strip()
+        or os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+        or (access_token or "").strip()
+        or os.getenv("GOOGLE_TTS_ACCESS_TOKEN", "").strip()
+        or "google_cloud_tts_default"
+    )
+
+
+def _min_interval_seconds(env_name: str, default: float) -> float:
+    raw = os.getenv(env_name, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return default
+
+
+def _get_json(
+    url: str,
+    headers: dict[str, str],
+    params: dict[str, str] | None = None,
+    *,
+    quota_key: str,
+) -> dict[str, Any]:
     query = urllib.parse.urlencode(params or {})
     full_url = f"{url}?{query}" if query else url
     request = urllib.request.Request(full_url, headers=headers)
-    return _read_json_response(request)
+    return _read_json_response(request, quota_key=quota_key)
 
 
-def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any]) -> dict[str, Any]:
+def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], *, quota_key: str) -> dict[str, Any]:
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request_headers = {
         **headers,
@@ -239,15 +270,30 @@ def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any]) -> di
         headers=request_headers,
         method="POST",
     )
-    return _read_json_response(request)
+    return _read_json_response(request, quota_key=quota_key)
 
 
-def _read_json_response(request: urllib.request.Request) -> dict[str, Any]:
+def _read_json_response(request: urllib.request.Request, *, quota_key: str) -> dict[str, Any]:
     try:
+        get_provider_quota_manager().before_request(
+            "google_cloud_tts",
+            quota_key,
+            min_interval_seconds=_min_interval_seconds("AUTO_TOOL_GOOGLE_CLOUD_TTS_MIN_INTERVAL_SECONDS", 0.2),
+        )
         with urllib.request.urlopen(request, timeout=60) as response:
-            return json.loads(response.read().decode("utf-8"))
+            payload = json.loads(response.read().decode("utf-8"))
+            get_provider_quota_manager().record_success("google_cloud_tts", quota_key)
+            return payload
+    except ProviderQuotaCoolingDown as exc:
+        raise TTSProviderError(str(exc)) from exc
     except urllib.error.HTTPError as exc:
         details = exc.read().decode("utf-8", errors="replace")
+        get_provider_quota_manager().record_failure(
+            "google_cloud_tts",
+            quota_key,
+            status_code=exc.code,
+            message=details,
+        )
         raise TTSProviderError(_google_api_error(exc.code, details)) from exc
     except urllib.error.URLError as exc:
         raise TTSProviderError(f"Google Cloud TTS request failed: {exc.reason}") from exc

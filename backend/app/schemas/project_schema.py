@@ -126,10 +126,24 @@ class MusicSettings(BaseModel):
     enabled: bool = False
     source_folder: str | None = None
     source_file: str | None = None
+    favorite_music_paths: list[str] = Field(default_factory=list)
     volume: float = Field(default=0.12, ge=0, le=1)
     fade_in: float = Field(default=0.5, ge=0)
     fade_out: float = Field(default=0.8, ge=0)
     duck_under_voice: bool = False
+
+    @field_validator("favorite_music_paths")
+    @classmethod
+    def clean_favorite_music_paths(cls, value: list[str]) -> list[str]:
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for item in value:
+            path = str(item).strip()
+            if not path or path in seen:
+                continue
+            cleaned.append(path)
+            seen.add(path)
+        return cleaned
 
 
 class TimelineSettings(BaseModel):

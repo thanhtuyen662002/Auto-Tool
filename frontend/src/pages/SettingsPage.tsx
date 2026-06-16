@@ -14,6 +14,7 @@ import ProviderSettingsCard from '../components/settings/ProviderSettingsCard';
 import SettingsLayout, { type SettingsTab } from '../components/settings/SettingsLayout';
 import SettingsSection from '../components/settings/SettingsSection';
 import SystemStatusCard from '../components/settings/SystemStatusCard';
+import VoiceMusicLibrarySettingsCard from '../components/settings/VoiceMusicLibrarySettingsCard';
 import { getSystemStatus, offlineStatus, type NormalizedSystemStatus } from '../services/healthApi';
 import {
   getLocalUiSettings,
@@ -88,6 +89,8 @@ export default function SettingsPage() {
         ) : null}
 
         {activeTab === 'api_keys' ? <ApiKeysSettingsCard /> : null}
+
+        {activeTab === 'voice_music' ? <VoiceMusicLibrarySettingsCard /> : null}
 
         {activeTab === 'paths' ? <PathSettingsCard onSaved={() => void refreshStatus()} /> : null}
 

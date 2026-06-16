@@ -6,7 +6,7 @@ import zipfile
 
 import requests
 
-from app.utils.updater import _download_file, _launch_updater_script, is_newer
+from app.utils.updater import _download_file, _launch_updater_script, check_for_update, is_newer
 
 
 def test_release_version_is_newer_than_prerelease() -> None:
@@ -24,6 +24,30 @@ def test_patch_version_is_newer_than_previous_core() -> None:
 
 def test_prerelease_is_not_newer_than_release_with_same_core() -> None:
     assert is_newer("1.0.1-rc1", "1.0.1") is False
+
+
+def test_check_for_update_selects_windows_release_asset(monkeypatch) -> None:
+    def fake_request(path, timeout):  # noqa: ANN001
+        assert path.endswith("/releases/latest")
+        assert timeout == 10
+        return {
+            "tag_name": "v1.0.12",
+            "html_url": "https://github.com/example/repo/releases/tag/v1.0.12",
+            "name": "v1.0.12",
+            "body": "notes",
+            "assets": [
+                {"name": "source.zip", "browser_download_url": "https://example.test/source.zip"},
+                {"name": "AutoTool-v1.0.12-windows.zip", "browser_download_url": "https://example.test/windows.zip"},
+            ],
+        }
+
+    monkeypatch.setattr("app.utils.updater._github_api_request", fake_request)
+
+    info = check_for_update("1.0.11")
+
+    assert info.has_update is True
+    assert info.latest_version == "1.0.12"
+    assert info.download_url == "https://example.test/windows.zip"
 
 
 def test_update_download_retries_and_resumes_after_connection_reset(tmp_path, monkeypatch) -> None:

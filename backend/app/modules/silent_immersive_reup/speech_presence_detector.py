@@ -10,6 +10,7 @@ from app.adapters.ffmpeg_adapter import FFmpegError, probe_video
 from app.modules.douyin_reup.subtitle_timing_guard import parse_srt_blocks
 from app.modules.silent_immersive_reup.silent_schema import SpeechPresenceResult
 from app.utils.dependency_manager import DependencyError, resolve_tool
+from app.utils.process_isolation import run_in_isolated_process
 
 
 class SpeechPresenceDetector:
@@ -131,23 +132,45 @@ class SpeechPresenceDetector:
 
     @staticmethod
     def _asr_segment_count(video_path: str) -> int:
-        from app.modules.douyin_reup.asr_service import ASRService
-
-        with tempfile.TemporaryDirectory(prefix="autotool_speech_detect_") as temp_dir:
-            output_path = Path(temp_dir) / "speech_detect.srt"
-            ASRService().transcribe_to_srt(
-                video_path,
-                str(output_path),
-                language="zh",
-                provider="faster_whisper",
-                model_size=os.getenv("AUTO_TOOL_SILENT_SPEECH_MODEL", "tiny"),
-                device=os.getenv("AUTO_TOOL_SILENT_SPEECH_DEVICE", "auto"),
-                vad_filter=True,
+        if os.getenv("AUTO_TOOL_SILENT_SPEECH_ASR_ISOLATION", "1").strip().lower() not in {"0", "false", "no", "off"}:
+            timeout_seconds = _env_int("AUTO_TOOL_SILENT_SPEECH_TIMEOUT_SECONDS", 300)
+            return int(
+                run_in_isolated_process(
+                    _speech_asr_worker,
+                    video_path,
+                    timeout_seconds=timeout_seconds,
+                    stage_name=f"ASR speech detect {Path(video_path).name}",
+                )
             )
-            try:
-                return len(parse_srt_blocks(str(output_path)))
-            except (OSError, FFmpegError):
-                return 0
+        return _speech_asr_worker(video_path)
+
+
+def _speech_asr_worker(video_path: str) -> int:
+    from app.modules.douyin_reup.asr_service import ASRService
+
+    with tempfile.TemporaryDirectory(prefix="autotool_speech_detect_") as temp_dir:
+        output_path = Path(temp_dir) / "speech_detect.srt"
+        ASRService().transcribe_to_srt(
+            video_path,
+            str(output_path),
+            language="zh",
+            provider="faster_whisper",
+            model_size=os.getenv("AUTO_TOOL_SILENT_SPEECH_MODEL", "tiny"),
+            device=os.getenv("AUTO_TOOL_SILENT_SPEECH_DEVICE", "auto"),
+            vad_filter=True,
+            max_audio_seconds=_env_int("AUTO_TOOL_SILENT_SPEECH_MAX_AUDIO_SECONDS", 30),
+        )
+        try:
+            return len(parse_srt_blocks(str(output_path)))
+        except (OSError, FFmpegError):
+            return 0
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default)).strip()))
+    except ValueError:
+        return default
 
 
 def _dedupe(values: list[str]) -> list[str]:

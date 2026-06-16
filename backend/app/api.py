@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import inspect
+import random
 import threading
 import uuid
 from collections import Counter
@@ -19,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from app import database
-from app.adapters.ffmpeg_adapter import FFmpegError
+from app.adapters.ffmpeg_adapter import FFmpegError, probe_media_duration
 from app.modules.media_scanner.scanner import MediaScanner
 from app.modules.content_manager.content_schema import build_content_summary
 from app.modules.content_manager.content_service import ContentService
@@ -161,7 +162,7 @@ from app.modules.source_media import (
     SourceMediaSelectionService,
 )
 from app.modules.timeline_templates.template_registry import list_timeline_templates
-from app.modules.tts.tts_manager import list_tts_providers
+from app.modules.tts.tts_manager import TTSManager, list_tts_providers
 from app.modules.tts.tts_schema import TTSSettings
 from app.modules.tts.providers.google_cloud_tts_provider import list_google_cloud_voices
 from app.modules.tts.providers.base import TTSProviderError
@@ -248,6 +249,8 @@ from app.schemas.api_schema import (
     JobResultsResponse,
     JobStatusResponse,
     LatestScriptResponse,
+    MusicLibraryResponse,
+    MusicLibraryTrack,
     OutputReviewResponse,
     PresetItem,
     ProductInfoImportRequest,
@@ -296,6 +299,8 @@ from app.schemas.api_schema import (
     SystemDependencyStatusResponse,
     TTSProviderItem,
     TTSProvidersResponse,
+    TTSPreviewRequest,
+    TTSPreviewResponse,
     TTSVoiceItem,
     TTSVoicesRequest,
     TTSVoicesResponse,
@@ -2527,6 +2532,74 @@ def create_app() -> FastAPI:
             voices=[TTSVoiceItem.model_validate(voice.model_dump(mode="json")) for voice in voices]
         )
 
+    @app.post("/api/tts/preview", response_model=TTSPreviewResponse)
+    def preview_tts_voice(request: TTSPreviewRequest) -> TTSPreviewResponse:
+        settings = _get_app_settings()
+        text = request.text.strip() or settings.google_tts_preview_text
+        provider = request.provider.strip().lower().replace("-", "_")
+        voice = request.voice.strip()
+        output_dir = ensure_dir(app_data_dir() / "previews" / "tts")
+        output_path = output_dir / f"{_safe_preview_filename(provider)}_{_safe_preview_filename(voice)}.mp3"
+        tts_settings = TTSSettings(
+            provider=provider,
+            fallback_provider="piper",
+            allow_provider_fallback=False,
+            allow_silent_fallback=False,
+            voice=voice,
+            language=request.language.strip() or "vi",
+            api_key=request.api_key or settings.google_tts_api_key,
+            credentials_json_path=request.credentials_json_path or settings.google_tts_credentials_json_path,
+            access_token=request.access_token or settings.google_tts_access_token,
+            output_format="mp3",
+        )
+        manager = TTSManager()
+        try:
+            result = manager.generate_voice(text, str(output_path), tts_settings)
+        except TTSProviderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể tạo audio nghe thử: {exc}") from exc
+        return TTSPreviewResponse(
+            success=True,
+            path=result.output_path,
+            url=f"/api/files/audio?path={quote(result.output_path)}",
+            provider=result.provider,
+            voice=voice,
+            warnings=result.warnings,
+        )
+
+    @app.get("/api/music/library", response_model=MusicLibraryResponse)
+    def get_music_library(folder_path: str | None = Query(default=None)) -> MusicLibraryResponse:
+        settings = _get_app_settings()
+        warnings: list[str] = []
+        folder = Path(folder_path).expanduser().resolve() if folder_path else None
+        tracks: list[MusicLibraryTrack] = []
+        favorite_set = {_normalize_path_for_compare(path) for path in settings.favorite_music_paths}
+
+        if folder is None:
+            favorite_tracks = _music_tracks_from_paths(settings.favorite_music_paths, favorite_set=favorite_set)
+            return MusicLibraryResponse(
+                folder_path=None,
+                tracks=favorite_tracks,
+                favorite_music_paths=settings.favorite_music_paths,
+                warnings=["Chưa chọn thư mục nhạc. Đang chỉ hiển thị các bài đã đánh dấu sao còn tồn tại."],
+            )
+        if not folder.exists() or not folder.is_dir():
+            raise HTTPException(status_code=404, detail=f"Thư mục nhạc không tồn tại: {folder}")
+
+        for path in sorted(folder.rglob("*")):
+            if not path.is_file() or path.suffix.lower() not in SUPPORTED_BGM_EXTENSIONS:
+                continue
+            track = _music_track_from_path(path, favorite_set=favorite_set, warnings=warnings)
+            if track:
+                tracks.append(track)
+        return MusicLibraryResponse(
+            folder_path=str(folder),
+            tracks=tracks,
+            favorite_music_paths=settings.favorite_music_paths,
+            warnings=warnings,
+        )
+
     @app.post(
         "/api/projects/{project_id}/generate-script-variants",
         response_model=GenerateScriptVariantsResponse,
@@ -2804,6 +2877,20 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=403, detail="Image path is not a registered Auto Tool preview asset.") from exc
         media_type = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
         return FileResponse(image_path, media_type=media_type, filename=image_path.name)
+
+    @app.get("/api/files/audio", response_model=None)
+    def get_audio_file(path: str = Query(...)) -> FileResponse:
+        audio_path = Path(path).expanduser().resolve()
+        if not audio_path.exists() or not audio_path.is_file():
+            raise HTTPException(status_code=404, detail=f"Audio file not found: {audio_path}")
+        if audio_path.suffix.lower() not in SUPPORTED_BGM_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Only common audio preview files are supported.")
+        try:
+            audio_path.relative_to(app_data_dir().resolve())
+        except ValueError as exc:
+            raise HTTPException(status_code=403, detail="Audio path is not a registered Auto Tool preview asset.") from exc
+        media_type = "audio/mpeg" if audio_path.suffix.lower() == ".mp3" else "audio/wav"
+        return FileResponse(audio_path, media_type=media_type, filename=audio_path.name)
 
     @app.get("/api/files/thumbnail", response_model=None)
     def get_thumbnail_file(path: str = Query(...)) -> FileResponse:
@@ -3861,7 +3948,8 @@ def _check_config_requirements(
 
     settings = config.douyin_reup if config else None
     if settings and _bgm_required_for_settings(settings, mode):
-        if not settings.music_folder:
+        has_favorite_bgm = _has_valid_favorite_bgm_file(settings.favorite_music_paths)
+        if not settings.music_folder and not has_favorite_bgm:
             issues.append(
                 ConfigRequirementIssue(
                     severity="error",
@@ -3871,9 +3959,9 @@ def _check_config_requirements(
                     action="Chọn thư mục có file .mp3/.wav/.m4a hoặc tắt mục Thêm nhạc nền.",
                 )
             )
-        else:
+        elif settings.music_folder:
             music_folder = Path(settings.music_folder).expanduser()
-            if not music_folder.exists() or not music_folder.is_dir():
+            if (not music_folder.exists() or not music_folder.is_dir()) and not has_favorite_bgm:
                 issues.append(
                     ConfigRequirementIssue(
                         severity="error",
@@ -3883,7 +3971,7 @@ def _check_config_requirements(
                         action="Chọn lại đúng thư mục nhạc nền hoặc tắt mục Thêm nhạc nền.",
                     )
                 )
-            elif not _has_supported_bgm_file(music_folder):
+            elif not _has_supported_bgm_file(music_folder) and not has_favorite_bgm:
                 issues.append(
                     ConfigRequirementIssue(
                         severity="error",
@@ -3951,6 +4039,17 @@ def _bgm_required_for_settings(settings: DouyinReupSettings, mode: str) -> bool:
         if settings.enable_silent_immersive_mode and settings.preset_id and settings.preset_id.startswith("silent_"):
             return bool(settings.add_bgm_for_silent_video)
         return bool(settings.add_bgm)
+    return False
+
+
+def _has_valid_favorite_bgm_file(paths: list[str]) -> bool:
+    for item in paths:
+        try:
+            path = Path(item).expanduser()
+            if path.is_file() and path.suffix.lower() in SUPPORTED_BGM_EXTENSIONS and path.stat().st_size > 0:
+                return True
+        except OSError:
+            continue
     return False
 
 
@@ -4407,6 +4506,7 @@ def _filter_douyin_outputs_by_ids(outputs: list[dict[str, Any]], video_ids: list
 
 def _apply_app_settings(config: ProjectConfig) -> ProjectConfig:
     settings = _get_app_settings()
+    preferred_google_voice = _pick_favorite_google_voice(settings)
     ai_updates: dict[str, Any] = {}
     if settings.gemini_api_keys:
         ai_updates["gemini_api_keys"] = settings.gemini_api_keys
@@ -4418,17 +4518,36 @@ def _apply_app_settings(config: ProjectConfig) -> ProjectConfig:
         tts_updates["credentials_json_path"] = settings.google_tts_credentials_json_path
     if settings.google_tts_access_token:
         tts_updates["access_token"] = settings.google_tts_access_token
+    if preferred_google_voice:
+        tts_updates["provider"] = "google_cloud_tts"
+        tts_updates["voice"] = preferred_google_voice
+
+    music_updates: dict[str, Any] = {}
+    if settings.favorite_music_paths:
+        music_updates["favorite_music_paths"] = settings.favorite_music_paths
+
+    douyin_updates: dict[str, Any] = {}
+    if settings.favorite_music_paths:
+        douyin_updates["favorite_music_paths"] = settings.favorite_music_paths
+    if preferred_google_voice:
+        douyin_updates["silent_voiceover_provider"] = "google_cloud_tts"
+        douyin_updates["silent_voiceover_voice"] = preferred_google_voice
 
     updates: dict[str, Any] = {}
     if ai_updates:
         updates["ai"] = config.ai.model_copy(update=ai_updates)
     if tts_updates:
         updates["tts"] = config.tts.model_copy(update=tts_updates)
+    if music_updates:
+        updates["music"] = config.music.model_copy(update=music_updates)
+    if douyin_updates and config.douyin_reup:
+        updates["douyin_reup"] = config.douyin_reup.model_copy(update=douyin_updates)
     return config.model_copy(update=updates) if updates else config
 
 
 def _tts_settings_from_app_settings() -> TTSSettings:
     settings = _get_app_settings()
+    preferred_google_voice = _pick_favorite_google_voice(settings)
     updates: dict[str, Any] = {}
     if settings.google_tts_api_key:
         updates["api_key"] = settings.google_tts_api_key
@@ -4436,7 +4555,71 @@ def _tts_settings_from_app_settings() -> TTSSettings:
         updates["credentials_json_path"] = settings.google_tts_credentials_json_path
     if settings.google_tts_access_token:
         updates["access_token"] = settings.google_tts_access_token
+    if preferred_google_voice:
+        updates["provider"] = "google_cloud_tts"
+        updates["voice"] = preferred_google_voice
     return TTSSettings().model_copy(update=updates) if updates else TTSSettings()
+
+
+def _pick_favorite_google_voice(settings: AppSettings) -> str | None:
+    voices = [voice.strip() for voice in settings.google_tts_favorite_voices if voice.strip()]
+    if not voices:
+        return None
+    return random.choice(voices)
+
+
+def _safe_preview_filename(value: str) -> str:
+    cleaned = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in value.strip())
+    return cleaned.strip("_")[:80] or "preview"
+
+
+def _normalize_path_for_compare(path: str) -> str:
+    try:
+        return str(Path(path).expanduser().resolve()).casefold()
+    except OSError:
+        return path.strip().casefold()
+
+
+def _music_tracks_from_paths(paths: list[str], *, favorite_set: set[str]) -> list[MusicLibraryTrack]:
+    tracks: list[MusicLibraryTrack] = []
+    warnings: list[str] = []
+    for item in paths:
+        path = Path(item).expanduser()
+        track = _music_track_from_path(path, favorite_set=favorite_set, warnings=warnings)
+        if track:
+            tracks.append(track)
+    return tracks
+
+
+def _music_track_from_path(
+    path: Path,
+    *,
+    favorite_set: set[str],
+    warnings: list[str],
+) -> MusicLibraryTrack | None:
+    try:
+        resolved = path.expanduser().resolve()
+    except OSError as exc:
+        warnings.append(f"Bỏ qua file nhạc không đọc được {path}: {exc}")
+        return None
+    if not resolved.exists() or not resolved.is_file() or resolved.suffix.lower() not in SUPPORTED_BGM_EXTENSIONS:
+        return None
+    size_bytes = resolved.stat().st_size
+    if size_bytes <= 0:
+        warnings.append(f"Bỏ qua file nhạc rỗng: {resolved}")
+        return None
+    duration: float | None = None
+    try:
+        duration = round(float(probe_media_duration(str(resolved))), 3)
+    except Exception as exc:
+        warnings.append(f"Không đọc được duration của {resolved.name}: {exc}")
+    return MusicLibraryTrack(
+        path=str(resolved),
+        filename=resolved.name,
+        size_bytes=size_bytes,
+        duration=duration,
+        favorite=_normalize_path_for_compare(str(resolved)) in favorite_set,
+    )
 
 
 def _validation_error_safety_result(exc: ValidationError) -> SafetyCheckResult:

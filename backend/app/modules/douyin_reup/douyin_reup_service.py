@@ -1108,15 +1108,23 @@ class DouyinReupService:
 
 def _product_context(config: ProjectConfig) -> dict[str, Any]:
     product = config.product
+    settings = config.douyin_reup
+    locked_product_name = settings.locked_product_name if settings and settings.locked_product_name else None
+    locked_industry = settings.locked_industry if settings and settings.locked_industry else None
+    industry = locked_industry or (config.industry.preset_id if config.industry else None)
     return {
-        "product_name": product.name,
-        "name": product.name,
+        "product_name": locked_product_name or product.name,
+        "name": locked_product_name or product.name,
         "brand": product.brand,
         "description": product.description,
         "features": list(product.features),
         "cta": product.cta,
-        "category": config.industry.preset_id if config.industry else None,
-        "industry": config.industry.preset_id if config.industry else None,
+        "category": industry,
+        "industry": industry,
+        "product_context_lock_enabled": bool(settings.product_context_lock_enabled) if settings else True,
+        "locked_product_name": locked_product_name,
+        "locked_industry": locked_industry,
+        "locked_product_keywords": list(settings.locked_product_keywords) if settings else [],
     }
 
 
@@ -1545,7 +1553,21 @@ def _dedupe(values: list[str]) -> list[str]:
 
 def _friendly_error(message: str) -> str:
     text = " ".join(str(message).split())
+    if "Traceback" in text:
+        text = text.split("Traceback", 1)[0].strip()
     lowered = text.lower()
+    if "permission" in lowered or "access is denied" in lowered or "không thể ghi file subtitle" in lowered:
+        return (
+            "Không có quyền đọc/ghi file hoặc file đang bị khóa tạm thời. "
+            "Hãy đóng video/log đang mở, kiểm tra antivirus/OneDrive hoặc chọn thư mục output khác."
+        )
+    if "asr không nhận diện được subtitle" in lowered or "asr không nhận diện được phụ đề" in lowered:
+        return (
+            "ASR/OCR không lấy được phụ đề nguồn đủ tin cậy cho video này. "
+            "Hãy dùng file .srt đi kèm, kiểm tra audio nguồn hoặc retry với cấu hình OCR/ASR khác."
+        )
+    if "ocr không nhận diện được" in lowered and ("phụ đề" in lowered or "subtitle" in lowered):
+        return "OCR không nhận diện được phụ đề tiếng Trung đủ tin cậy. Video này cần file .srt đi kèm hoặc cấu hình OCR khác."
     if "faster-whisper" in lowered or "faster_whisper" in lowered:
         return "Không tìm thấy faster-whisper. Hãy cài dependency bằng `py -m pip install -r backend/requirements.txt` hoặc tắt ASR."
     if "easyocr" in lowered:

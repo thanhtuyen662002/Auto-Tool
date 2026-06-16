@@ -9,6 +9,7 @@ import urllib.request
 from json import JSONDecodeError
 from typing import Any
 
+from app.modules.provider_quota import ProviderQuotaCoolingDown, get_provider_quota_manager
 from app.utils.env_loader import load_local_env
 
 
@@ -78,11 +79,28 @@ class GeminiAdapter:
         last_error: Exception | None = None
         for attempt in range(3):
             try:
+                get_provider_quota_manager().before_request(
+                    "gemini",
+                    api_key,
+                    min_interval_seconds=_min_interval_seconds("AUTO_TOOL_GEMINI_MIN_INTERVAL_SECONDS", 0.2),
+                )
                 with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                    return json.loads(response.read().decode("utf-8"))
+                    payload = json.loads(response.read().decode("utf-8"))
+                    get_provider_quota_manager().record_success("gemini", api_key)
+                    return payload
+            except ProviderQuotaCoolingDown as exc:
+                raise ScriptGenerationError(f"Gemini key #{key_index} is cooling down: {exc}") from exc
             except urllib.error.HTTPError as exc:
                 details = exc.read().decode("utf-8", errors="replace")
+                quota_error = get_provider_quota_manager().record_failure(
+                    "gemini",
+                    api_key,
+                    status_code=exc.code,
+                    message=details,
+                )
                 last_error = ScriptGenerationError(f"Gemini key #{key_index} HTTP {exc.code}: {details}")
+                if quota_error:
+                    break
                 if exc.code < 500 and exc.code != 429:
                     break
             except (urllib.error.URLError, TimeoutError, JSONDecodeError) as exc:
@@ -195,3 +213,13 @@ class GeminiAdapter:
                     return text[start : index + 1]
 
         raise ScriptGenerationError("JSON object in Gemini response is incomplete.")
+
+
+def _min_interval_seconds(env_name: str, default: float) -> float:
+    raw = os.getenv(env_name, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return default

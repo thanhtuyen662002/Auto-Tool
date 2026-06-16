@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.modules.queue_control.queue_control_schema import BatchResourcePlan, QueueSettings
+from app.modules.queue_control.system_resources import cpu_percent, memory_snapshot
 
 
 class BatchResourcePlanner:
@@ -98,21 +99,12 @@ class BatchResourcePlanner:
             "disk_total_gb": round(disk.total / (1024**3), 2),
             "memory_available": False,
         }
-        try:
-            import psutil  # type: ignore
-
-            memory = psutil.virtual_memory()
-            snapshot.update(
-                {
-                    "memory_available": True,
-                    "memory_total_gb": round(memory.total / (1024**3), 2),
-                    "memory_available_gb": round(memory.available / (1024**3), 2),
-                    "memory_percent": round(float(memory.percent), 1),
-                    "cpu_percent": round(float(psutil.cpu_percent(interval=0)), 1),
-                }
-            )
-        except Exception:
-            pass
+        memory = memory_snapshot()
+        if memory:
+            snapshot.update(memory)
+        cpu = cpu_percent()
+        if cpu is not None:
+            snapshot["cpu_percent"] = cpu
         return snapshot
 
     def _recommended_concurrency(self, resources: dict[str, Any]) -> int:

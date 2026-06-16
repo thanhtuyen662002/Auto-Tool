@@ -44,6 +44,7 @@ def test_detector_uses_asr_when_no_srt(tmp_path):
         use_sidecar_srt=False,
         use_embedded_subtitle=False,
         use_asr_if_no_subtitle=True,
+        asr_subprocess_isolation=False,
     )
     detector = SubtitleSourceDetector(asr_service=FakeASR())
 

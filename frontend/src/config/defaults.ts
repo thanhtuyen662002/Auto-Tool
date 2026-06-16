@@ -38,6 +38,7 @@ export const DEFAULT_MUSIC_SETTINGS: MusicSettings = {
   enabled: true,
   source_folder: 'examples/music',
   source_file: null,
+  favorite_music_paths: [],
   volume: 0.12,
   fade_in: 0.5,
   fade_out: 0.8,

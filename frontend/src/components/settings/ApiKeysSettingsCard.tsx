@@ -10,6 +10,9 @@ const EMPTY: AppSettings = {
   google_tts_credentials_json_path: '',
   google_tts_api_key: '',
   google_tts_access_token: '',
+  google_tts_favorite_voices: [],
+  google_tts_preview_text: 'Xin chào, đây là giọng đọc thử của Auto Tool.',
+  favorite_music_paths: [],
 };
 
 export default function ApiKeysSettingsCard() {
@@ -231,6 +234,9 @@ function normalize(s: AppSettings): AppSettings {
     google_tts_credentials_json_path: s.google_tts_credentials_json_path ?? '',
     google_tts_api_key: s.google_tts_api_key ?? '',
     google_tts_access_token: s.google_tts_access_token ?? '',
+    google_tts_favorite_voices: s.google_tts_favorite_voices ?? [],
+    google_tts_preview_text: s.google_tts_preview_text ?? 'Xin chào, đây là giọng đọc thử của Auto Tool.',
+    favorite_music_paths: s.favorite_music_paths ?? [],
   };
 }
 
@@ -240,5 +246,8 @@ function clean(s: AppSettings): AppSettings {
     google_tts_credentials_json_path: s.google_tts_credentials_json_path?.trim() || null,
     google_tts_api_key: s.google_tts_api_key?.trim() || null,
     google_tts_access_token: s.google_tts_access_token?.trim() || null,
+    google_tts_favorite_voices: (s.google_tts_favorite_voices ?? []).map((voice) => voice.trim()).filter(Boolean),
+    google_tts_preview_text: s.google_tts_preview_text?.trim() || 'Xin chào, đây là giọng đọc thử của Auto Tool.',
+    favorite_music_paths: (s.favorite_music_paths ?? []).map((path) => path.trim()).filter(Boolean),
   };
 }

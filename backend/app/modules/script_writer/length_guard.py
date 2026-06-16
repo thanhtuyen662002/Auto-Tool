@@ -8,6 +8,7 @@ def prepare_script_for_tts(
     script: ProductVideoScript,
     target_duration: float | None,
     language: str = "vi",
+    allow_shortening: bool = True,
 ) -> tuple[ProductVideoScript, list[str]]:
     warnings: list[str] = []
     cleaned_voiceover = [
@@ -36,7 +37,7 @@ def prepare_script_for_tts(
         }
     )
 
-    if not target_duration or target_duration <= 0:
+    if not target_duration or target_duration <= 0 or not allow_shortening:
         return cleaned_script, warnings
 
     full_text = _voiceover_text(cleaned_script)

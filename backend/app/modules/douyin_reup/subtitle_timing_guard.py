@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 import textwrap
+import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -118,8 +120,30 @@ def write_srt_blocks(blocks: list[SubtitleBlock], output_path: str) -> str:
                 ]
             )
         )
-    target.write_text("\n\n".join(parts) + ("\n" if parts else ""), encoding="utf-8")
+    payload = "\n\n".join(parts) + ("\n" if parts else "")
+    _atomic_write_text_with_retry(target, payload)
     return str(target)
+
+
+def _atomic_write_text_with_retry(target: Path, payload: str, attempts: int = 5) -> None:
+    ensure_dir(target.parent)
+    last_error: OSError | None = None
+    for attempt in range(1, max(1, attempts) + 1):
+        temp_path = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temp_path.write_text(payload, encoding="utf-8")
+            temp_path.replace(target)
+            return
+        except OSError as exc:
+            last_error = exc
+            temp_path.unlink(missing_ok=True)
+            if attempt >= attempts:
+                break
+            time.sleep(0.12 * attempt)
+    raise PermissionError(
+        f"Không thể ghi file subtitle sau {attempts} lần thử: {target}. "
+        "File hoặc thư mục có thể đang bị khóa bởi Windows, antivirus hoặc ứng dụng xem video."
+    ) from last_error
 
 
 def parse_srt_timestamp(value: str) -> float:

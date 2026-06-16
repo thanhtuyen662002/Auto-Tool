@@ -190,7 +190,7 @@ class DouyinRenderPipeline:
                     raise RuntimeError("Đã bật nhạc nền nhưng chưa chọn thư mục nhạc.")
                 warnings.append("Đã bật nhạc nền nhưng chưa chọn thư mục nhạc nên video không có BGM.")
             else:
-                bgm_path = self.bgm_mixer.pick_bgm(settings.music_folder)
+                bgm_path = self.bgm_mixer.pick_bgm(settings.music_folder, settings.favorite_music_paths)
                 if not bgm_path:
                     if not _allow_render_without_bgm():
                         raise RuntimeError(f"Không tìm thấy file nhạc nền hợp lệ trong thư mục: {settings.music_folder}")
@@ -333,6 +333,8 @@ class DouyinRenderPipeline:
             language=settings.target_language,
             target_duration=target_duration,
             tts_settings=merged_tts_settings,
+            allow_script_shortening=False,
+            lock_subtitle_timing=True,
         )
         result = self.voice_generator.last_tts_result
         if not result or result.provider == "silent":
