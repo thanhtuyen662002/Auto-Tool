@@ -10,7 +10,7 @@ from typing import Any, Callable
 from pydantic import ValidationError
 
 from app import database
-from app.modules.job_recovery import JobCheckpointService
+from app.modules.job_recovery.job_checkpoint_service import JobCheckpointService
 from app.modules.queue_control.queue_control_schema import (
     QueueItem,
     QueueItemStatus,

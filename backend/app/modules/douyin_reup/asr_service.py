@@ -30,6 +30,7 @@ class ASRService:
         model_size: str = "medium",
         device: str = "auto",
         vad_filter: bool = False,
+        max_audio_seconds: int | float | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> str:
         self.warnings = []
@@ -48,7 +49,7 @@ class ASRService:
         target = Path(output_srt_path)
         ensure_dir(target.parent)
         audio_path = target.with_name(f"{target.stem}_asr_audio.wav")
-        audio_limit = _asr_audio_limit_seconds(video_path)
+        audio_limit = _asr_audio_limit_seconds(video_path, max_audio_seconds=max_audio_seconds)
         trim_args = ["-t", f"{audio_limit:.3f}"] if audio_limit else []
         _progress(progress_callback, "asr_extracting_audio", 10)
         run_ffmpeg(
@@ -151,12 +152,18 @@ class ASRService:
         return list(segments)
 
 
-def _asr_audio_limit_seconds(video_path: str) -> float | None:
-    raw = os.getenv("AUTO_TOOL_ASR_MAX_AUDIO_SECONDS", "180").strip()
-    try:
-        limit = float(raw)
-    except ValueError:
-        limit = 180.0
+def _asr_audio_limit_seconds(video_path: str, max_audio_seconds: int | float | None = None) -> float | None:
+    if max_audio_seconds is None:
+        raw = os.getenv("AUTO_TOOL_ASR_MAX_AUDIO_SECONDS", "180").strip()
+        try:
+            limit = float(raw)
+        except ValueError:
+            limit = 180.0
+    else:
+        try:
+            limit = float(max_audio_seconds)
+        except (TypeError, ValueError):
+            limit = 180.0
     if limit <= 0:
         return None
     try:

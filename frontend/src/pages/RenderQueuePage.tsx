@@ -209,6 +209,17 @@ function BatchResourcePlanCard({ queue }: { queue: QueueState | null }) {
         <ResourceMetric label="Khuyến nghị máy" value={`${plan.recommended_concurrency} luồng`} />
         <ResourceMetric label="Tổng item" value={plan.total_items} />
       </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-4">
+        <ResourceMetric label="Kích thước lô" value={`${plan.chunk_size || queue?.settings.batch_chunk_size || 0} video`} />
+        <ResourceMetric label="Số lô" value={plan.chunk_count || 0} />
+        <ResourceMetric label="Timeout FFmpeg" value={`${Math.round((queue?.settings.ffmpeg_timeout_seconds || 0) / 60)} phút`} />
+        <ResourceMetric label="Watchdog" value={`${queue?.settings.watchdog_stale_minutes || 0} phút`} />
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <ResourceMetric label="Chế độ" value={queue?.settings.performance_mode === 'fast' ? 'Nhanh' : queue?.settings.performance_mode === 'balanced' ? 'Cân bằng' : 'An toàn'} />
+        <ResourceMetric label="Tự dừng khi lỗi lặp" value={queue?.settings.pause_on_repeated_failures ? 'Bật' : 'Tắt'} />
+        <ResourceMetric label="Ngưỡng lỗi liên tiếp" value={queue?.settings.max_consecutive_failures || 0} />
+      </div>
       <div className="mt-4 grid gap-2 text-sm text-muted md:grid-cols-3">
         <div>CPU: {cpu ?? 'Không rõ'}</div>
         <div>RAM: {ram ? `${ram} GB` : 'Không rõ'}</div>

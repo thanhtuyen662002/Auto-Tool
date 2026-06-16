@@ -1,5 +1,22 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.11
+
+### Highlights
+
+- Added large-batch reliability controls for Douyin voice, Silent Reup and product/affiliate render flows.
+- Added queue chunk planning, batch chunk logs and periodic memory cleanup between chunks.
+- Added queue watchdog detection for stale running items, exposed through queue/resource APIs.
+- Added configurable FFmpeg timeout per queued item and ASR audio cap per reup settings.
+- Added automatic pause after repeated consecutive video failures to avoid wasting overnight batches.
+- Added frontend "Hiệu năng và chống kẹt" controls for safe/balanced/fast batch modes.
+- Fixed a queue/job-recovery circular import by lazy-loading `JobResumeService`.
+
+### QA
+
+- Backend test suite passed: 432 tests.
+- Frontend production build passed.
+
 ## v1.0.10
 
 ### Highlights

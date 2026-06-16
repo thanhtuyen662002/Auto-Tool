@@ -120,6 +120,7 @@ from app.modules.queue_control import (
     QueueSettings,
     QueueStateResponse,
     QueueStateService,
+    QueueWatchdogService,
     ResourceGuardService,
     ResourceStatusResponse,
 )
@@ -381,6 +382,7 @@ def create_app() -> FastAPI:
     queue_control_service = QueueControlService(queue_state_service)
     queue_priority_service = QueuePriorityService(queue_state_service)
     queue_retry_service = QueueRetryService(queue_state_service)
+    queue_watchdog_service = QueueWatchdogService(queue_state_service)
     douyin_downloader_service = DouyinDownloaderService()
     app.add_middleware(
         CORSMiddleware,
@@ -699,7 +701,8 @@ def create_app() -> FastAPI:
     @app.get("/api/queue-control/jobs/{job_id}", response_model=QueueStateResponse)
     def get_queue_control_job(job_id: str) -> QueueStateResponse:
         try:
-            state = queue_state_service.load_queue_state(job_id) or queue_state_service.rebuild_from_checkpoints(job_id)
+            report = queue_watchdog_service.inspect(job_id, mutate=True)
+            state = report["state"]
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return QueueStateResponse(success=True, data=state, warnings=state.warnings, errors=state.errors)
@@ -796,10 +799,15 @@ def create_app() -> FastAPI:
     @app.get("/api/queue-control/jobs/{job_id}/resource-status", response_model=ResourceStatusResponse)
     def get_queue_resource_status(job_id: str) -> ResourceStatusResponse:
         try:
-            state = queue_state_service.load_queue_state(job_id) or queue_state_service.rebuild_from_checkpoints(job_id)
+            watchdog_report = queue_watchdog_service.inspect(job_id, mutate=True)
+            state = watchdog_report["state"]
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         report = ResourceGuardService(state.output_dir).check_resources(state.settings or QueueSettings())
+        report["watchdog"] = {
+            "stale_items": watchdog_report.get("stale_items", []),
+            "messages": watchdog_report.get("messages", []),
+        }
         if state.concurrency_plan:
             report["concurrency_plan"] = state.concurrency_plan.model_dump(mode="json")
         return ResourceStatusResponse(success=True, data=report, warnings=list(report.get("warnings") or []), errors=[])

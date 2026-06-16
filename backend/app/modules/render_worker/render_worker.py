@@ -4,10 +4,12 @@ from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import datetime
 from pathlib import Path
+import gc
 import threading
 import time
 from typing import Any
 
+from app.adapters.ffmpeg_adapter import ffmpeg_timeout
 from app.modules.industry_presets.industry_preset_service import IndustryPresetService
 from app.modules.content_safety.safety_guard_service import SafetyGuardService
 from app.modules.cache.cache_service import CacheService
@@ -327,6 +329,7 @@ def render_project(
                 if queue_item is None:
                     break
                 timeline = timeline_by_video_id[queue_item.video_id]
+                _log_queue_chunk_start(queue_state, queue_item, log_callback)
             else:
                 if len(outputs) >= len(timelines):
                     break
@@ -374,25 +377,26 @@ def render_project(
                 )
 
             try:
-                output_record = render_one_output(
-                    index=index,
-                    timeline=timeline,
-                    config=working_config,
-                    output_dir=output_dir,
-                    renderer=renderer,
-                    voice_generator=voice_generator,
-                    subtitle_generator=subtitle_generator,
-                    music_selector=music_selector,
-                    custom_script=custom_script,
-                    script_override=_script_for_output(index, custom_script, script_variants),
-                    preview_only=preview_only,
-                    log_callback=log_callback,
-                    cache_service=cache_service,
-                    source_media_filter_summary=summarize_timeline_source_filter(
-                        timeline,
-                        media_filter.last_summary,
-                    ),
-                )
+                with ffmpeg_timeout(_queue_ffmpeg_timeout_seconds(queue_state)):
+                    output_record = render_one_output(
+                        index=index,
+                        timeline=timeline,
+                        config=working_config,
+                        output_dir=output_dir,
+                        renderer=renderer,
+                        voice_generator=voice_generator,
+                        subtitle_generator=subtitle_generator,
+                        music_selector=music_selector,
+                        custom_script=custom_script,
+                        script_override=_script_for_output(index, custom_script, script_variants),
+                        preview_only=preview_only,
+                        log_callback=log_callback,
+                        cache_service=cache_service,
+                        source_media_filter_summary=summarize_timeline_source_filter(
+                            timeline,
+                            media_filter.last_summary,
+                        ),
+                    )
             except Exception as exc:
                 output_record = _failed_single_output(index, output_dir, str(exc), preview_only=preview_only)
                 _log(log_callback, "error", f"Render thất bại cho video {index:03d}: {exc}")
@@ -408,8 +412,14 @@ def render_project(
                     error_message=_queue_error_from_output(output_record),
                     output_video_path=output_record.get("path"),
                 )
+                pause_reason = _repeated_failure_pause_reason(queue_state)
+                if pause_reason and queue_control:
+                    queue_control.mark_paused(job_id, pause_reason)
+                    summary["queue_status"] = "paused"
+                    break
                 if queue_state.settings.cooldown_seconds_between_renders > 0:
                     time.sleep(queue_state.settings.cooldown_seconds_between_renders)
+                _collect_garbage_after_chunk(queue_state, queue_item)
 
         outputs.sort(key=lambda item: int(item.get("index") or 0))
 
@@ -561,6 +571,7 @@ def _render_product_queue_parallel(
 
                 timeline = timeline_by_video_id[queue_item.video_id]
                 index = timeline.output_index
+                _log_queue_chunk_start(current_state, queue_item, log_callback)
                 _emit_queue_progress(
                     outputs,
                     futures,
@@ -589,6 +600,7 @@ def _render_product_queue_parallel(
                     log_callback=log_callback,
                     source_filter_summary=source_filter_summary,
                     stage_gate=stage_gate,
+                    ffmpeg_timeout_seconds=queue_state.settings.ffmpeg_timeout_seconds,
                 )
                 futures[future] = (queue_item, index)
 
@@ -617,6 +629,10 @@ def _render_product_queue_parallel(
                         error_message=_queue_error_from_output(output_record),
                         output_video_path=output_record.get("path"),
                     )
+                    repeated_failure_reason = _repeated_failure_pause_reason(latest_state)
+                    if repeated_failure_reason and stop_reason is None:
+                        pause_reason = repeated_failure_reason
+                        stop_reason = "paused"
                 _emit_queue_progress(
                     outputs,
                     futures,
@@ -627,6 +643,7 @@ def _render_product_queue_parallel(
                 cooldown = int(latest_state.settings.cooldown_seconds_between_renders or 0)
                 if cooldown > 0:
                     time.sleep(cooldown)
+                _collect_garbage_after_chunk(latest_state, queue_item)
 
     if stop_reason == "cancelled":
         queue_control.mark_cancelled(job_id)
@@ -647,31 +664,33 @@ def _render_one_output_isolated(
     log_callback: LogCallback | None,
     source_filter_summary: dict[str, Any],
     stage_gate: StageGate,
+    ffmpeg_timeout_seconds: int | None = None,
 ) -> dict[str, Any]:
     worker_cache = CacheService.for_project(config, log_callback=log_callback)
-    return render_one_output(
-        index=index,
-        timeline=timeline,
-        config=config,
-        output_dir=output_dir,
-        renderer=Renderer(),
-        voice_generator=VoiceGenerator(
+    with ffmpeg_timeout(ffmpeg_timeout_seconds):
+        return render_one_output(
+            index=index,
+            timeline=timeline,
+            config=config,
+            output_dir=output_dir,
+            renderer=Renderer(),
+            voice_generator=VoiceGenerator(
+                cache_service=worker_cache,
+                cache_enabled=config.cache.cache_tts,
+            ),
+            subtitle_generator=SubtitleGenerator(),
+            music_selector=MusicSelector(),
+            custom_script=custom_script,
+            script_override=_script_for_output(index, custom_script, script_variants),
+            preview_only=preview_only,
+            log_callback=log_callback,
             cache_service=worker_cache,
-            cache_enabled=config.cache.cache_tts,
-        ),
-        subtitle_generator=SubtitleGenerator(),
-        music_selector=MusicSelector(),
-        custom_script=custom_script,
-        script_override=_script_for_output(index, custom_script, script_variants),
-        preview_only=preview_only,
-        log_callback=log_callback,
-        cache_service=worker_cache,
-        source_media_filter_summary=summarize_timeline_source_filter(
-            timeline,
-            source_filter_summary,
-        ),
-        stage_gate=stage_gate,
-    )
+            source_media_filter_summary=summarize_timeline_source_filter(
+                timeline,
+                source_filter_summary,
+            ),
+            stage_gate=stage_gate,
+        )
 
 
 def _emit_queue_progress(
@@ -739,6 +758,59 @@ def _queue_error_from_output(output_record: dict[str, Any]) -> str | None:
     if isinstance(errors, list) and errors:
         return str(errors[0])
     return "Render output thất bại."
+
+
+def _queue_ffmpeg_timeout_seconds(queue_state: QueueState | None) -> int | None:
+    if queue_state is None:
+        return None
+    value = int(queue_state.settings.ffmpeg_timeout_seconds or 0)
+    return value or None
+
+
+def _repeated_failure_pause_reason(queue_state: QueueState | None) -> str | None:
+    if queue_state is None or not queue_state.settings.pause_on_repeated_failures:
+        return None
+    limit = max(1, int(queue_state.settings.max_consecutive_failures or 1))
+    processed = [
+        item
+        for item in sorted(queue_state.items, key=lambda item: item.order_index)
+        if item.status in {
+            QueueItemStatus.completed,
+            QueueItemStatus.failed,
+            QueueItemStatus.needs_review,
+            QueueItemStatus.skipped,
+            QueueItemStatus.cancelled,
+            QueueItemStatus.rendered,
+        }
+    ]
+    streak = 0
+    for item in reversed(processed):
+        if item.status != QueueItemStatus.failed:
+            break
+        streak += 1
+    if streak >= limit:
+        return f"Batch đã tạm dừng vì {streak} video liên tiếp bị lỗi. Hãy kiểm tra cấu hình trước khi tiếp tục."
+    return None
+
+
+def _log_queue_chunk_start(queue_state: QueueState | None, queue_item, log_callback: LogCallback | None) -> None:
+    if queue_state is None:
+        return
+    chunk_size = max(1, int(queue_state.settings.batch_chunk_size or 1))
+    if (queue_item.order_index - 1) % chunk_size != 0:
+        return
+    chunk_index = ((queue_item.order_index - 1) // chunk_size) + 1
+    chunk_count = queue_state.concurrency_plan.chunk_count if queue_state.concurrency_plan else 0
+    suffix = f"/{chunk_count}" if chunk_count else ""
+    _log(log_callback, "info", f"Bắt đầu lô {chunk_index}{suffix}: video {queue_item.order_index}/{queue_state.total_items}.")
+
+
+def _collect_garbage_after_chunk(queue_state: QueueState | None, queue_item) -> None:
+    if queue_state is None:
+        return
+    chunk_size = max(1, int(queue_state.settings.batch_chunk_size or 1))
+    if queue_item.order_index % chunk_size == 0:
+        gc.collect()
 
 
 def _failed_single_output(index: int, output_dir: Path, reason: str, preview_only: bool = False) -> dict[str, Any]:

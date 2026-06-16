@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from contextlib import contextmanager
+from contextvars import ContextVar
 from fractions import Fraction
 from pathlib import Path
+from typing import Iterator
 
 from app.schemas.media_schema import MediaFile
 from app.utils.dependency_manager import DependencyError, resolve_tool
@@ -18,12 +21,27 @@ class MissingFFmpegError(FFmpegError):
     """Raised when ffmpeg or ffprobe is not available."""
 
 
-def _run_process(command: list[str]) -> subprocess.CompletedProcess[str]:
+_FFMPEG_TIMEOUT_OVERRIDE: ContextVar[float | None] = ContextVar("ffmpeg_timeout_override", default=None)
+
+
+@contextmanager
+def ffmpeg_timeout(seconds: float | int | None) -> Iterator[None]:
+    """Temporarily override FFmpeg/FFprobe timeout for the current worker context."""
+
+    token = _FFMPEG_TIMEOUT_OVERRIDE.set(_normalize_timeout(seconds))
+    try:
+        yield
+    finally:
+        _FFMPEG_TIMEOUT_OVERRIDE.reset(token)
+
+
+def _run_process(command: list[str], timeout_seconds: float | int | None = None) -> subprocess.CompletedProcess[str]:
     try:
         command = [resolve_tool(command[0]), *command[1:]]
     except DependencyError as exc:
         raise MissingFFmpegError(str(exc)) from exc
 
+    timeout = _normalize_timeout(timeout_seconds) or _process_timeout_seconds()
     try:
         result = subprocess.run(
             command,
@@ -32,13 +50,13 @@ def _run_process(command: list[str]) -> subprocess.CompletedProcess[str]:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=_process_timeout_seconds(),
+            timeout=timeout,
         )
     except FileNotFoundError as exc:
         raise MissingFFmpegError(f"Command not found: {command[0]}") from exc
     except subprocess.TimeoutExpired as exc:
         raise FFmpegError(
-            f"Command timed out after {_process_timeout_seconds()} seconds: {' '.join(command)}"
+            f"Command timed out after {timeout} seconds: {' '.join(command)}"
         ) from exc
 
     if result.returncode != 0:
@@ -50,11 +68,26 @@ def _run_process(command: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def _process_timeout_seconds() -> float:
+    override = _FFMPEG_TIMEOUT_OVERRIDE.get()
+    if override is not None:
+        return override
     raw = os.getenv("AUTO_TOOL_FFMPEG_TIMEOUT_SECONDS", "1800").strip()
     try:
         return max(30.0, float(raw))
     except ValueError:
         return 1800.0
+
+
+def _normalize_timeout(seconds: float | int | None) -> float | None:
+    if seconds is None:
+        return None
+    try:
+        value = float(seconds)
+    except (TypeError, ValueError):
+        return None
+    if value <= 0:
+        return None
+    return max(30.0, value)
 
 
 def _parse_fps(value: str | None) -> float:
@@ -145,9 +178,9 @@ def probe_media_duration(path: str) -> float:
     return duration
 
 
-def run_ffmpeg(args: list[str]) -> None:
+def run_ffmpeg(args: list[str], timeout_seconds: float | int | None = None) -> None:
     if not args:
         raise ValueError("run_ffmpeg requires at least one ffmpeg argument")
 
     command = args if Path(args[0]).stem.lower() == "ffmpeg" else ["ffmpeg", *args]
-    _run_process(command)
+    _run_process(command, timeout_seconds=timeout_seconds)

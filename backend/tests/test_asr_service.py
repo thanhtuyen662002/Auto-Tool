@@ -75,6 +75,24 @@ def test_asr_audio_limit_caps_long_video_duration(monkeypatch):
     assert _asr_audio_limit_seconds("long.mp4") == 120
 
 
+def test_asr_audio_limit_prefers_explicit_setting(monkeypatch):
+    monkeypatch.setenv("AUTO_TOOL_ASR_MAX_AUDIO_SECONDS", "120")
+    monkeypatch.setattr(
+        "app.modules.douyin_reup.asr_service.probe_video",
+        lambda path: MediaFile(
+            path=path,
+            duration=300,
+            width=1080,
+            height=1920,
+            fps=30,
+            has_audio=True,
+            format_name="mp4",
+        ),
+    )
+
+    assert _asr_audio_limit_seconds("long.mp4", max_audio_seconds=60) == 60
+
+
 def test_asr_audio_limit_can_be_disabled(monkeypatch):
     monkeypatch.setenv("AUTO_TOOL_ASR_MAX_AUDIO_SECONDS", "0")
 

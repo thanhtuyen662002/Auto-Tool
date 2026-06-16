@@ -59,6 +59,7 @@ class SubtitleSourceDetector:
                         model_size=settings.asr_model_size,
                         device=settings.asr_device,
                         vad_filter=settings.asr_vad_filter,
+                        max_audio_seconds=settings.asr_max_audio_seconds,
                         progress_callback=progress_callback,
                     )
                     asr_result = SubtitleSourceResult(

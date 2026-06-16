@@ -22,6 +22,8 @@ class BatchResourcePlanner:
         resources = self._resource_snapshot(output_dir)
         requested = max(1, int(settings.max_concurrent_videos))
         recommended = self._recommended_concurrency(resources)
+        chunk_size = _chunk_size_for(settings, total_items)
+        chunk_count = (total_items + chunk_size - 1) // chunk_size if total_items > 0 else 0
         can_use_product_pool = (
             mode == "product_render"
             and total_items > 1
@@ -55,7 +57,12 @@ class BatchResourcePlanner:
                     f"Máy này có thể chạy tối đa {recommended} worker sau khi pipeline tương ứng được bật an toàn."
                 )
 
-        effective_settings = settings.model_copy(update={"max_concurrent_videos": effective})
+        effective_settings = settings.model_copy(
+            update={
+                "max_concurrent_videos": effective,
+                "batch_chunk_size": chunk_size,
+            }
+        )
         plan = BatchResourcePlan(
             requested_concurrency=requested,
             effective_concurrency=effective,
@@ -64,6 +71,9 @@ class BatchResourcePlanner:
             execution_mode=execution_mode,
             mode=mode,
             total_items=total_items,
+            chunk_size=chunk_size,
+            chunk_count=chunk_count,
+            estimated_items_per_hour=_estimated_items_per_hour(mode, effective),
             stage_limits={
                 "asr": 1,
                 "ocr": 1,
@@ -114,3 +124,25 @@ class BatchResourcePlanner:
             if not resources.get("memory_available") or memory_available_gb >= 8:
                 return 2
         return 1
+
+
+def _chunk_size_for(settings: QueueSettings, total_items: int) -> int:
+    requested = int(settings.batch_chunk_size or 50)
+    if settings.performance_mode == "fast":
+        default = 100
+    elif settings.performance_mode == "balanced":
+        default = 50
+    else:
+        default = 25
+    size = requested if requested != 50 else default
+    if total_items >= 1000:
+        size = min(size, 100)
+    return max(1, min(size, 500))
+
+
+def _estimated_items_per_hour(mode: str, effective_concurrency: int) -> float | None:
+    if mode in {"douyin_reup", "silent_immersive"}:
+        return round(10.0 * max(1, effective_concurrency), 1)
+    if mode == "product_render":
+        return round(20.0 * max(1, effective_concurrency), 1)
+    return None

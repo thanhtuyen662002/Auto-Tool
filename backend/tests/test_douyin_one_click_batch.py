@@ -61,7 +61,14 @@ def test_douyin_one_click_batch_queues_job_with_preset_settings(tmp_path: Path, 
                 "bgm_folder": str(music_dir),
                 "process_mode": "first_n",
                 "max_videos": 1,
-                "advanced_overrides": {"bgm_volume": 0.2},
+                "advanced_overrides": {
+                    "bgm_volume": 0.2,
+                    "batch_performance_mode": "balanced",
+                    "batch_chunk_size": 40,
+                    "batch_ffmpeg_timeout_seconds": 600,
+                    "batch_watchdog_stale_minutes": 15,
+                    "asr_max_audio_seconds": 90,
+                },
             },
         )
 
@@ -81,4 +88,9 @@ def test_douyin_one_click_batch_queues_job_with_preset_settings(tmp_path: Path, 
     assert settings["bgm_volume"] == 0.2
     assert settings["asr_model_size"] == "tiny"
     assert settings["asr_vad_filter"] is True
+    assert settings["asr_max_audio_seconds"] == 90
     assert settings["ocr_sample_fps"] == 1.0
+    assert settings["batch_performance_mode"] == "balanced"
+    assert settings["batch_chunk_size"] == 40
+    assert settings["batch_ffmpeg_timeout_seconds"] == 600
+    assert settings["batch_watchdog_stale_minutes"] == 15

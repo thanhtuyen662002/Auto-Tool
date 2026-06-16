@@ -52,6 +52,8 @@ class QueueControlAction(str, Enum):
 class QueueSettings(BaseModel):
     max_concurrent_videos: int = Field(default=1, ge=1, le=2)
     max_videos_per_batch: int | None = Field(default=None, gt=0)
+    batch_chunk_size: int = Field(default=50, ge=1, le=500)
+    performance_mode: Literal["safe", "balanced", "fast"] = "safe"
     pause_after_current_item: bool = True
     allow_parallel_asr: bool = False
     allow_parallel_ocr: bool = False
@@ -65,6 +67,13 @@ class QueueSettings(BaseModel):
     min_free_disk_gb: float = Field(default=5.0, ge=0)
     max_cpu_percent_warning: float = Field(default=90.0, ge=0, le=100)
     max_memory_percent_warning: float = Field(default=90.0, ge=0, le=100)
+    item_timeout_seconds: int = Field(default=1800, ge=60, le=24 * 60 * 60)
+    ffmpeg_timeout_seconds: int = Field(default=900, ge=60, le=24 * 60 * 60)
+    watchdog_enabled: bool = True
+    watchdog_stale_minutes: int = Field(default=20, ge=1, le=24 * 60)
+    auto_fail_stale_items: bool = False
+    pause_on_repeated_failures: bool = True
+    max_consecutive_failures: int = Field(default=10, ge=1, le=1000)
 
     @field_validator("max_concurrent_videos")
     @classmethod
@@ -80,6 +89,9 @@ class BatchResourcePlan(BaseModel):
     execution_mode: Literal["sequential", "parallel_ready", "clamped"] = "sequential"
     mode: str = "product_render"
     total_items: int = 0
+    chunk_size: int = 50
+    chunk_count: int = 0
+    estimated_items_per_hour: float | None = None
     stage_limits: dict[str, int] = Field(default_factory=dict)
     resources: dict[str, Any] = Field(default_factory=dict)
     reasons: list[str] = Field(default_factory=list)

@@ -146,6 +146,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   asr_model_size: 'medium',
   asr_device: 'auto',
   asr_vad_filter: false,
+  asr_max_audio_seconds: 180,
   asr_subtitle_offset_seconds: -0.25,
   use_ocr_if_asr_failed: true,
   use_ocr_if_no_subtitle: true,
@@ -176,6 +177,13 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   max_videos: null,
   selected_video_paths: [],
   source_selection_id: null,
+  batch_performance_mode: 'safe',
+  batch_chunk_size: 50,
+  batch_ffmpeg_timeout_seconds: 900,
+  batch_item_timeout_seconds: 1800,
+  batch_watchdog_stale_minutes: 20,
+  batch_pause_on_repeated_failures: true,
+  batch_max_consecutive_failures: 10,
   keep_temp: false,
   review_subtitles_before_render: true,
   auto_render_after_translation: false,
@@ -221,6 +229,10 @@ function defaultProjectName(workflow: 'douyin' | 'silent'): string {
   return workflow === 'silent' ? `silent_immersive_${date}` : `douyin_reup_${date}`;
 }
 
+function normalizeDouyinSettings(settings: Partial<DouyinReupSettings>): DouyinReupSettings {
+  return { ...DEFAULT_SETTINGS, ...settings };
+}
+
 function readRecentFolders(key: string): StartRecentFolder[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(key) || '[]') as string[];
@@ -261,8 +273,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   const [projectName, setProjectName] = useState(() => defaultProjectName(initialWorkflow));
   const [sourceFolder, setSourceFolder] = useState('');
   const [outputFolder, setOutputFolder] = useState(() => localStorage.getItem('auto-tool.default-output-folder') || './examples/outputs');
-  const [settings, setSettings] = useState<DouyinReupSettings>(() => ({
-    ...DEFAULT_SETTINGS,
+  const [settings, setSettings] = useState<DouyinReupSettings>(() => normalizeDouyinSettings({
     music_folder: localStorage.getItem('auto-tool.default-bgm-folder') || DEFAULT_SETTINGS.music_folder,
     silent_caption_tone: localStorage.getItem(LAST_TONE_KEY) || DEFAULT_SETTINGS.silent_caption_tone,
   }));
@@ -424,11 +435,11 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         const selectedPreset = savedPreset ?? defaultPreset;
         if (selectedPreset) {
           setSelectedPresetId(selectedPreset.id);
-          setSettings({
+          setSettings(normalizeDouyinSettings({
             ...selectedPreset.settings,
             music_folder: localStorage.getItem('auto-tool.default-bgm-folder') || DEFAULT_SETTINGS.music_folder,
             silent_caption_tone: localStorage.getItem(LAST_TONE_KEY) || selectedPreset.settings.silent_caption_tone,
-          });
+          }));
         }
       })
       .catch(() => setPresets([]));
@@ -521,7 +532,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         preset_id: presetId,
         current_settings: settings,
       });
-      setSettings(response.settings);
+      setSettings(normalizeDouyinSettings(response.settings));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể áp dụng preset.');
     }
@@ -709,6 +720,14 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       auto_route_speech_to_voice_reup: settings.auto_route_speech_to_voice_reup,
       auto_route_no_speech_to_silent_reup: settings.auto_route_no_speech_to_silent_reup,
       auto_route_speech_threshold: settings.auto_route_speech_threshold,
+      asr_max_audio_seconds: settings.asr_max_audio_seconds,
+      batch_performance_mode: settings.batch_performance_mode,
+      batch_chunk_size: settings.batch_chunk_size,
+      batch_ffmpeg_timeout_seconds: settings.batch_ffmpeg_timeout_seconds,
+      batch_item_timeout_seconds: settings.batch_item_timeout_seconds,
+      batch_watchdog_stale_minutes: settings.batch_watchdog_stale_minutes,
+      batch_pause_on_repeated_failures: settings.batch_pause_on_repeated_failures,
+      batch_max_consecutive_failures: settings.batch_max_consecutive_failures,
     };
   }
 
@@ -1147,6 +1166,16 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 onEnabledChange={(value) => updateSettings({ auto_route_no_speech_to_silent_reup: value })}
               />
             )}
+            <BatchReliabilityCard
+              mode={settings.batch_performance_mode}
+              chunkSize={settings.batch_chunk_size}
+              ffmpegTimeoutSeconds={settings.batch_ffmpeg_timeout_seconds}
+              watchdogMinutes={settings.batch_watchdog_stale_minutes}
+              asrMaxAudioSeconds={settings.asr_max_audio_seconds}
+              pauseOnRepeatedFailures={settings.batch_pause_on_repeated_failures}
+              maxConsecutiveFailures={settings.batch_max_consecutive_failures}
+              onChange={updateSettings}
+            />
             <OutputFolderCard
               mode={workflowMode}
               outputFolder={outputFolder}
@@ -1988,6 +2017,152 @@ function AutoRouteSpeechCard({
           Nếu video được chuyển sang flow có thoại và đang bật voiceover tiếng Việt, audio gốc sẽ được tắt cho video đó để tránh hai giọng chồng nhau.
         </div>
       ) : null}
+    </GlassCard>
+  );
+}
+
+function BatchReliabilityCard({
+  mode,
+  chunkSize,
+  ffmpegTimeoutSeconds,
+  watchdogMinutes,
+  asrMaxAudioSeconds,
+  pauseOnRepeatedFailures,
+  maxConsecutiveFailures,
+  onChange,
+}: {
+  mode: string;
+  chunkSize: number;
+  ffmpegTimeoutSeconds: number;
+  watchdogMinutes: number;
+  asrMaxAudioSeconds: number;
+  pauseOnRepeatedFailures: boolean;
+  maxConsecutiveFailures: number;
+  onChange: (updates: Partial<DouyinReupSettings>) => void;
+}) {
+  function applyMode(nextMode: 'safe' | 'balanced' | 'fast') {
+    const presets = {
+      safe: {
+        batch_performance_mode: 'safe',
+        batch_chunk_size: 25,
+        batch_ffmpeg_timeout_seconds: 900,
+        batch_item_timeout_seconds: 1800,
+        batch_watchdog_stale_minutes: 20,
+        asr_max_audio_seconds: 180,
+        batch_pause_on_repeated_failures: true,
+        batch_max_consecutive_failures: 5,
+      },
+      balanced: {
+        batch_performance_mode: 'balanced',
+        batch_chunk_size: 50,
+        batch_ffmpeg_timeout_seconds: 900,
+        batch_item_timeout_seconds: 1800,
+        batch_watchdog_stale_minutes: 20,
+        asr_max_audio_seconds: 180,
+        batch_pause_on_repeated_failures: true,
+        batch_max_consecutive_failures: 10,
+      },
+      fast: {
+        batch_performance_mode: 'fast',
+        batch_chunk_size: 100,
+        batch_ffmpeg_timeout_seconds: 1200,
+        batch_item_timeout_seconds: 2400,
+        batch_watchdog_stale_minutes: 30,
+        asr_max_audio_seconds: 240,
+        batch_pause_on_repeated_failures: true,
+        batch_max_consecutive_failures: 15,
+      },
+    } satisfies Record<string, Partial<DouyinReupSettings>>;
+    onChange(presets[nextMode]);
+  }
+
+  return (
+    <GlassCard className="grid gap-4 p-5" strong>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Batch lớn</div>
+          <h2 className="mt-2 text-xl font-semibold text-white">Hiệu năng và chống kẹt</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Dùng cho batch nhiều video chạy qua đêm. Tool sẽ chia lô, giới hạn FFmpeg/ASR và tự tạm dừng nếu lỗi lặp lại.
+          </p>
+        </div>
+        <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs font-semibold text-cyan-100">
+          {mode === 'fast' ? 'Nhanh' : mode === 'balanced' ? 'Cân bằng' : 'An toàn'}
+        </span>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        {(['safe', 'balanced', 'fast'] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+              mode === item
+                ? 'border-cyan-300/70 bg-cyan-300/15 text-cyan-50'
+                : 'border-white/10 bg-white/5 text-slate-300 hover:border-cyan-300/35'
+            }`}
+            onClick={() => applyMode(item)}
+          >
+            {item === 'safe' ? 'An toàn' : item === 'balanced' ? 'Cân bằng' : 'Nhanh'}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SliderInput
+          label={`Kích thước mỗi lô: ${chunkSize} video`}
+          min={10}
+          max={200}
+          step={5}
+          value={chunkSize}
+          onChange={(value) => onChange({ batch_chunk_size: Math.round(value) })}
+        />
+        <SliderInput
+          label={`Giới hạn audio ASR: ${asrMaxAudioSeconds}s`}
+          min={60}
+          max={600}
+          step={30}
+          value={asrMaxAudioSeconds}
+          onChange={(value) => onChange({ asr_max_audio_seconds: Math.round(value) })}
+        />
+        <SliderInput
+          label={`Timeout FFmpeg: ${Math.round(ffmpegTimeoutSeconds / 60)} phút`}
+          min={300}
+          max={3600}
+          step={60}
+          value={ffmpegTimeoutSeconds}
+          onChange={(value) => onChange({ batch_ffmpeg_timeout_seconds: Math.round(value), batch_item_timeout_seconds: Math.max(Math.round(value) * 2, 600) })}
+        />
+        <SliderInput
+          label={`Watchdog cảnh báo sau: ${watchdogMinutes} phút`}
+          min={5}
+          max={120}
+          step={5}
+          value={watchdogMinutes}
+          onChange={(value) => onChange({ batch_watchdog_stale_minutes: Math.round(value) })}
+        />
+      </div>
+
+      <div className="grid gap-3 rounded-md border border-white/10 bg-white/5 p-3">
+        <label className="flex items-center gap-2 text-sm text-slate-200">
+          <input
+            type="checkbox"
+            checked={pauseOnRepeatedFailures}
+            onChange={(event) => onChange({ batch_pause_on_repeated_failures: event.target.checked })}
+          />
+          <span>Tự tạm dừng khi nhiều video liên tiếp bị lỗi</span>
+        </label>
+        {pauseOnRepeatedFailures ? (
+          <SliderInput
+            label={`Ngưỡng lỗi liên tiếp: ${maxConsecutiveFailures} video`}
+            min={3}
+            max={30}
+            step={1}
+            value={maxConsecutiveFailures}
+            onChange={(value) => onChange({ batch_max_consecutive_failures: Math.round(value) })}
+          />
+        ) : null}
+      </div>
     </GlassCard>
   );
 }

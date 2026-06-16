@@ -29,6 +29,7 @@ class DouyinReupSettings(BaseModel):
     asr_model_size: str = "medium"
     asr_device: str = "auto"
     asr_vad_filter: bool = False
+    asr_max_audio_seconds: int = Field(default=180, ge=0, le=7200)
     asr_subtitle_offset_seconds: float = Field(default=-0.25, ge=-2.0, le=2.0)
     use_ocr_if_asr_failed: bool = True
     use_ocr_if_no_subtitle: bool = True
@@ -59,6 +60,13 @@ class DouyinReupSettings(BaseModel):
     max_videos: int | None = Field(default=None, gt=0)
     selected_video_paths: list[str] = Field(default_factory=list)
     source_selection_id: str | None = None
+    batch_performance_mode: Literal["safe", "balanced", "fast"] = "safe"
+    batch_chunk_size: int = Field(default=50, ge=1, le=500)
+    batch_ffmpeg_timeout_seconds: int = Field(default=900, ge=60, le=24 * 60 * 60)
+    batch_item_timeout_seconds: int = Field(default=1800, ge=60, le=24 * 60 * 60)
+    batch_watchdog_stale_minutes: int = Field(default=20, ge=1, le=24 * 60)
+    batch_pause_on_repeated_failures: bool = True
+    batch_max_consecutive_failures: int = Field(default=10, ge=1, le=1000)
     keep_temp: bool = False
     review_subtitles_before_render: bool = True
     auto_render_after_translation: bool = False
@@ -112,6 +120,7 @@ class DouyinReupSettings(BaseModel):
         "silent_caption_tone",
         "silent_voiceover_provider",
         "silent_voiceover_voice",
+        "batch_performance_mode",
     )
     @classmethod
     def clean_text(cls, value: str) -> str:

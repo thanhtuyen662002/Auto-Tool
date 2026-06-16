@@ -129,3 +129,31 @@ def test_batch_resource_planner_keeps_douyin_pipeline_sequential(tmp_path: Path,
     assert plan.worker_pool_enabled is False
     assert plan.effective_concurrency == 1
     assert plan.warnings
+
+
+def test_batch_resource_planner_reports_chunk_plan_for_large_batch(tmp_path: Path, monkeypatch):
+    planner = BatchResourcePlanner()
+    monkeypatch.setattr(
+        planner,
+        "_resource_snapshot",
+        lambda output_dir: {
+            "cpu_count": 4,
+            "disk_free_gb": 80,
+            "disk_total_gb": 200,
+            "memory_available": True,
+            "memory_total_gb": 16,
+            "memory_available_gb": 8,
+        },
+    )
+
+    settings, plan = planner.build_plan(
+        mode="douyin_reup",
+        settings=QueueSettings(performance_mode="safe"),
+        output_dir=str(tmp_path),
+        total_items=123,
+    )
+
+    assert settings.batch_chunk_size == 25
+    assert plan.chunk_size == 25
+    assert plan.chunk_count == 5
+    assert plan.estimated_items_per_hour

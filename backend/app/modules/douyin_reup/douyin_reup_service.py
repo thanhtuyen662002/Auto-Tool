@@ -4,11 +4,13 @@ import json
 import inspect
 import shutil
 import time
+import gc
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from app.adapters.ffmpeg_adapter import ffmpeg_timeout
 from app.modules.douyin_reup.douyin_folder_scanner import DouyinFolderScanner
 from app.modules.douyin_reup.douyin_render_pipeline import DouyinRenderPipeline
 from app.modules.douyin_reup.douyin_schema import (
@@ -113,7 +115,7 @@ class DouyinReupService:
                     job_id=job_id,
                     mode="silent_immersive" if is_silent_reup_settings(settings) else "douyin_reup",
                     video_paths=current_video_paths,
-                    settings=QueueSettings(max_videos_per_batch=settings.max_videos),
+                    settings=_queue_settings_from_douyin(settings),
                     output_dir=str(output_root),
                     project_id=project_id,
                 )
@@ -148,6 +150,7 @@ class DouyinReupService:
                     break
                 video = videos_by_id[queue_item.video_id]
                 index = _queue_video_index(queue_item.video_id)
+                _log_queue_chunk_start(queue_state, queue_item, log_callback)
             else:
                 if completed + failed >= total:
                     break
@@ -211,18 +214,19 @@ class DouyinReupService:
                         _initial_recoverable_step(settings),
                         {"source_video": video.path},
                     )
-                output = self._process_one_video(
-                    index=index,
-                    video=video,
-                    config=config,
-                    settings=settings,
-                    output_root=output_root,
-                    project_id=project_id,
-                    job_id=job_id,
-                    cached_output=_cached_retry_output(video, retry_cache),
-                    retry_steps=retry_steps or {"asr", "translation", "render"},
-                    step_progress_callback=step_progress,
-                )
+                with ffmpeg_timeout(_queue_ffmpeg_timeout_seconds(queue_state)):
+                    output = self._process_one_video(
+                        index=index,
+                        video=video,
+                        config=config,
+                        settings=settings,
+                        output_root=output_root,
+                        project_id=project_id,
+                        job_id=job_id,
+                        cached_output=_cached_retry_output(video, retry_cache),
+                        retry_steps=retry_steps or {"asr", "translation", "render"},
+                        step_progress_callback=step_progress,
+                    )
                 outputs.append(output)
                 subtitle_sources.update([output.subtitle_source or "none"])
                 if output.status in {"success", "needs_review"}:
@@ -256,8 +260,14 @@ class DouyinReupService:
                     error_message=output.error_message or ("; ".join(output.errors) if output.errors else None),
                     output_video_path=output.path or None,
                 )
+                pause_reason = _repeated_failure_pause_reason(queue_state)
+                if pause_reason and queue_control:
+                    queue_control.mark_paused(job_id, pause_reason)
+                    queue_status = "paused"
+                    break
                 if queue_state.settings.cooldown_seconds_between_renders > 0:
                     time.sleep(queue_state.settings.cooldown_seconds_between_renders)
+                _collect_garbage_after_chunk(queue_state, queue_item)
             _progress(progress_callback, total, completed, failed, f"douyin_video_{index}_done", _progress_percent(index, total))
 
         if job_id and queue_state_service:
@@ -1369,6 +1379,74 @@ def _queue_status_from_douyin_output(output: DouyinOutputResult) -> QueueItemSta
     if output.status == "skipped":
         return QueueItemStatus.skipped
     return QueueItemStatus.failed
+
+
+def _queue_ffmpeg_timeout_seconds(queue_state: QueueState | None) -> int | None:
+    if queue_state is None:
+        return None
+    value = int(queue_state.settings.ffmpeg_timeout_seconds or 0)
+    return value or None
+
+
+def _queue_settings_from_douyin(settings: DouyinReupSettings) -> QueueSettings:
+    return QueueSettings(
+        max_videos_per_batch=settings.max_videos,
+        performance_mode=settings.batch_performance_mode,
+        batch_chunk_size=settings.batch_chunk_size,
+        item_timeout_seconds=settings.batch_item_timeout_seconds,
+        ffmpeg_timeout_seconds=settings.batch_ffmpeg_timeout_seconds,
+        watchdog_stale_minutes=settings.batch_watchdog_stale_minutes,
+        pause_on_repeated_failures=settings.batch_pause_on_repeated_failures,
+        max_consecutive_failures=settings.batch_max_consecutive_failures,
+        resource_guard_enabled=True,
+        continue_on_video_error=True,
+    )
+
+
+def _repeated_failure_pause_reason(queue_state: QueueState | None) -> str | None:
+    if queue_state is None or not queue_state.settings.pause_on_repeated_failures:
+        return None
+    limit = max(1, int(queue_state.settings.max_consecutive_failures or 1))
+    processed = [
+        item
+        for item in sorted(queue_state.items, key=lambda item: item.order_index)
+        if item.status in {
+            QueueItemStatus.completed,
+            QueueItemStatus.failed,
+            QueueItemStatus.needs_review,
+            QueueItemStatus.skipped,
+            QueueItemStatus.cancelled,
+            QueueItemStatus.rendered,
+        }
+    ]
+    streak = 0
+    for item in reversed(processed):
+        if item.status != QueueItemStatus.failed:
+            break
+        streak += 1
+    if streak >= limit:
+        return f"Batch đã tạm dừng vì {streak} video liên tiếp bị lỗi. Hãy kiểm tra cấu hình trước khi tiếp tục."
+    return None
+
+
+def _log_queue_chunk_start(queue_state: QueueState | None, queue_item, log_callback: LogCallback | None) -> None:
+    if queue_state is None:
+        return
+    chunk_size = max(1, int(queue_state.settings.batch_chunk_size or 1))
+    if (queue_item.order_index - 1) % chunk_size != 0:
+        return
+    chunk_index = ((queue_item.order_index - 1) // chunk_size) + 1
+    chunk_count = queue_state.concurrency_plan.chunk_count if queue_state.concurrency_plan else 0
+    suffix = f"/{chunk_count}" if chunk_count else ""
+    _log(log_callback, "info", f"Bắt đầu lô {chunk_index}{suffix}: video {queue_item.order_index}/{queue_state.total_items}.")
+
+
+def _collect_garbage_after_chunk(queue_state: QueueState | None, queue_item) -> None:
+    if queue_state is None:
+        return
+    chunk_size = max(1, int(queue_state.settings.batch_chunk_size or 1))
+    if queue_item.order_index % chunk_size == 0:
+        gc.collect()
 
 
 def _has_low_disk_warning(warnings: list[str]) -> bool:

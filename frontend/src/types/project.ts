@@ -132,6 +132,7 @@ export interface DouyinReupSettings {
   asr_model_size: string;
   asr_device: string;
   asr_vad_filter: boolean;
+  asr_max_audio_seconds: number;
   asr_subtitle_offset_seconds: number;
   use_ocr_if_asr_failed: boolean;
   use_ocr_if_no_subtitle: boolean;
@@ -162,6 +163,13 @@ export interface DouyinReupSettings {
   max_videos?: number | null;
   selected_video_paths: string[];
   source_selection_id?: string | null;
+  batch_performance_mode: 'safe' | 'balanced' | 'fast' | string;
+  batch_chunk_size: number;
+  batch_ffmpeg_timeout_seconds: number;
+  batch_item_timeout_seconds: number;
+  batch_watchdog_stale_minutes: number;
+  batch_pause_on_repeated_failures: boolean;
+  batch_max_consecutive_failures: number;
   keep_temp: boolean;
   review_subtitles_before_render: boolean;
   auto_render_after_translation: boolean;
@@ -1985,6 +1993,8 @@ export type QueueItemStatus =
 export interface QueueSettings {
   max_concurrent_videos: number;
   max_videos_per_batch?: number | null;
+  batch_chunk_size: number;
+  performance_mode: 'safe' | 'balanced' | 'fast' | string;
   pause_after_current_item: boolean;
   allow_parallel_asr: boolean;
   allow_parallel_ocr: boolean;
@@ -1998,6 +2008,13 @@ export interface QueueSettings {
   min_free_disk_gb: number;
   max_cpu_percent_warning: number;
   max_memory_percent_warning: number;
+  item_timeout_seconds: number;
+  ffmpeg_timeout_seconds: number;
+  watchdog_enabled: boolean;
+  watchdog_stale_minutes: number;
+  auto_fail_stale_items: boolean;
+  pause_on_repeated_failures: boolean;
+  max_consecutive_failures: number;
 }
 
 export interface QueueItem {
@@ -2029,6 +2046,9 @@ export interface BatchResourcePlan {
   execution_mode: string;
   mode: string;
   total_items: number;
+  chunk_size: number;
+  chunk_count: number;
+  estimated_items_per_hour?: number | null;
   stage_limits: Record<string, number>;
   resources: Record<string, unknown>;
   reasons: string[];
