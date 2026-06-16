@@ -11,6 +11,8 @@ from app.modules.job_recovery.job_checkpoint_service import JobCheckpointService
 from app.modules.job_recovery.job_lock_service import JobLockService
 from app.modules.job_recovery.job_reconciliation_service import JobReconciliationService
 from app.modules.job_recovery.job_recovery_schema import ResumeJobRequest, ResumeJobResult
+from app.modules.queue_control.queue_control_schema import QueueItemStatus
+from app.modules.queue_control.queue_state_service import QueueStateService
 from app.utils.app_paths import app_data_dir
 
 
@@ -72,18 +74,20 @@ class JobResumeService:
         failed = [item for item in outputs if isinstance(item, dict) and item.get("recovery_status") == "failed"]
         interrupted = [item for item in outputs if isinstance(item, dict) and item.get("recovery_status") == "interrupted"]
         pending_count = max(0, int(job.get("total_outputs") or 0) - len(outputs))
+        queue_retry_items, queue_resume_items = _queue_resume_items(job_id, request.resume_mode)
+        synthetic_pending = [] if queue_resume_items else _pending_items(job_id, pending_count)
         if request.resume_mode == "retry_failed":
-            retry_items = failed
+            retry_items = _merge_resume_items(failed, queue_retry_items)
             resume_items = []
         elif request.resume_mode == "retry_interrupted":
-            retry_items = interrupted
+            retry_items = _merge_resume_items(interrupted, queue_retry_items)
             resume_items = []
         elif request.resume_mode == "continue_pending":
             retry_items = []
-            resume_items = interrupted + _pending_items(job_id, pending_count)
+            resume_items = _merge_resume_items(interrupted + synthetic_pending, queue_resume_items)
         else:
-            retry_items = interrupted
-            resume_items = _pending_items(job_id, pending_count)
+            retry_items = _merge_resume_items(interrupted, queue_retry_items)
+            resume_items = _merge_resume_items(synthetic_pending, queue_resume_items)
         if request.max_items is not None:
             limit = max(0, request.max_items)
             retry_items = retry_items[:limit]
@@ -103,6 +107,7 @@ class JobResumeService:
             "resumed_items": len(retry_items) + len(resume_items),
             "retry_outputs": retry_items,
             "pending_outputs": resume_items,
+            "selected_source_videos": _source_videos_from_resume_items([*retry_items, *resume_items]),
             "warnings": warnings,
             "reconciliation": reconciliation,
         }
@@ -171,6 +176,62 @@ def _pending_items(job_id: str, count: int) -> list[dict[str, Any]]:
     return [{"index": index + 1, "status": "pending", "source_video": "", "recovery_status": "pending", "job_id": job_id} for index in range(max(0, count))]
 
 
+def _queue_resume_items(job_id: str, resume_mode: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    state = QueueStateService().load_queue_state(job_id)
+    if state is None:
+        return [], []
+    retry_items: list[dict[str, Any]] = []
+    resume_items: list[dict[str, Any]] = []
+    for item in sorted(state.items, key=lambda value: value.order_index):
+        payload = {
+            "index": item.order_index,
+            "status": item.status.value,
+            "source_video": item.video_path,
+            "recovery_status": item.status.value,
+            "job_id": job_id,
+            "queue_item_id": item.id,
+        }
+        if resume_mode == "retry_failed" and item.status == QueueItemStatus.failed:
+            retry_items.append(payload)
+        elif resume_mode == "retry_interrupted" and item.status in {QueueItemStatus.running, QueueItemStatus.paused, QueueItemStatus.cancelled}:
+            retry_items.append(payload)
+        elif resume_mode == "continue_pending" and item.status in {QueueItemStatus.queued, QueueItemStatus.running, QueueItemStatus.paused}:
+            resume_items.append(payload)
+        elif resume_mode == "reconcile_then_continue":
+            if item.status in {QueueItemStatus.running, QueueItemStatus.paused, QueueItemStatus.cancelled}:
+                retry_items.append(payload)
+            elif item.status == QueueItemStatus.queued:
+                resume_items.append(payload)
+    return retry_items, resume_items
+
+
+def _merge_resume_items(primary: list[dict[str, Any]], secondary: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in [*secondary, *primary]:
+        key = str(item.get("source_video") or item.get("index") or len(merged)).strip().lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+    return sorted(merged, key=lambda item: int(item.get("index") or 0))
+
+
+def _source_videos_from_resume_items(items: list[dict[str, Any]]) -> list[str]:
+    paths: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        path = str(item.get("source_video") or "").strip()
+        if not path:
+            continue
+        key = str(Path(path).expanduser().resolve()).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        paths.append(path)
+    return paths
+
+
 def _resume_dir(original_job_id: str) -> Path:
     safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in original_job_id)[:120] or "job"
     path = app_data_dir() / "data" / "job_recovery" / safe
@@ -194,4 +255,3 @@ def _mode_from_plan_or_job(plan: dict[str, Any], job: dict[str, Any]) -> str:
     if any(isinstance(item, dict) and item.get("subtitle_review_document_id") for item in outputs):
         return "subtitle_render"
     return "product_render"
-

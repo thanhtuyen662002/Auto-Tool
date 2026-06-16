@@ -24,6 +24,7 @@ from app.modules.douyin_reup.subtitle_timing_guard import SubtitleTimingGuard
 from app.modules.douyin_reup.subtitle_translator import SubtitleTranslator
 from app.modules.final_output_qa.final_output_qa_schema import PlatformTarget
 from app.modules.final_output_qa.final_output_qa_service import FinalOutputQAService
+from app.modules.job_recovery import JobCheckpointService, RecoverableStep
 from app.modules.queue_control import (
     QueueControlService,
     QueueItemPriority,
@@ -101,6 +102,7 @@ class DouyinReupService:
         resource_guard: ResourceGuardService | None = None
         queue_state: QueueState | None = None
         queue_status: str | None = None
+        checkpoint_service = JobCheckpointService() if job_id else None
         if job_id:
             queue_state_service = QueueStateService()
             queue_control = QueueControlService(queue_state_service)
@@ -201,6 +203,14 @@ class DouyinReupService:
                     progress_percent=10,
                 )
             try:
+                if checkpoint_service and job_id:
+                    checkpoint_service.mark_step_started(
+                        job_id,
+                        f"video_{index:03d}",
+                        video.path,
+                        _initial_recoverable_step(settings),
+                        {"source_video": video.path},
+                    )
                 output = self._process_one_video(
                     index=index,
                     video=video,
@@ -220,11 +230,20 @@ class DouyinReupService:
                 else:
                     failed += 1
                     _log(log_callback, "warning", f"Video {index} lỗi tại {output.failed_step or 'unknown'}: {'; '.join(output.errors)}")
+                if checkpoint_service and job_id:
+                    _mark_douyin_output_checkpoint(checkpoint_service, job_id, f"video_{index:03d}", output)
             except Exception as exc:
                 failed += 1
                 output = self._failed_output(index, video, output_root, _friendly_error(str(exc)), settings=settings)
                 outputs.append(output)
                 subtitle_sources.update([output.subtitle_source or "none"])
+                if checkpoint_service and job_id:
+                    checkpoint_service.mark_step_failed(
+                        job_id,
+                        f"video_{index:03d}",
+                        _recoverable_step_from_failed_step(output.failed_step),
+                        output.error_message or str(exc),
+                    )
                 _log(log_callback, "error", f"Video {index} thất bại: {output.error_message or exc}")
 
             if queue_state_service and job_id and queue_item:
@@ -1114,6 +1133,63 @@ def _progress_percent(done: int, total: int) -> int:
     if total <= 0:
         return 100
     return max(5, min(99, int((done / total) * 95) + 5))
+
+
+def _initial_recoverable_step(settings: DouyinReupSettings) -> RecoverableStep:
+    return RecoverableStep.caption_generation if is_silent_reup_settings(settings) else RecoverableStep.subtitle_source
+
+
+def _mark_douyin_output_checkpoint(
+    checkpoint_service: JobCheckpointService,
+    job_id: str,
+    video_id: str,
+    output: DouyinOutputResult,
+) -> None:
+    if output.status in {"success", "needs_review"}:
+        step = RecoverableStep.review_document if output.status == "needs_review" else RecoverableStep.render
+        output_paths = {
+            "video": output.path or "",
+            "log": output.log_file or "",
+            "source_srt": output.source_srt_file or "",
+            "translated_srt": output.translated_srt_file or "",
+            "subtitle_review_document_id": output.subtitle_review_document_id or "",
+        }
+        checkpoint_service.mark_step_completed(job_id, video_id, step, output_paths)
+        return
+
+    checkpoint_service.mark_step_failed(
+        job_id,
+        video_id,
+        _recoverable_step_from_failed_step(output.failed_step),
+        output.error_message or "; ".join(output.errors) or "Douyin output failed.",
+    )
+
+
+def _recoverable_step_from_failed_step(failed_step: str | None) -> RecoverableStep:
+    value = (failed_step or "").strip().lower()
+    if "asr" in value:
+        return RecoverableStep.asr
+    if "ocr" in value:
+        return RecoverableStep.ocr
+    if "translation" in value or "translate" in value:
+        return RecoverableStep.translation
+    if "timing" in value or "quality" in value:
+        return RecoverableStep.quality_check
+    if "review" in value:
+        return RecoverableStep.review_document
+    if "caption" in value or "silent_plan" in value:
+        return RecoverableStep.caption_generation
+    if "visual" in value:
+        return RecoverableStep.visual_tagging
+    if "tts" in value or "voice" in value:
+        return RecoverableStep.tts
+    if "qa" in value:
+        return RecoverableStep.final_qa
+    if "render" in value:
+        return RecoverableStep.render
+    if "subtitle_source" in value or "source" in value:
+        return RecoverableStep.subtitle_source
+    return RecoverableStep.render
 
 
 def _queue_state_needs_rebuild(queue_state: QueueState, video_paths: list[str]) -> bool:

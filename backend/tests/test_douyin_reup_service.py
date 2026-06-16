@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.modules.douyin_reup.douyin_reup_service import DouyinReupService
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem, SubtitleSourceResult, TranslationResult
+from app.modules.job_recovery import JobCheckpointService, JobStepStatus, RecoverableStep
 from app.modules.silent_immersive_reup.silent_schema import SpeechPresenceResult
 from app.schemas.project_schema import ProjectConfig
 
@@ -41,7 +42,9 @@ def _project_config(tmp_path: Path, source_folder: Path, output_folder: Path) ->
     )
 
 
-def test_douyin_reup_service_processes_each_video_without_crashing_batch(tmp_path):
+def test_douyin_reup_service_processes_each_video_without_crashing_batch(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.modules.job_recovery.job_checkpoint_service.app_data_dir", lambda: tmp_path / "appdata")
+    monkeypatch.setattr("app.modules.queue_control.queue_state_service.app_data_dir", lambda: tmp_path / "appdata")
     source_dir = tmp_path / "source"
     output_dir = tmp_path / "outputs"
     source_dir.mkdir()
@@ -106,12 +109,19 @@ def test_douyin_reup_service_processes_each_video_without_crashing_batch(tmp_pat
         source_detector=FakeDetector(),
         translator=FakeTranslator(),
         render_pipeline=FakePipeline(),
-    ).process_folder(config)
+    ).process_folder(config, project_id="project-1", job_id="job-1")
 
     assert summary["successful_outputs"] == 1
     assert summary["failed_outputs"] == 0
     assert summary["outputs"][0]["status"] == "success"
     assert Path(summary["summary_file"]).exists()
+    checkpoints = JobCheckpointService(storage_root=tmp_path / "appdata" / "data" / "job_recovery").load_video_checkpoints("job-1")
+    assert any(
+        item.video_id == "video_001"
+        and item.step == RecoverableStep.render
+        and item.status == JobStepStatus.completed
+        for item in checkpoints
+    )
 
 
 def test_silent_batch_auto_routes_speech_video_to_voice_flow(tmp_path, monkeypatch):

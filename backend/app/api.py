@@ -605,8 +605,8 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="; ".join(result.errors) or "Không thể resume job.")
         if result.new_job_id:
             original_job = _get_job_or_404(job_id)
-            retry_outputs = (result.resume_plan or {}).get("retry_outputs") or []
-            if _is_douyin_resume(original_job, retry_outputs):
+            retry_outputs = _douyin_resume_outputs(result.resume_plan or {})
+            if _job_looks_douyin(original_job) and retry_outputs:
                 threading.Thread(
                     target=_run_resume_thread,
                     args=(
@@ -663,8 +663,8 @@ def create_app() -> FastAPI:
             return result
         if result.new_job_id:
             original_job = _get_job_or_404(job_id)
-            retry_outputs = (result.resume_plan or {}).get("retry_outputs") or []
-            if _is_douyin_resume(original_job, retry_outputs):
+            retry_outputs = _douyin_resume_outputs(result.resume_plan or {})
+            if _job_looks_douyin(original_job) and retry_outputs:
                 threading.Thread(
                     target=_run_resume_thread,
                     args=(
@@ -2952,6 +2952,30 @@ def _run_resume_thread(original_job_id: str, resume_service: JobResumeService, t
 
 def _is_douyin_resume(original_job: dict[str, Any], retry_outputs: list[dict[str, Any]]) -> bool:
     return _job_looks_douyin(original_job) and bool(retry_outputs)
+
+
+def _douyin_resume_outputs(resume_plan: dict[str, Any]) -> list[dict[str, Any]]:
+    selected = [str(path).strip() for path in resume_plan.get("selected_source_videos") or [] if str(path).strip()]
+    items = [item for item in (resume_plan.get("retry_outputs") or []) if isinstance(item, dict)]
+    items.extend(item for item in (resume_plan.get("pending_outputs") or []) if isinstance(item, dict))
+    by_path: dict[str, dict[str, Any]] = {}
+    for item in items:
+        path = str(item.get("source_video") or "").strip()
+        if not path:
+            continue
+        by_path[str(Path(path).expanduser().resolve()).lower()] = item
+    for index, path in enumerate(selected, start=1):
+        key = str(Path(path).expanduser().resolve()).lower()
+        by_path.setdefault(
+            key,
+            {
+                "index": index,
+                "status": "pending",
+                "source_video": path,
+                "recovery_status": "pending",
+            },
+        )
+    return sorted(by_path.values(), key=lambda item: int(item.get("index") or 0))
 
 
 def _job_looks_douyin(job: dict[str, Any]) -> bool:
