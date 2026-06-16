@@ -190,6 +190,11 @@ def render_one_output(
             output_log["tts"]["provider_used"] = voice_generator.last_tts_result.provider
             output_log["tts"]["fallback_used"] = voice_generator.last_tts_result.fallback_used
             output_log["tts"]["warnings"] = list(voice_generator.last_tts_result.warnings)
+            if _unexpected_silent_tts(config.tts, voice_generator.last_tts_result.provider):
+                raise RuntimeError(
+                    "TTS đã rơi về âm thanh im lặng dù cấu hình không cho phép. "
+                    "Hãy kiểm tra nhà cung cấp TTS/giọng đọc hoặc bật allow_silent_fallback nếu thật sự muốn render không voice."
+                )
         synced_subtitles = voice_generator.last_subtitle_timeline
 
         normalized_voice_for_render, normalized_voice_duration = run_step(
@@ -280,6 +285,12 @@ def render_one_output(
 
         music_path = run_step(output_log, "select_music", lambda: music_selector.select_music(config, index))
         extend_warnings(output_log, music_selector.warnings)
+        if config.music.enabled and not music_path:
+            reason = "; ".join(music_selector.warnings) or "không chọn được file nhạc hợp lệ"
+            raise RuntimeError(
+                "Đã bật nhạc nền nhưng không tìm thấy file nhạc hợp lệ để render. "
+                f"Chi tiết: {reason}"
+            )
         output_log["music_file"] = music_path
 
         overlay_renderer = OverlayRenderer(
@@ -445,6 +456,12 @@ def _voice_extension(config: ProjectConfig) -> str:
     if output_format in {"mp3", "wav"}:
         return output_format
     return "mp3"
+
+
+def _unexpected_silent_tts(settings: Any, provider: str | None) -> bool:
+    provider_id = str(provider or "").strip().lower().replace("-", "_")
+    requested = str(getattr(settings, "provider", "") or "").strip().lower().replace("-", "_")
+    return provider_id in {"silent", "mock", "none"} and requested not in {"silent", "mock", "none"}
 
 
 def _normalize_voice_for_render(

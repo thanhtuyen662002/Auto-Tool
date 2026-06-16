@@ -81,6 +81,7 @@ class SilentReupPipeline:
         settings: DouyinReupSettings,
         output_dir: str,
         product_context: dict | None = None,
+        gemini_api_keys: list[str] | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> SilentReupPlan:
         started = perf_counter()
@@ -133,6 +134,7 @@ class SilentReupPipeline:
             settings,
             target_dir,
             warnings,
+            gemini_api_keys=gemini_api_keys,
             progress_callback=_mapped_progress_callback(progress_callback, 38, 70, "ocr"),
         )
         segments = self._attach_ocr_text_to_segments(segments)
@@ -561,6 +563,7 @@ class SilentReupPipeline:
         settings: DouyinReupSettings,
         target_dir: Path,
         warnings: list[str],
+        gemini_api_keys: list[str] | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> str | None:
         if not settings.use_ocr_if_no_subtitle:
@@ -588,13 +591,20 @@ class SilentReupPipeline:
             warnings.extend(ocr_result.errors)
             return None
         translated_path = target_dir / "silent_ocr_vi.srt"
-        translation = self.translator.translate_srt(
-            ocr_result.source_srt_path,
-            str(translated_path),
-            source_language=settings.source_language,
-            target_language=settings.target_language,
-            provider=settings.translation_provider,
-        )
+        try:
+            translation = self.translator.translate_srt(
+                ocr_result.source_srt_path,
+                str(translated_path),
+                source_language=settings.source_language,
+                target_language=settings.target_language,
+                provider=settings.translation_provider,
+                api_keys=gemini_api_keys or [],
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "OCR đã nhận diện được chữ trong video nhưng không dịch được sang tiếng Việt. "
+                "Hãy kiểm tra Gemini API key/quota hoặc tắt OCR hard-sub nếu muốn dùng caption template."
+            ) from exc
         warnings.extend(translation.warnings)
         self.last_ocr_translated_srt_path = translation.translated_srt_path
         return translation.translated_srt_path

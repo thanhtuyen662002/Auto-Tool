@@ -46,10 +46,17 @@ class SilentReupService:
         settings: DouyinReupSettings | None = None,
         output_dir: str | None = None,
         product_context: dict | None = None,
+        gemini_api_keys: list[str] | None = None,
     ) -> SilentReupPlan:
         settings = settings or DouyinReupSettings(enabled=True)
         target_dir = ensure_dir(output_dir or Path(video_path).with_suffix("").parent / "_silent_reup_plan" / Path(video_path).stem)
-        return self.pipeline.build_plan(video_path, settings, str(target_dir), product_context)
+        return self.pipeline.build_plan(
+            video_path,
+            settings,
+            str(target_dir),
+            product_context,
+            gemini_api_keys=gemini_api_keys,
+        )
 
     def regenerate_captions(
         self,

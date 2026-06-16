@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -38,8 +39,11 @@ class SubtitleTranslator:
             )
 
         if provider.strip().lower() != "gemini":
+            message = f"Provider dịch subtitle chưa hỗ trợ: {provider}."
+            if not _translation_fallback_enabled():
+                raise RuntimeError(f"{message} Hãy chọn Gemini hoặc cấu hình provider dịch hợp lệ.")
             shutil.copy2(source_srt_path, target)
-            warnings.append(f"Provider dịch subtitle chưa hỗ trợ: {provider}. Đã giữ nguyên subtitle nguồn.")
+            warnings.append(f"{message} Đã giữ nguyên subtitle nguồn vì AUTO_TOOL_ALLOW_TRANSLATION_FALLBACK=1.")
             return self._fallback_result(source_srt_path, str(target), source_language, target_language, warnings)
 
         blocks = parse_srt_blocks(source_srt_path)
@@ -63,8 +67,16 @@ class SubtitleTranslator:
                 target_language=target_language,
             )
         except Exception as exc:
+            if not _translation_fallback_enabled():
+                raise RuntimeError(
+                    "Dịch subtitle bằng Gemini thất bại nên dừng render để tránh xuất video sai ngôn ngữ. "
+                    f"Chi tiết: {exc}"
+                ) from exc
             shutil.copy2(source_srt_path, target)
-            warnings.append(f"Dịch subtitle bằng Gemini thất bại, đã giữ nguyên subtitle nguồn: {exc}")
+            warnings.append(
+                "Dịch subtitle bằng Gemini thất bại, đã giữ nguyên subtitle nguồn vì "
+                f"AUTO_TOOL_ALLOW_TRANSLATION_FALLBACK=1: {exc}"
+            )
             return self._fallback_result(source_srt_path, str(target), source_language, target_language, warnings)
 
     def _translate_blocks_with_gemini(
@@ -179,3 +191,7 @@ def _format_for_prompt(seconds: float) -> str:
     from app.modules.douyin_reup.subtitle_timing_guard import format_srt_timestamp
 
     return format_srt_timestamp(seconds)
+
+
+def _translation_fallback_enabled() -> bool:
+    return os.getenv("AUTO_TOOL_ALLOW_TRANSLATION_FALLBACK", "0").strip().lower() in {"1", "true", "yes", "on"}

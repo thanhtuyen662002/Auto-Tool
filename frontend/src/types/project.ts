@@ -65,6 +65,8 @@ export interface ScriptVariationSettings {
 export interface TTSSettings {
   provider: string;
   fallback_provider: string;
+  allow_provider_fallback: boolean;
+  allow_silent_fallback: boolean;
   voice: string;
   language: string;
   api_key?: string | null;
@@ -173,6 +175,8 @@ export interface DouyinReupSettings {
   silent_mode_strategy: 'chill_immersive' | 'product_review_voiceover' | 'sales_recut' | string;
   detect_speech_presence: boolean;
   speech_detection_threshold: number;
+  auto_route_speech_to_voice_reup: boolean;
+  auto_route_speech_threshold: number;
   use_visual_segments_for_silent_video: boolean;
   silent_segment_duration_min: number;
   silent_segment_duration_max: number;
@@ -493,6 +497,7 @@ export interface SilentOneClickBatchRequest {
   source_selection_id?: string | null;
   review_before_render?: boolean;
   product_context?: Record<string, unknown>;
+  advanced_overrides?: Record<string, unknown>;
 }
 
 export interface DouyinOneClickBatchResponse {

@@ -17,6 +17,7 @@ def test_douyin_one_click_batch_queues_job_with_preset_settings(tmp_path: Path, 
     source_dir.mkdir()
     output_dir.mkdir()
     music_dir.mkdir()
+    (music_dir / "bgm.mp3").write_bytes(b"fake-audio")
     video = source_dir / "clip.mp4"
     video.write_bytes(b"fake")
 

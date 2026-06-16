@@ -36,7 +36,7 @@ from app.modules.queue_control import (
 )
 from app.modules.source_media import SourceMediaSelectionService
 from app.modules.silent_immersive_reup.silent_reup_pipeline import SilentReupPipeline
-from app.modules.silent_immersive_reup.silent_reup_service import is_silent_reup_settings
+from app.modules.silent_immersive_reup.silent_reup_service import is_silent_reup_settings, speech_result_for_video
 from app.modules.subtitle_review import SubtitleReviewService
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir, write_json
@@ -476,7 +476,7 @@ class DouyinReupService:
                 ass_path=render_payload.get("subtitle_ass_file"),
                 overlay_path=render_payload.get("overlay_file"),
                 subtitle_expected=settings.burn_subtitle,
-                audio_expected=settings.keep_original_audio or settings.add_bgm,
+                audio_expected=settings.keep_original_audio or settings.add_bgm or settings.generate_voiceover_for_silent_video,
                 overlay_expected=settings.add_overlay,
                 report_path=str(video_dir / f"video_{index:03d}_final_qa.json"),
             )
@@ -495,6 +495,7 @@ class DouyinReupService:
                 subtitle_ass_file=render_payload.get("subtitle_ass_file"),
                 overlay_file=render_payload.get("overlay_file"),
                 bgm_file=render_payload.get("bgm_file"),
+                voiceover_file=render_payload.get("voiceover_file"),
                 log_file=str(log_path),
                 ocr_debug_json_path=source_result.ocr_debug_json_path,
                 ocr_frame_count=source_result.ocr_frame_count,
@@ -611,6 +612,19 @@ class DouyinReupService:
         caption_source: str | None = None
         document_id: str | None = None
 
+        routed = self._route_silent_video_to_voice_if_needed(
+            index=index,
+            video=video,
+            config=config,
+            settings=settings,
+            output_root=output_root,
+            project_id=project_id,
+            job_id=job_id,
+            step_progress_callback=step_progress_callback,
+        )
+        if routed is not None:
+            return routed
+
         try:
             failed_step = "silent_plan"
             _step_progress(step_progress_callback, "silent_plan", 5)
@@ -620,6 +634,7 @@ class DouyinReupService:
                 "settings": settings,
                 "output_dir": str(video_dir),
                 "product_context": _product_context(config),
+                "gemini_api_keys": config.ai.gemini_api_keys,
             }
             if "progress_callback" in inspect.signature(self.silent_pipeline.build_plan).parameters:
                 plan_kwargs["progress_callback"] = _mapped_progress_callback(
@@ -736,7 +751,7 @@ class DouyinReupService:
                 project_id=project_id,
                 video_id=f"douyin_silent_{index:03d}",
                 ass_path=render_result.caption_ass_path,
-                overlay_path=None,
+                overlay_path=render_result.overlay_path,
                 subtitle_expected=settings.burn_subtitle,
                 audio_expected=(
                     settings.keep_immersive_original_audio
@@ -865,6 +880,60 @@ class DouyinReupService:
                 payload["final_output_qa"] = _final_qa_summary(final_qa_report)
             write_json(log_path, payload)
 
+    def _route_silent_video_to_voice_if_needed(
+        self,
+        *,
+        index: int,
+        video: DouyinVideoItem,
+        config: ProjectConfig,
+        settings: DouyinReupSettings,
+        output_root: Path,
+        project_id: str | None,
+        job_id: str | None,
+        step_progress_callback: ProgressCallback | None,
+    ) -> DouyinOutputResult | None:
+        if not (
+            settings.auto_route_speech_to_voice_reup
+            and settings.detect_speech_presence
+            and settings.silent_mode_detection
+        ):
+            return None
+
+        route_settings = settings.model_copy(
+            update={"speech_detection_threshold": settings.auto_route_speech_threshold}
+        )
+        _step_progress(step_progress_callback, "speech_route_check", 3)
+        speech = speech_result_for_video(video.path, route_settings)
+        if not speech.has_speech:
+            return None
+
+        routed_settings = _voice_reup_settings_from_silent(settings)
+        routed_warning = (
+            "Tự động chuyển video này sang flow có thoại vì phát hiện tín hiệu lời thoại "
+            f"(điểm {speech.speech_score:.2f}, ngưỡng {settings.auto_route_speech_threshold:.2f})."
+        )
+        warnings = _dedupe([*video.warnings, routed_warning, *speech.warnings])
+        routed_video = video.model_copy(update={"warnings": warnings})
+        output = self._process_one_video(
+            index=index,
+            video=routed_video,
+            config=config.model_copy(update={"douyin_reup": routed_settings}),
+            settings=routed_settings,
+            output_root=output_root,
+            project_id=project_id,
+            job_id=job_id,
+            cached_output=None,
+            retry_steps={"asr", "translation", "render"},
+            step_progress_callback=step_progress_callback,
+        )
+        return output.model_copy(
+            update={
+                "reup_mode": "auto_routed_voice_reup",
+                "speech_score": speech.speech_score,
+                "warnings": _dedupe([*output.warnings, routed_warning, *speech.warnings]),
+            }
+        )
+
     def _select_videos(self, videos: list[DouyinVideoItem], settings: DouyinReupSettings) -> list[DouyinVideoItem]:
         if settings.process_mode == "selected":
             by_path = {str(Path(video.path).expanduser().resolve()).lower(): video for video in videos}
@@ -946,6 +1015,32 @@ def _product_context(config: ProjectConfig) -> dict[str, Any]:
         "category": config.industry.preset_id if config.industry else None,
         "industry": config.industry.preset_id if config.industry else None,
     }
+
+
+def _voice_reup_settings_from_silent(settings: DouyinReupSettings) -> DouyinReupSettings:
+    generate_voiceover = bool(settings.generate_voiceover_for_silent_video)
+    return settings.model_copy(
+        update={
+            "preset_id": "voice_priority",
+            "preset_name": "Tự động chuyển sang video có thoại",
+            "enable_silent_immersive_mode": False,
+            "silent_mode_detection": False,
+            "subtitle_source_priority": ["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"],
+            "use_sidecar_srt": True,
+            "use_embedded_subtitle": True,
+            "use_asr_if_no_subtitle": True,
+            "use_ocr_if_asr_failed": True,
+            "use_ocr_if_no_subtitle": False,
+            "prefer_ocr_over_asr_when_text_visible": False,
+            "add_bgm": bool(settings.add_bgm_for_silent_video or settings.add_bgm),
+            "bgm_volume": settings.immersive_bgm_volume if settings.add_bgm_for_silent_video else settings.bgm_volume,
+            "keep_original_audio": False if generate_voiceover else settings.keep_immersive_original_audio,
+            "original_audio_volume": 0.0 if generate_voiceover else settings.immersive_original_audio_volume,
+            "generate_voiceover_for_silent_video": generate_voiceover,
+            "silent_voiceover_provider": settings.silent_voiceover_provider,
+            "silent_voiceover_voice": settings.silent_voiceover_voice,
+        }
+    )
 
 
 def _silent_caption_source(plan) -> str:

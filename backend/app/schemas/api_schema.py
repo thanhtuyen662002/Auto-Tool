@@ -345,6 +345,7 @@ class SilentReupOneClickRequest(BaseModel):
     source_selection_id: str | None = None
     review_before_render: bool = True
     product_context: dict[str, Any] = Field(default_factory=dict)
+    advanced_overrides: dict[str, Any] = Field(default_factory=dict)
 
 
 class SegmentScoringResponse(BaseModel):

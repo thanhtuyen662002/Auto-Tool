@@ -33,7 +33,7 @@ def test_visual_tag_vocabulary_report_and_user_override(tmp_path, monkeypatch):
     video.write_bytes(b"fake")
 
     class FakeService:
-        def build_plan(self, video_path, settings=None, output_dir=None, product_context=None):
+        def build_plan(self, video_path, settings=None, output_dir=None, product_context=None, **_kwargs):
             return _plan(video_path)
 
     monkeypatch.setattr("app.api.SilentReupService", FakeService)

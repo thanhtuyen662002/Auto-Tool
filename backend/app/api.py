@@ -24,9 +24,11 @@ from app.modules.media_scanner.scanner import MediaScanner
 from app.modules.content_manager.content_schema import build_content_summary
 from app.modules.content_manager.content_service import ContentService
 from app.modules.cache.cache_service import CacheService
+from app.modules.music_selector.music_selector import MusicSelector
 from app.modules.content_safety.safety_guard_service import SafetyGuardService
 from app.modules.content_safety.safety_schema import SafetyCheckResult, SafetyIssue, build_safety_result
 from app.modules.douyin_reup.douyin_folder_scanner import DouyinFolderScanner
+from app.modules.douyin_reup.bgm_mixer import SUPPORTED_BGM_EXTENSIONS
 from app.modules.douyin_reup.douyin_render_pipeline import DouyinRenderPipeline
 from app.modules.douyin_reup.douyin_reup_service import DouyinReupService, build_retry_cache
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
@@ -1089,7 +1091,13 @@ def create_app() -> FastAPI:
             plan_id = str(uuid.uuid4())
             output_dir = ensure_dir(video_path.parent / "_silent_reup_plans" / f"{video_path.stem}-{plan_id[:8]}")
             service = SilentReupService()
-            plan = service.build_plan(str(video_path), settings=settings, output_dir=str(output_dir), product_context=request.product_context)
+            plan = service.build_plan(
+                str(video_path),
+                settings=settings,
+                output_dir=str(output_dir),
+                product_context=request.product_context,
+                gemini_api_keys=_get_app_settings().gemini_api_keys,
+            )
             _SILENT_PLAN_STORE[plan_id] = {
                 "plan": plan.model_dump(mode="json"),
                 "settings": settings.model_dump(mode="json"),
@@ -1380,6 +1388,7 @@ def create_app() -> FastAPI:
             )
             if request.max_videos is not None:
                 overrides["max_videos"] = request.max_videos
+            overrides.update(request.advanced_overrides or {})
             settings = preset_service.apply_preset(preset_id, overrides=overrides)
             config = _build_douyin_project_config_from_settings(
                 project_name=request.project_name,
@@ -3421,7 +3430,11 @@ def run_subtitle_review_render_job(
                         document_settings.keep_immersive_original_audio
                         or document_settings.add_bgm_for_silent_video
                         or document_settings.generate_voiceover_for_silent_video
-                    ) if is_silent else (document_settings.keep_original_audio or document_settings.add_bgm),
+                    ) if is_silent else (
+                        document_settings.keep_original_audio
+                        or document_settings.add_bgm
+                        or document_settings.generate_voiceover_for_silent_video
+                    ),
                     overlay_expected=document_settings.add_overlay,
                     report_path=str(document_dir / f"video_{index:03d}_final_qa.json"),
                 )
@@ -3786,6 +3799,43 @@ def _check_config_requirements(
                 )
             )
 
+    settings = config.douyin_reup if config else None
+    if settings and _bgm_required_for_settings(settings, mode):
+        if not settings.music_folder:
+            issues.append(
+                ConfigRequirementIssue(
+                    severity="error",
+                    code="missing_bgm_folder",
+                    field="settings.music_folder",
+                    message="Bạn đã bật nhạc nền nhưng chưa chọn thư mục nhạc.",
+                    action="Chọn thư mục có file .mp3/.wav/.m4a hoặc tắt mục Thêm nhạc nền.",
+                )
+            )
+        else:
+            music_folder = Path(settings.music_folder).expanduser()
+            if not music_folder.exists() or not music_folder.is_dir():
+                issues.append(
+                    ConfigRequirementIssue(
+                        severity="error",
+                        code="bgm_folder_not_found",
+                        field="settings.music_folder",
+                        message=f"Thư mục nhạc nền không tồn tại: {settings.music_folder}",
+                        action="Chọn lại đúng thư mục nhạc nền hoặc tắt mục Thêm nhạc nền.",
+                    )
+                )
+            elif not _has_supported_bgm_file(music_folder):
+                issues.append(
+                    ConfigRequirementIssue(
+                        severity="error",
+                        code="bgm_folder_empty",
+                        field="settings.music_folder",
+                        message=f"Thư mục nhạc nền không có file audio hợp lệ: {settings.music_folder}",
+                        action="Thêm file .mp3/.wav/.m4a/.aac/.flac/.ogg/.opus hoặc tắt mục Thêm nhạc nền.",
+                    )
+                )
+
+    issues.extend(_product_music_requirement_issues(config, mode))
+
     errors_count = sum(1 for issue in issues if issue.severity == "error")
     warnings_count = sum(1 for issue in issues if issue.severity == "warning")
     return ConfigRequirementCheckResponse(
@@ -3831,6 +3881,43 @@ def _google_tts_required_for_mode(config: ProjectConfig | None, mode: str) -> bo
     if settings and settings.generate_voiceover_for_silent_video:
         providers.add(_normalized_provider(settings.silent_voiceover_provider))
     return "google_cloud_tts" in providers
+
+
+def _bgm_required_for_settings(settings: DouyinReupSettings, mode: str) -> bool:
+    normalized_mode = mode.strip().lower()
+    if normalized_mode == "silent_reup":
+        return bool(settings.add_bgm_for_silent_video)
+    if normalized_mode == "douyin_reup":
+        if settings.enable_silent_immersive_mode and settings.preset_id and settings.preset_id.startswith("silent_"):
+            return bool(settings.add_bgm_for_silent_video)
+        return bool(settings.add_bgm)
+    return False
+
+
+def _product_music_requirement_issues(config: ProjectConfig | None, mode: str) -> list[ConfigRequirementIssue]:
+    if config is None or mode.strip().lower() != "product_render" or not config.music.enabled:
+        return []
+    selector = MusicSelector()
+    selected = selector.select_music(config, output_index=1)
+    if selected:
+        return []
+    message = "; ".join(selector.warnings) or "Đã bật nhạc nền nhưng chưa chọn được file nhạc hợp lệ."
+    return [
+        ConfigRequirementIssue(
+            severity="error",
+            code="product_music_missing_or_invalid",
+            field="music.source_folder",
+            message=f"Đã bật nhạc nền nhưng không có file nhạc hợp lệ để render: {message}",
+            action="Chọn lại thư mục/file nhạc hợp lệ hoặc tắt mục Thêm nhạc nền trước khi render.",
+        )
+    ]
+
+
+def _has_supported_bgm_file(folder: Path) -> bool:
+    return any(
+        path.is_file() and path.suffix.lower() in SUPPORTED_BGM_EXTENSIONS and path.stat().st_size > 0
+        for path in folder.iterdir()
+    )
 
 
 def _has_gemini_key(config: ProjectConfig | None) -> bool:

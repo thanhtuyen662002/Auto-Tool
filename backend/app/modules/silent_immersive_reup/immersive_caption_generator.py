@@ -56,17 +56,20 @@ class ImmersiveCaptionGenerator:
 
         selected_industry = industry if industry and industry != "auto" else None
         product_industry = (product_context or {}).get("industry") or (product_context or {}).get("category")
+        has_product_context = _has_product_context(product_context)
         recent = list(recent_caption_texts or [])
         captions: list[ImmersiveCaptionLine] = []
         for index, segment in enumerate(segments, start=1):
             if segment.duration < 0.35:
                 continue
-            segment_industry = normalize_industry(
+            industry_hint = (
                 (segment.primary_industry if use_visual_tags else None)
                 or selected_industry
-                or video_recommended_industry
+                or (video_recommended_industry if has_product_context else None)
                 or product_industry
+                or "general_product"
             )
+            segment_industry = normalize_industry(industry_hint)
             intent = _intent_for_segment(segment.segment_type, segment if use_visual_tags else None)
             if len(segments) > 1 and index == len(segments):
                 intent = SilentCaptionIntent.cta
@@ -257,6 +260,25 @@ def _product_name(product_context: dict | None) -> str:
     if not product_context:
         return ""
     return str(product_context.get("product_name") or product_context.get("name") or "").strip()
+
+
+def _has_product_context(product_context: dict | None) -> bool:
+    if not product_context:
+        return False
+    values = [
+        product_context.get("product_name"),
+        product_context.get("name"),
+        product_context.get("description"),
+        product_context.get("features"),
+    ]
+    for value in values:
+        if isinstance(value, list) and any(str(item).strip() for item in value):
+            return True
+        if isinstance(value, str) and value.strip():
+            return True
+        if value and not isinstance(value, (str, list)):
+            return True
+    return False
 
 
 def _first_feature(product_context: dict | None) -> str:

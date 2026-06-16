@@ -47,6 +47,8 @@ export const DEFAULT_MUSIC_SETTINGS: MusicSettings = {
 export const DEFAULT_TTS_SETTINGS: TTSSettings = {
   provider: 'edge_tts',
   fallback_provider: 'piper',
+  allow_provider_fallback: true,
+  allow_silent_fallback: false,
   voice: 'vi-VN-HoaiMyNeural',
   language: 'vi',
   api_key: '',

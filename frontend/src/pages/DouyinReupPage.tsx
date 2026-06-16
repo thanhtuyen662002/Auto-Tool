@@ -120,6 +120,14 @@ const DEFAULT_VISUAL_TAG_VOCABULARY: SilentVisualTagVocabulary = {
   quality: ['clear_frame', 'dark_frame', 'high_motion', 'low_motion', 'stable_shot', 'blur_risk'],
 };
 
+const VIETNAMESE_TTS_VOICES = [
+  { provider: 'edge_tts', voice: 'vi-VN-HoaiMyNeural', label: 'Edge TTS - Hoài My (nữ)' },
+  { provider: 'edge_tts', voice: 'vi-VN-NamMinhNeural', label: 'Edge TTS - Nam Minh (nam)' },
+  { provider: 'piper', voice: 'vi_VN-vais1000-medium', label: 'Piper offline - vais1000' },
+  { provider: 'google_cloud_tts', voice: 'vi-VN-Wavenet-A', label: 'Google Cloud - Wavenet A (nữ)' },
+  { provider: 'google_cloud_tts', voice: 'vi-VN-Wavenet-D', label: 'Google Cloud - Wavenet D (nam)' },
+];
+
 const DEFAULT_SETTINGS: DouyinReupSettings = {
   enabled: true,
   preset_id: 'safe_review',
@@ -180,6 +188,8 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   silent_mode_strategy: 'chill_immersive',
   detect_speech_presence: true,
   speech_detection_threshold: 0.35,
+  auto_route_speech_to_voice_reup: true,
+  auto_route_speech_threshold: 0.28,
   use_visual_segments_for_silent_video: true,
   silent_segment_duration_min: 1.2,
   silent_segment_duration_max: 4.0,
@@ -317,6 +327,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   const reviewBeforeRender = workflowMode === 'silent_immersive' ? settings.silent_review_before_render : settings.review_subtitles_before_render;
   const usesManualSubtitleReview = reviewBeforeRender && !settings.auto_render_after_translation;
   const currentAutoRender = !usesManualSubtitleReview;
+  const addMusicEnabled = workflowMode === 'silent_immersive' ? settings.add_bgm_for_silent_video : settings.add_bgm;
   const isSilentPreset =
     selectedPresetId.startsWith('silent_') || Boolean(settings.enable_silent_immersive_mode && settings.preset_id?.startsWith('silent_'));
   const normalPresets = useMemo(() => presets.filter((preset) => !preset.id.startsWith('silent_')), [presets]);
@@ -349,10 +360,11 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       scanSummary,
       scanErrors,
       musicFolder: settings.music_folder || '',
+      addMusic: addMusicEnabled,
       backendReady: dependencyStatus !== null,
       autoRender: currentAutoRender,
     }),
-    [currentAutoRender, dependencyStatus, outputFolder, scanErrors, scanSummary, selectedPresetCard, settings.music_folder, sourceFolder],
+    [addMusicEnabled, currentAutoRender, dependencyStatus, outputFolder, scanErrors, scanSummary, selectedPresetCard, settings.music_folder, sourceFolder],
   );
   const validationMessages = useMemo(
     () => buildValidationMessages(checklist, selectedPresetCard, dependencyStatus, scanSummary, currentAutoRender),
@@ -507,6 +519,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         syncRecentPath('music', settings.music_folder || '');
       }
       const productContext = buildSilentProductContext(silentProductContext);
+      const audioOverrides = buildAudioOverrides();
       const silentAutoRender = settings.auto_render_after_translation || selectedPresetId === 'silent_sales_recut';
       const response = initialWorkflow === 'silent'
         ? await startSilentOneClick({
@@ -521,6 +534,10 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             selected_video_paths: selectedPaths,
             review_before_render: Boolean(settings.silent_review_before_render && !silentAutoRender),
             product_context: productContext,
+            advanced_overrides: {
+              ...audioOverrides,
+              silent_caption_tone: settings.silent_caption_tone,
+            },
           })
         : await startDouyinOneClick({
         project_name: projectName.trim() || 'douyin-reup',
@@ -536,6 +553,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         auto_render_after_translation: settings.auto_render_after_translation,
             product_context: productContext,
         advanced_overrides: {
+          ...audioOverrides,
           ...(mode === 'advanced' ? settings : {}),
           silent_caption_tone: settings.silent_caption_tone,
         },
@@ -649,6 +667,45 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       return;
     }
     updateSettings(updates);
+  }
+
+  function buildAudioOverrides(): Record<string, unknown> {
+    return {
+      add_bgm: settings.add_bgm,
+      add_bgm_for_silent_video: settings.add_bgm_for_silent_video,
+      bgm_volume: settings.bgm_volume,
+      immersive_bgm_volume: settings.immersive_bgm_volume,
+      original_audio_volume: settings.original_audio_volume,
+      immersive_original_audio_volume: settings.immersive_original_audio_volume,
+      keep_original_audio: settings.keep_original_audio,
+      keep_immersive_original_audio: settings.keep_immersive_original_audio,
+      generate_voiceover_for_silent_video: settings.generate_voiceover_for_silent_video,
+      silent_voiceover_provider: settings.silent_voiceover_provider,
+      silent_voiceover_voice: settings.silent_voiceover_voice,
+      auto_route_speech_to_voice_reup: settings.auto_route_speech_to_voice_reup,
+      auto_route_speech_threshold: settings.auto_route_speech_threshold,
+    };
+  }
+
+  function updateVoiceChoice(value: string) {
+    const match = VIETNAMESE_TTS_VOICES.find((item) => `${item.provider}:${item.voice}` === value);
+    if (!match) return;
+    updateSettings({
+      silent_voiceover_provider: match.provider,
+      silent_voiceover_voice: match.voice,
+    });
+  }
+
+  function updateVoiceoverEnabled(value: boolean) {
+    if (workflowMode === 'douyin_voice') {
+      updateSettings({
+        generate_voiceover_for_silent_video: value,
+        keep_original_audio: !value,
+        original_audio_volume: value ? 0.18 : DEFAULT_SETTINGS.original_audio_volume,
+      });
+      return;
+    }
+    updateSettings({ generate_voiceover_for_silent_video: value });
   }
 
   async function browseSourceFolder() {
@@ -927,6 +984,8 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           <div className="grid gap-3 sm:grid-cols-2">
             <SliderInput label="Dịch thời gian sub" min={-1} max={1} step={0.05} value={settings.asr_subtitle_offset_seconds} onChange={(value) => updateAdvancedSettings({ asr_subtitle_offset_seconds: value })} />
             <Toggle label="Bật VAD cho giọng nói" checked={settings.asr_vad_filter} onChange={(value) => updateAdvancedSettings({ asr_vad_filter: value })} />
+            <Toggle label="Tự chuyển video có thoại sang flow có thoại" checked={settings.auto_route_speech_to_voice_reup} onChange={(value) => updateAdvancedSettings({ auto_route_speech_to_voice_reup: value })} />
+            <SliderInput label="Ngưỡng tự chuyển flow" min={0.1} max={0.6} step={0.01} value={settings.auto_route_speech_threshold} onChange={(value) => updateAdvancedSettings({ auto_route_speech_threshold: value })} />
             <Toggle label="Dùng file .srt đi kèm" checked={settings.use_sidecar_srt} onChange={(value) => updateAdvancedSettings({ use_sidecar_srt: value })} />
             <Toggle label="Dùng subtitle nhúng" checked={settings.use_embedded_subtitle} onChange={(value) => updateAdvancedSettings({ use_embedded_subtitle: value })} />
             <Toggle label="Nhận diện giọng nói nếu thiếu subtitle" checked={settings.use_asr_if_no_subtitle} onChange={(value) => updateAdvancedSettings({ use_asr_if_no_subtitle: value })} />
@@ -1048,6 +1107,15 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               reviewMode={usesManualSubtitleReview}
               onModeChange={(renderMode) => updateRenderFlow(renderMode)}
             />
+            {workflowMode === 'silent_immersive' ? (
+              <AutoRouteSpeechCard
+                enabled={settings.auto_route_speech_to_voice_reup}
+                threshold={settings.auto_route_speech_threshold}
+                voiceoverEnabled={settings.generate_voiceover_for_silent_video}
+                onEnabledChange={(value) => updateSettings({ auto_route_speech_to_voice_reup: value })}
+                onThresholdChange={(value) => updateSettings({ auto_route_speech_threshold: value })}
+              />
+            ) : null}
             <OutputFolderCard
               mode={workflowMode}
               outputFolder={outputFolder}
@@ -1061,13 +1129,21 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             />
             <MusicFolderCard
               musicFolder={settings.music_folder || ''}
-              addMusic={initialWorkflow === 'silent' ? settings.add_bgm_for_silent_video : settings.add_bgm}
+              addMusic={addMusicEnabled}
               recentFolders={recentMusicFolders}
               onAddMusicChange={(value) => updateSettings(initialWorkflow === 'silent' ? { add_bgm_for_silent_video: value, add_bgm: value } : { add_bgm: value })}
               onBrowse={() => void browseMusicFolder()}
               onMusicFolderChange={(value) => updateSettings({ music_folder: value })}
               onUseRecent={(path) => updateSettings({ music_folder: path })}
               onRemoveRecent={(path) => setRecentMusicFolders((current) => removeRecentFolder(RECENT_MUSIC_KEY, current, path))}
+            />
+            <VoiceoverCard
+              mode={workflowMode}
+              enabled={settings.generate_voiceover_for_silent_video}
+              provider={settings.silent_voiceover_provider}
+              voice={settings.silent_voiceover_voice}
+              onEnabledChange={updateVoiceoverEnabled}
+              onVoiceChange={updateVoiceChoice}
             />
             {workflowMode === 'silent_immersive' ? (
               <ProductContextCard
@@ -1634,6 +1710,7 @@ function buildChecklist({
   scanSummary,
   scanErrors,
   musicFolder,
+  addMusic,
   backendReady,
   autoRender,
 }: {
@@ -1643,6 +1720,7 @@ function buildChecklist({
   scanSummary: StartScanSummary | null;
   scanErrors: string[];
   musicFolder: string;
+  addMusic: boolean;
   backendReady: boolean;
   autoRender: boolean;
 }): StartChecklistItem[] {
@@ -1674,8 +1752,12 @@ function buildChecklist({
     {
       id: 'music',
       label: 'Music',
-      status: musicFolder.trim() ? 'ok' : 'warning',
-      message: musicFolder.trim() ? 'Đã chọn music folder.' : 'Chưa chọn nhạc nền, tool vẫn có thể giữ âm thanh gốc.',
+      status: addMusic ? (musicFolder.trim() ? 'ok' : 'missing') : 'ok',
+      message: addMusic
+        ? musicFolder.trim()
+          ? 'Đã chọn thư mục nhạc nền.'
+          : 'Đang bật nhạc nền nhưng chưa chọn thư mục nhạc.'
+        : 'Không thêm nhạc nền.',
     },
     {
       id: 'backend',
@@ -1788,6 +1870,117 @@ function RenderFlowOption({
         </span>
       </div>
     </button>
+  );
+}
+
+function AutoRouteSpeechCard({
+  enabled,
+  threshold,
+  voiceoverEnabled,
+  onEnabledChange,
+  onThresholdChange,
+}: {
+  enabled: boolean;
+  threshold: number;
+  voiceoverEnabled: boolean;
+  onEnabledChange: (value: boolean) => void;
+  onThresholdChange: (value: number) => void;
+}) {
+  return (
+    <GlassCard className="grid gap-4 p-5" strong>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Tự phân luồng</div>
+          <h2 className="mt-2 text-xl font-semibold text-white">Tự chuyển video có thoại</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Khi chạy batch không thoại, tool sẽ kiểm tra nhanh từng video. Video có dấu hiệu lời thoại sẽ tự chuyển sang flow có thoại để dịch/render, không cần bạn chọn tay.
+          </p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${enabled ? 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100' : 'border-white/15 bg-white/5 text-slate-300'}`}>
+          {enabled ? 'Đang bật' : 'Đang tắt'}
+        </span>
+      </div>
+      <label className="flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200">
+        <input type="checkbox" checked={enabled} onChange={(event) => onEnabledChange(event.target.checked)} />
+        <span>Tự động chuyển video có thoại sang flow có thoại</span>
+      </label>
+      <SliderInput
+        label={`Ngưỡng nhận diện thoại: ${Math.round(threshold * 100)}%`}
+        min={0.1}
+        max={0.6}
+        step={0.01}
+        value={threshold}
+        onChange={(value) => {
+          if (enabled) onThresholdChange(value);
+        }}
+      />
+      {enabled && voiceoverEnabled ? (
+        <div className="rounded-md border border-emerald-300/20 bg-emerald-300/10 p-3 text-xs leading-5 text-emerald-100">
+          Nếu video được chuyển sang flow có thoại và đang bật voiceover tiếng Việt, audio gốc sẽ được tắt cho video đó để tránh hai giọng chồng nhau.
+        </div>
+      ) : null}
+    </GlassCard>
+  );
+}
+
+function VoiceoverCard({
+  mode,
+  enabled,
+  provider,
+  voice,
+  onEnabledChange,
+  onVoiceChange,
+}: {
+  mode: StartWorkflowMode;
+  enabled: boolean;
+  provider: string;
+  voice: string;
+  onEnabledChange: (value: boolean) => void;
+  onVoiceChange: (value: string) => void;
+}) {
+  const isSilent = mode === 'silent_immersive';
+  const selectedValue = `${provider}:${voice}`;
+  return (
+    <GlassCard className="grid gap-4 p-5" strong>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Giọng đọc</div>
+          <h2 className="mt-2 text-xl font-semibold text-white">Voiceover tiếng Việt</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            {isSilent
+              ? 'Tạo lời đọc tiếng Việt từ caption/kịch bản của video không thoại.'
+              : 'Tạo lời đọc tiếng Việt từ phụ đề đã dịch và trộn vào video có thoại.'}
+          </p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${enabled ? 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100' : 'border-white/15 bg-white/5 text-slate-300'}`}>
+          {enabled ? 'Có voice' : 'Không voice'}
+        </span>
+      </div>
+      <label className="flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200">
+        <input type="checkbox" checked={enabled} onChange={(event) => onEnabledChange(event.target.checked)} />
+        <span>Tạo giọng đọc tiếng Việt</span>
+      </label>
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium text-slate-200">Chọn giọng đọc</span>
+        <select
+          className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+          disabled={!enabled}
+          value={selectedValue}
+          onChange={(event) => onVoiceChange(event.target.value)}
+        >
+          {VIETNAMESE_TTS_VOICES.map((item) => (
+            <option key={`${item.provider}:${item.voice}`} value={`${item.provider}:${item.voice}`}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {enabled && provider === 'google_cloud_tts' ? (
+        <div className="rounded-md border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
+          Google Cloud TTS cần API key hoặc Service Account trong Cài đặt hệ thống. Nếu chưa cấu hình, backend sẽ chặn render trước khi chạy.
+        </div>
+      ) : null}
+    </GlassCard>
   );
 }
 

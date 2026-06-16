@@ -37,7 +37,7 @@ export default function MusicFolderCard({
         <span>Thêm nhạc nền nhẹ</span>
       </label>
       <label className="block">
-        <span className="mb-1.5 block text-sm font-medium text-slate-200">Music folder</span>
+        <span className="mb-1.5 block text-sm font-medium text-slate-200">Thư mục nhạc nền</span>
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <input
             className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white outline-none focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/15"
@@ -46,7 +46,7 @@ export default function MusicFolderCard({
             value={musicFolder}
             onChange={(event) => onMusicFolderChange(event.target.value)}
           />
-          <GlassButton variant="secondary" onClick={onBrowse}>Browse</GlassButton>
+          <GlassButton variant="secondary" onClick={onBrowse}>Chọn thư mục</GlassButton>
         </div>
       </label>
       {!musicFolder.trim() ? <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs text-slate-400">Chưa chọn nhạc nền. Tool vẫn có thể giữ âm thanh gốc.</div> : null}

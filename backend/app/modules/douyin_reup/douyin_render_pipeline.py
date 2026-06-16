@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -7,17 +8,21 @@ from app.adapters.ffmpeg_adapter import FFmpegError, probe_video, run_ffmpeg
 from app.modules.douyin_reup.bgm_mixer import BGMMixer
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem, TranslationResult
 from app.modules.douyin_reup.subtitle_timing_guard import parse_srt_blocks
+from app.modules.script_writer.script_writer import ProductVideoScript, SubtitleLine, VoiceoverLine
 from app.modules.subtitle_review import ApproveSubtitleDocumentRequest, SubtitleReviewService, SubtitleReviewStatus
+from app.modules.tts.tts_schema import TTSSettings
 from app.modules.visual_style.overlay_asset_builder import build_overlay_asset
 from app.modules.visual_style.style_schema import VisualStyleSettings
 from app.modules.visual_style.subtitle_style_renderer import generate_ass_subtitle
 from app.modules.visual_style.visual_style_service import VisualStyleService, parse_resolution
+from app.modules.voice_generator.voice_generator import VoiceGenerator
 from app.utils.file_utils import ensure_dir
 
 
 class DouyinRenderPipeline:
-    def __init__(self, bgm_mixer: BGMMixer | None = None) -> None:
+    def __init__(self, bgm_mixer: BGMMixer | None = None, voice_generator: VoiceGenerator | None = None) -> None:
         self.bgm_mixer = bgm_mixer or BGMMixer()
+        self.voice_generator = voice_generator or VoiceGenerator()
 
     def render_video_with_translated_subtitle(
         self,
@@ -157,11 +162,30 @@ class DouyinRenderPipeline:
         else:
             subtitle_ass_path = None  # type: ignore[assignment]
             if settings.burn_subtitle:
-                warnings.append("Không có subtitle hợp lệ để burn vào video.")
+                raise RuntimeError("Đã bật burn subtitle nhưng không có subtitle hợp lệ để đưa vào video.")
 
-        bgm_path = self.bgm_mixer.pick_bgm(settings.music_folder) if settings.add_bgm else None
-        if settings.add_bgm and settings.music_folder and not bgm_path:
-            warnings.append(f"Không tìm thấy file nhạc nền hợp lệ trong thư mục: {settings.music_folder}")
+        if voiceover_path is None and settings.generate_voiceover_for_silent_video:
+            voiceover_path = self._generate_voiceover_from_srt(
+                subtitle_srt_path=subtitle_srt_path,
+                output_dir=str(target_dir),
+                output_name=output_name,
+                settings=settings,
+                target_duration=video.duration,
+            )
+            warnings.extend(self.voice_generator.warnings)
+
+        bgm_path = None
+        if settings.add_bgm:
+            if not settings.music_folder:
+                if not _allow_render_without_bgm():
+                    raise RuntimeError("Đã bật nhạc nền nhưng chưa chọn thư mục nhạc.")
+                warnings.append("Đã bật nhạc nền nhưng chưa chọn thư mục nhạc nên video không có BGM.")
+            else:
+                bgm_path = self.bgm_mixer.pick_bgm(settings.music_folder)
+                if not bgm_path:
+                    if not _allow_render_without_bgm():
+                        raise RuntimeError(f"Không tìm thấy file nhạc nền hợp lệ trong thư mục: {settings.music_folder}")
+                    warnings.append(f"Không tìm thấy file nhạc nền hợp lệ trong thư mục: {settings.music_folder}")
 
         try:
             self._run_render(
@@ -177,6 +201,11 @@ class DouyinRenderPipeline:
             )
         except FFmpegError as exc:
             if subtitle_ass_path:
+                if not _allow_render_without_subtitle():
+                    raise FFmpegError(
+                        "Burn subtitle thất bại nên dừng render để tránh xuất video không có phụ đề. "
+                        f"Chi tiết: {exc}"
+                    ) from exc
                 warnings.append(f"Burn subtitle thất bại, thử render lại không subtitle: {exc}")
                 try:
                     self._run_render(
@@ -193,6 +222,11 @@ class DouyinRenderPipeline:
                 except FFmpegError as retry_exc:
                     if not bgm_path:
                         raise
+                    if not _allow_render_without_bgm():
+                        raise FFmpegError(
+                            "Render với nhạc nền thất bại nên dừng render để tránh xuất video thiếu nhạc. "
+                            f"Chi tiết: {retry_exc}"
+                        ) from retry_exc
                     warnings.append(f"Render với nhạc nền thất bại, thử render lại chỉ giữ audio gốc: {retry_exc}")
                     bgm_path = None
                     self._run_render(
@@ -208,6 +242,11 @@ class DouyinRenderPipeline:
                     )
                 subtitle_ass_path = None  # type: ignore[assignment]
             elif bgm_path:
+                if not _allow_render_without_bgm():
+                    raise FFmpegError(
+                        "Render với nhạc nền thất bại nên dừng render để tránh xuất video thiếu nhạc. "
+                        f"Chi tiết: {exc}"
+                    ) from exc
                 warnings.append(f"Render với nhạc nền thất bại, thử render lại chỉ giữ audio gốc: {exc}")
                 bgm_path = None
                 self._run_render(
@@ -240,6 +279,59 @@ class DouyinRenderPipeline:
             "warnings": warnings,
             "errors": errors,
         }
+
+    def _generate_voiceover_from_srt(
+        self,
+        *,
+        subtitle_srt_path: str,
+        output_dir: str,
+        output_name: str,
+        settings: DouyinReupSettings,
+        target_duration: float,
+    ) -> str:
+        blocks = [block for block in parse_srt_blocks(subtitle_srt_path) if block.text.strip()]
+        if not blocks:
+            raise RuntimeError("Đã bật tạo giọng đọc tiếng Việt nhưng subtitle Việt rỗng.")
+        voiceover = [
+            VoiceoverLine(time_hint=f"{block.start:.2f}-{block.end:.2f}s", text=block.text.strip())
+            for block in blocks
+        ]
+        subtitles = [
+            SubtitleLine(start_hint=block.start, end_hint=block.end, text=block.text.strip())
+            for block in blocks
+        ]
+        script = ProductVideoScript(
+            hook=voiceover[0].text,
+            voiceover=voiceover,
+            subtitles=subtitles,
+            cta=voiceover[-1].text,
+            caption=" ".join(line.text for line in voiceover[:2]),
+            hashtags=["#douyin", "#review", "#sanpham"],
+        )
+        tts_settings = TTSSettings(
+            provider=settings.silent_voiceover_provider,
+            fallback_provider="piper",
+            voice=settings.silent_voiceover_voice,
+            language=settings.target_language,
+            output_format="mp3",
+        )
+        voiceover_path = self.voice_generator.generate_voiceover(
+            script,
+            output_dir,
+            filename=f"{Path(output_name).stem}_voiceover.mp3",
+            text_filename=f"{Path(output_name).stem}_voiceover_text.txt",
+            language=settings.target_language,
+            target_duration=target_duration,
+            tts_settings=tts_settings,
+        )
+        result = self.voice_generator.last_tts_result
+        if not result or result.provider == "silent":
+            raise RuntimeError(
+                "TTS không tạo được giọng đọc thật. Hãy kiểm tra provider/voice hoặc cấu hình Google Cloud TTS/Piper."
+            )
+        if not Path(voiceover_path).exists() or Path(voiceover_path).stat().st_size <= 0:
+            raise RuntimeError("TTS báo thành công nhưng file voiceover không tồn tại hoặc bị rỗng.")
+        return voiceover_path
 
     def _run_render(
         self,
@@ -370,3 +462,11 @@ def _escape_filter_path(path: str) -> str:
 
 def _clamp_volume(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+def _allow_render_without_subtitle() -> bool:
+    return os.getenv("AUTO_TOOL_ALLOW_RENDER_WITHOUT_SUBTITLE", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _allow_render_without_bgm() -> bool:
+    return os.getenv("AUTO_TOOL_ALLOW_RENDER_WITHOUT_BGM", "0").strip().lower() in {"1", "true", "yes", "on"}

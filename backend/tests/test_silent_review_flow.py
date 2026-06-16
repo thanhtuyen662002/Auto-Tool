@@ -73,7 +73,7 @@ class FakeSilentPlanPipeline:
     last_voiceover_script_path = None
     last_voiceover_subtitle_path = None
 
-    def build_plan(self, video_path, settings, output_dir, product_context=None):
+    def build_plan(self, video_path, settings, output_dir, product_context=None, **_kwargs):
         plan = SilentReupPlan(
             video_path=video_path,
             strategy=settings.silent_mode_strategy,

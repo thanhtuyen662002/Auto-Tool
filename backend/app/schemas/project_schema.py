@@ -163,6 +163,8 @@ class TTSSettings(BaseModel):
 
     provider: str = "edge_tts"
     fallback_provider: str = "piper"
+    allow_provider_fallback: bool = True
+    allow_silent_fallback: bool = False
     voice: str = "vi-VN-HoaiMyNeural"
     language: str = "vi"
     api_key: str | None = None

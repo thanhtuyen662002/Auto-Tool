@@ -73,6 +73,7 @@ def test_douyin_reup_scan_and_process_api_queue_job(tmp_path, monkeypatch):
                     "visual_style_preset_id": "clean_review_light",
                     "burn_subtitle": True,
                     "add_overlay": True,
+                    "add_bgm": False,
                     "music_folder": None,
                     "bgm_volume": 0.16,
                     "original_audio_volume": 0.85,

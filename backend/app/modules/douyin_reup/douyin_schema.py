@@ -72,6 +72,8 @@ class DouyinReupSettings(BaseModel):
     silent_mode_strategy: Literal["chill_immersive", "product_review_voiceover", "sales_recut"] = "chill_immersive"
     detect_speech_presence: bool = True
     speech_detection_threshold: float = Field(default=0.35, ge=0, le=1)
+    auto_route_speech_to_voice_reup: bool = True
+    auto_route_speech_threshold: float = Field(default=0.28, ge=0, le=1)
     use_visual_segments_for_silent_video: bool = True
     silent_segment_duration_min: float = Field(default=1.2, gt=0, le=30)
     silent_segment_duration_max: float = Field(default=4.0, gt=0, le=60)

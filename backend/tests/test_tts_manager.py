@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from app.modules.tts.providers.base import BaseTTSProvider, TTSProviderError
 from app.modules.tts.tts_manager import TTSManager
 from app.modules.tts.tts_schema import TTSResult, TTSSettings
@@ -59,7 +61,7 @@ def test_tts_manager_falls_back_when_primary_fails(tmp_path):
     assert any("edge_tts failed intentionally" in warning for warning in result.warnings)
 
 
-def test_tts_manager_uses_silent_when_other_providers_fail(tmp_path):
+def test_tts_manager_does_not_use_silent_fallback_by_default(tmp_path):
     manager = TTSManager(
         {
             "edge_tts": FakeProvider("edge_tts", should_fail=True),
@@ -69,8 +71,42 @@ def test_tts_manager_uses_silent_when_other_providers_fail(tmp_path):
         }
     )
 
-    result = manager.generate_voice("Xin chao", str(tmp_path / "voice.wav"), TTSSettings())
+    with pytest.raises(TTSProviderError):
+        manager.generate_voice("Xin chao", str(tmp_path / "voice.wav"), TTSSettings())
+
+
+def test_tts_manager_uses_silent_when_explicitly_allowed(tmp_path):
+    manager = TTSManager(
+        {
+            "edge_tts": FakeProvider("edge_tts", should_fail=True),
+            "piper": FakeProvider("piper", should_fail=True),
+            "gtts": FakeProvider("gtts", should_fail=True),
+            "silent": FakeProvider("silent"),
+        }
+    )
+
+    result = manager.generate_voice(
+        "Xin chao",
+        str(tmp_path / "voice.wav"),
+        TTSSettings(allow_silent_fallback=True),
+    )
 
     assert result.provider == "silent"
     assert result.fallback_used is True
     assert result.duration == 1.25
+
+
+def test_tts_manager_can_disable_provider_fallback(tmp_path):
+    primary = FakeProvider("edge_tts", should_fail=True)
+    fallback = FakeProvider("piper")
+    manager = TTSManager({"edge_tts": primary, "piper": fallback, "gtts": FakeProvider("gtts"), "silent": FakeProvider("silent")})
+
+    with pytest.raises(TTSProviderError):
+        manager.generate_voice(
+            "Xin chao",
+            str(tmp_path / "voice.wav"),
+            TTSSettings(provider="edge_tts", fallback_provider="piper", allow_provider_fallback=False),
+        )
+
+    assert primary.calls == 1
+    assert fallback.calls == 0

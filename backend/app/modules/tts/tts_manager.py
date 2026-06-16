@@ -51,13 +51,16 @@ class TTSManager:
     def _provider_order(self, settings: TTSSettings) -> list[str]:
         if self.locked_provider:
             requested = [self.locked_provider]
+        elif not settings.allow_provider_fallback:
+            requested = [_normalize_provider_id(settings.provider)]
         else:
             requested = [
                 _normalize_provider_id(settings.provider),
                 _normalize_provider_id(settings.fallback_provider),
                 "gtts",
             ]
-        requested.append("silent")
+        if settings.allow_silent_fallback or _normalize_provider_id(settings.provider) == "silent":
+            requested.append("silent")
 
         ordered: list[str] = []
         for item in requested:

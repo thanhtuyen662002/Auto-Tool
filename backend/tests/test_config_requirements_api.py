@@ -73,6 +73,35 @@ def test_config_requirements_reports_missing_google_tts_credentials_file(
     assert payload["issues"][0]["code"] == "google_tts_credentials_file_missing"
 
 
+def test_config_requirements_blocks_product_render_when_music_enabled_without_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _isolated_config_env(tmp_path, monkeypatch)
+    config = _project_config(tmp_path)
+    config["ai"]["gemini_api_keys"] = ["test-gemini-key"]
+    config["music"] = {
+        "enabled": True,
+        "source_folder": None,
+        "source_file": None,
+        "volume": 0.12,
+        "fade_in": 0.5,
+        "fade_out": 0.8,
+        "duck_under_voice": False,
+    }
+
+    with TestClient(api_module.create_app()) as client:
+        response = client.post(
+            "/api/config/requirements",
+            json={"mode": "product_render", "project_config": config},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ready"] is False
+    assert any(issue["code"] == "product_music_missing_or_invalid" for issue in payload["issues"])
+
+
 def _isolated_config_env(tmp_path: Path, monkeypatch) -> None:
     database.DB_PATH = tmp_path / "autotool-config-requirements.db"
     monkeypatch.setattr(api_module, "load_local_env", lambda: None)

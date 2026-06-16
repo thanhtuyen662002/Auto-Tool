@@ -12,7 +12,7 @@ def test_regenerate_after_override_does_not_rebuild_or_analyze_video(tmp_path, m
     calls = {"build": 0, "regenerate": 0}
 
     class FakeService:
-        def build_plan(self, video_path, settings=None, output_dir=None, product_context=None):
+        def build_plan(self, video_path, settings=None, output_dir=None, product_context=None, **_kwargs):
             calls["build"] += 1
             return SilentReupPlan(
                 video_path=video_path,

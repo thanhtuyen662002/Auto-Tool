@@ -24,7 +24,7 @@ def test_template_api_and_regenerate_without_build_plan_analysis(tmp_path, monke
     calls = {"build": 0, "regenerate": 0}
 
     class FakeService:
-        def build_plan(self, video_path, settings=None, output_dir=None, product_context=None):
+        def build_plan(self, video_path, settings=None, output_dir=None, product_context=None, **_kwargs):
             calls["build"] += 1
             return _plan(video_path)
 

@@ -26,7 +26,7 @@ def test_silent_detect_and_plan_api(tmp_path, monkeypatch):
                 }
             ]
 
-        def build_plan(self, video_path, settings=None, output_dir=None, product_context=None):
+        def build_plan(self, video_path, settings=None, output_dir=None, product_context=None, **_kwargs):
             return SilentReupPlan(
                 video_path=video_path,
                 strategy="chill_immersive",
@@ -76,7 +76,11 @@ def test_silent_detect_and_plan_api(tmp_path, monkeypatch):
 
         planned = client.post(
             "/api/silent-reup/plan",
-            json={"video_path": str(video), "settings": {"use_ocr_if_no_subtitle": False}, "product_context": {}},
+            json={
+                "video_path": str(video),
+                "settings": {"use_ocr_if_no_subtitle": False, "add_bgm_for_silent_video": False},
+                "product_context": {},
+            },
         )
         assert planned.status_code == 200
         payload = planned.json()
@@ -85,7 +89,10 @@ def test_silent_detect_and_plan_api(tmp_path, monkeypatch):
 
         rendered = client.post(
             "/api/silent-reup/render",
-            json={"plan_id": payload["plan_id"], "settings": {"use_ocr_if_no_subtitle": False}},
+            json={
+                "plan_id": payload["plan_id"],
+                "settings": {"use_ocr_if_no_subtitle": False, "add_bgm_for_silent_video": False},
+            },
         )
         assert rendered.status_code == 200
         assert rendered.json()["job_id"]
@@ -144,6 +151,7 @@ def test_silent_one_click_api_queues_batch(tmp_path, monkeypatch):
                 "strategy": "chill_immersive",
                 "review_before_render": True,
                 "product_context": {"product_name": "Ke bep"},
+                "advanced_overrides": {"add_bgm": False, "add_bgm_for_silent_video": False},
             },
         )
 
