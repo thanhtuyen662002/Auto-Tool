@@ -176,6 +176,7 @@ export interface DouyinReupSettings {
   detect_speech_presence: boolean;
   speech_detection_threshold: number;
   auto_route_speech_to_voice_reup: boolean;
+  auto_route_no_speech_to_silent_reup: boolean;
   auto_route_speech_threshold: number;
   use_visual_segments_for_silent_video: boolean;
   silent_segment_duration_min: number;

@@ -17,7 +17,7 @@ export const DEFAULT_REVIEW_RENDER_SETTINGS: DouyinReupSettings = {
   auto_generate_rewrite_for_flagged_lines: false, auto_apply_safe_rewrites: false, default_rewrite_style: 'short_natural',
   enable_silent_immersive_mode: true, silent_mode_detection: true, silent_mode_strategy: 'chill_immersive',
   detect_speech_presence: true, speech_detection_threshold: 0.35, auto_route_speech_to_voice_reup: true,
-  auto_route_speech_threshold: 0.28, use_visual_segments_for_silent_video: true,
+  auto_route_no_speech_to_silent_reup: true, auto_route_speech_threshold: 0.28, use_visual_segments_for_silent_video: true,
   silent_segment_duration_min: 1.2, silent_segment_duration_max: 4, generate_visual_captions: true,
   visual_caption_language: 'vi', visual_caption_style: 'natural_short', silent_caption_tone: 'natural',
   generate_voiceover_for_silent_video: false, silent_voiceover_provider: 'edge_tts',

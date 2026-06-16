@@ -480,14 +480,27 @@ def update_job(job_id: str, **updates: Any) -> None:
 
 
 def add_job_log(job_id: str, level: str, message: str) -> None:
-    with get_connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO job_logs (job_id, created_at, level, message)
-            VALUES (?, ?, ?, ?)
-            """,
-            (job_id, _now(), level, message),
-        )
+    try:
+        with get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO job_logs (job_id, created_at, level, message)
+                VALUES (?, ?, ?, ?)
+                """,
+                (job_id, _now(), level, message),
+            )
+    except sqlite3.OperationalError as exc:
+        if "no such table: job_logs" not in str(exc).lower():
+            raise
+        init_db()
+        with get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO job_logs (job_id, created_at, level, message)
+                VALUES (?, ?, ?, ?)
+                """,
+                (job_id, _now(), level, message),
+            )
 
 
 def get_job_logs(job_id: str, limit: int = 200) -> list[dict[str, Any]]:

@@ -190,6 +190,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   detect_speech_presence: true,
   speech_detection_threshold: 0.35,
   auto_route_speech_to_voice_reup: true,
+  auto_route_no_speech_to_silent_reup: true,
   auto_route_speech_threshold: 0.28,
   use_visual_segments_for_silent_video: true,
   silent_segment_duration_min: 1.2,
@@ -706,6 +707,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       silent_voiceover_provider: settings.silent_voiceover_provider,
       silent_voiceover_voice: settings.silent_voiceover_voice,
       auto_route_speech_to_voice_reup: settings.auto_route_speech_to_voice_reup,
+      auto_route_no_speech_to_silent_reup: settings.auto_route_no_speech_to_silent_reup,
       auto_route_speech_threshold: settings.auto_route_speech_threshold,
     };
   }
@@ -1008,6 +1010,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             <SliderInput label="Dịch thời gian sub" min={-1} max={1} step={0.05} value={settings.asr_subtitle_offset_seconds} onChange={(value) => updateAdvancedSettings({ asr_subtitle_offset_seconds: value })} />
             <Toggle label="Bật VAD cho giọng nói" checked={settings.asr_vad_filter} onChange={(value) => updateAdvancedSettings({ asr_vad_filter: value })} />
             <Toggle label="Tự chuyển video có thoại sang flow có thoại" checked={settings.auto_route_speech_to_voice_reup} onChange={(value) => updateAdvancedSettings({ auto_route_speech_to_voice_reup: value })} />
+            <Toggle label="Tự chuyển video không thoại sang Silent Mode" checked={settings.auto_route_no_speech_to_silent_reup} onChange={(value) => updateAdvancedSettings({ auto_route_no_speech_to_silent_reup: value })} />
             <SliderInput label="Ngưỡng tự chuyển flow" min={0.1} max={0.6} step={0.01} value={settings.auto_route_speech_threshold} onChange={(value) => updateAdvancedSettings({ auto_route_speech_threshold: value })} />
             <Toggle label="Dùng file .srt đi kèm" checked={settings.use_sidecar_srt} onChange={(value) => updateAdvancedSettings({ use_sidecar_srt: value })} />
             <Toggle label="Dùng subtitle nhúng" checked={settings.use_embedded_subtitle} onChange={(value) => updateAdvancedSettings({ use_embedded_subtitle: value })} />
@@ -1138,7 +1141,12 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 onEnabledChange={(value) => updateSettings({ auto_route_speech_to_voice_reup: value })}
                 onThresholdChange={(value) => updateSettings({ auto_route_speech_threshold: value })}
               />
-            ) : null}
+            ) : (
+              <AutoRouteNoSpeechCard
+                enabled={settings.auto_route_no_speech_to_silent_reup}
+                onEnabledChange={(value) => updateSettings({ auto_route_no_speech_to_silent_reup: value })}
+              />
+            )}
             <OutputFolderCard
               mode={workflowMode}
               outputFolder={outputFolder}
@@ -1978,6 +1986,40 @@ function AutoRouteSpeechCard({
       {enabled && voiceoverEnabled ? (
         <div className="rounded-md border border-emerald-300/20 bg-emerald-300/10 p-3 text-xs leading-5 text-emerald-100">
           Nếu video được chuyển sang flow có thoại và đang bật voiceover tiếng Việt, audio gốc sẽ được tắt cho video đó để tránh hai giọng chồng nhau.
+        </div>
+      ) : null}
+    </GlassCard>
+  );
+}
+
+function AutoRouteNoSpeechCard({
+  enabled,
+  onEnabledChange,
+}: {
+  enabled: boolean;
+  onEnabledChange: (value: boolean) => void;
+}) {
+  return (
+    <GlassCard className="grid gap-4 p-5" strong>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Tự phân luồng</div>
+          <h2 className="mt-2 text-xl font-semibold text-white">Tự chuyển video không thoại</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Khi chạy batch có thoại nhưng một video không có phụ đề, ASR hoặc lời thoại đủ rõ, tool sẽ tự chuyển video đó sang Silent Mode để tạo caption theo cảnh thay vì đánh lỗi.
+          </p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${enabled ? 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100' : 'border-white/15 bg-white/5 text-slate-300'}`}>
+          {enabled ? 'Đang bật' : 'Đang tắt'}
+        </span>
+      </div>
+      <label className="flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200">
+        <input type="checkbox" checked={enabled} onChange={(event) => onEnabledChange(event.target.checked)} />
+        <span>Tự động chuyển video không thoại sang Silent Mode</span>
+      </label>
+      {enabled ? (
+        <div className="rounded-md border border-sky-300/20 bg-sky-300/10 p-3 text-xs leading-5 text-sky-100">
+          Video được chuyển sẽ dùng cài đặt nhạc, overlay và voiceover hiện tại. Log của từng video sẽ ghi rõ `auto_routed_silent_immersive` để dễ lọc kết quả sau batch.
         </div>
       ) : null}
     </GlassCard>

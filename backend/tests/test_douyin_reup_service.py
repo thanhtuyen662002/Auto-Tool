@@ -6,7 +6,12 @@ from pathlib import Path
 from app.modules.douyin_reup.douyin_reup_service import DouyinReupService
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem, SubtitleSourceResult, TranslationResult
 from app.modules.job_recovery import JobCheckpointService, JobStepStatus, RecoverableStep
-from app.modules.silent_immersive_reup.silent_schema import SpeechPresenceResult
+from app.modules.silent_immersive_reup.silent_schema import (
+    ImmersiveCaptionLine,
+    SilentReupPlan,
+    SilentReupResult,
+    SpeechPresenceResult,
+)
 from app.schemas.project_schema import ProjectConfig
 
 
@@ -218,4 +223,115 @@ def test_silent_batch_auto_routes_speech_video_to_voice_flow(tmp_path, monkeypat
     assert result.status == "success"
     assert result.reup_mode == "auto_routed_voice_reup"
     assert result.speech_score == 0.72
+    assert any("Tự động chuyển" in warning for warning in result.warnings)
+
+
+def test_voice_batch_auto_routes_no_speech_video_to_silent_flow(tmp_path, monkeypatch):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "outputs"
+    source_dir.mkdir()
+    output_dir.mkdir()
+    video_path = source_dir / "silent.mp4"
+    video_path.write_bytes(b"fake video")
+
+    monkeypatch.setattr(
+        "app.modules.douyin_reup.douyin_reup_service.speech_result_for_video",
+        lambda video_path, settings: SpeechPresenceResult(
+            video_path=video_path,
+            has_speech=False,
+            speech_score=0.05,
+            audio_energy_score=0.1,
+            speech_segments_count=0,
+            method="test",
+            warnings=[],
+        ),
+    )
+
+    class FakeDetector:
+        def detect_source(self, video, settings, work_dir):
+            return SubtitleSourceResult(
+                video_path=video.path,
+                source_type="none",
+                source_srt_path=None,
+                language="zh",
+                errors=["Không có phụ đề hoặc lời thoại đủ rõ."],
+            )
+
+    class FakeSilentPipeline:
+        last_plan_path = None
+        last_ocr_source_srt_path = None
+        last_voiceover_script_path = None
+        last_voiceover_subtitle_path = None
+        last_ocr_debug_json_path = None
+        last_ocr_frame_count = 0
+        last_ocr_detected_line_count = 0
+        last_ocr_average_confidence = 0.0
+
+        def build_plan(self, video_path, settings, output_dir, product_context=None, gemini_api_keys=None):
+            assert settings.preset_id == "silent_chill_immersive"
+            assert settings.auto_route_speech_to_voice_reup is False
+            plan_path = Path(output_dir) / "silent_reup_plan.json"
+            plan_path.write_text("{}", encoding="utf-8")
+            self.last_plan_path = str(plan_path)
+            return SilentReupPlan(
+                video_path=video_path,
+                strategy=settings.silent_mode_strategy,
+                has_speech=False,
+                speech_score=0.05,
+                visual_segments=[],
+                captions=[
+                    ImmersiveCaptionLine(
+                        index=1,
+                        start=0,
+                        end=2,
+                        text="Caption theo cảnh",
+                    )
+                ],
+                recommended_audio_mode="original_audio_plus_bgm",
+            )
+
+        def write_caption_srt(self, plan, output_dir, filename):
+            path = Path(output_dir) / filename
+            path.write_text("1\n00:00:00,000 --> 00:00:02,000\nCaption theo cảnh\n", encoding="utf-8")
+            return str(path)
+
+        def render_from_plan(self, plan, settings, output_dir, **kwargs):
+            output = Path(output_dir) / "silent_reup.mp4"
+            output.write_bytes(b"fake mp4")
+            return SilentReupResult(
+                input_video_path=plan.video_path,
+                output_video_path=str(output),
+                plan_path=self.last_plan_path,
+                caption_srt_path=str(Path(output_dir) / "video_001_silent_vi.srt"),
+                status="success",
+            )
+
+    config = _project_config(tmp_path, source_dir, output_dir)
+    settings = DouyinReupSettings(
+        enabled=True,
+        preset_id="voice_priority",
+        preset_name="Có thoại",
+        review_subtitles_before_render=False,
+        auto_render_after_translation=True,
+        auto_route_no_speech_to_silent_reup=True,
+    )
+    config = config.model_copy(update={"douyin_reup": settings})
+    video = DouyinVideoItem(
+        path=str(video_path),
+        filename=video_path.name,
+        duration=8,
+        width=1080,
+        height=1920,
+        fps=30,
+        has_audio=True,
+    )
+
+    result = DouyinReupService(
+        source_detector=FakeDetector(),
+        silent_pipeline=FakeSilentPipeline(),
+    )._process_one_video(1, video, config, settings, output_dir)
+
+    assert result.status == "success"
+    assert result.reup_mode == "auto_routed_silent_immersive"
+    assert result.speech_score == 0.05
     assert any("Tự động chuyển" in warning for warning in result.warnings)
