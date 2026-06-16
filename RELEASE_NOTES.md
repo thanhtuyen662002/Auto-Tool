@@ -1,5 +1,23 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.10
+
+### Highlights
+
+- Added resource-aware batch planning, stage gates and safer product render worker limits.
+- Improved Douyin/Silent job resume so interrupted, pending and failed items can continue more reliably.
+- Preserved Google Cloud TTS credentials when reup voiceover overrides provider/voice.
+- Added startup readiness checks for required Gemini/TTS/BGM config before long reup batches.
+- Added mixed-batch auto routing: Silent batches can route speech videos to voice reup, and voice batches can route no-speech videos to Silent Mode when safe.
+- Made required subtitle QA failures explicit instead of warning-only.
+- Capped ASR audio duration with `AUTO_TOOL_ASR_MAX_AUDIO_SECONDS` to reduce long-video hangs.
+- Hardened job logging when background workers start before the SQLite log table is initialized.
+
+### QA
+
+- Backend test suite passed: 428 tests.
+- Frontend production build passed.
+
 ## v1.0.6
 
 ### Highlights
