@@ -62,13 +62,22 @@ class ImmersiveCaptionGenerator:
         for index, segment in enumerate(segments, start=1):
             if segment.duration < 0.35:
                 continue
-            industry_hint = (
-                (segment.primary_industry if use_visual_tags else None)
-                or selected_industry
-                or (video_recommended_industry if has_product_context else None)
-                or product_industry
-                or "general_product"
-            )
+            if has_product_context:
+                industry_hint = (
+                    selected_industry
+                    or product_industry
+                    or video_recommended_industry
+                    or (segment.primary_industry if use_visual_tags else None)
+                    or "general_product"
+                )
+            else:
+                industry_hint = (
+                    (segment.primary_industry if use_visual_tags else None)
+                    or selected_industry
+                    or video_recommended_industry
+                    or product_industry
+                    or "general_product"
+                )
             segment_industry = normalize_industry(industry_hint)
             intent = _intent_for_segment(segment.segment_type, segment if use_visual_tags else None)
             if len(segments) > 1 and index == len(segments):
