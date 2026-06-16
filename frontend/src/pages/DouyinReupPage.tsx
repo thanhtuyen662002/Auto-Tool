@@ -52,6 +52,7 @@ import {
   startDouyinOneClick,
   startSilentOneClick,
 } from '../services/startWorkflowApi';
+import { getHealth as getBackendHealth, type HealthResponse } from '../services/healthApi';
 import {
   addRecentMusicFolder,
   addRecentOutputFolder,
@@ -294,6 +295,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     include_posting_checklist: true,
   });
   const [dependencyStatus, setDependencyStatus] = useState<SystemDependencyStatusResponse | null>(null);
+  const [backendHealth, setBackendHealth] = useState<HealthResponse | null>(null);
   const [retryPresetByOutput, setRetryPresetByOutput] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -362,9 +364,27 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       musicFolder: settings.music_folder || '',
       addMusic: addMusicEnabled,
       backendReady: dependencyStatus !== null,
+      backendHealth,
+      translationProvider: settings.translation_provider,
+      voiceoverEnabled: settings.generate_voiceover_for_silent_video,
+      voiceProvider: settings.silent_voiceover_provider,
       autoRender: currentAutoRender,
     }),
-    [addMusicEnabled, currentAutoRender, dependencyStatus, outputFolder, scanErrors, scanSummary, selectedPresetCard, settings.music_folder, sourceFolder],
+    [
+      addMusicEnabled,
+      backendHealth,
+      currentAutoRender,
+      dependencyStatus,
+      outputFolder,
+      scanErrors,
+      scanSummary,
+      selectedPresetCard,
+      settings.generate_voiceover_for_silent_video,
+      settings.music_folder,
+      settings.silent_voiceover_provider,
+      settings.translation_provider,
+      sourceFolder,
+    ],
   );
   const validationMessages = useMemo(
     () => buildValidationMessages(checklist, selectedPresetCard, dependencyStatus, scanSummary, currentAutoRender),
@@ -417,6 +437,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     getHealth()
       .then(setDependencyStatus)
       .catch(() => setDependencyStatus(null));
+    getBackendHealth()
+      .then(setBackendHealth)
+      .catch(() => setBackendHealth(null));
     listSilentCaptionIndustries()
       .then((response) => setSilentIndustries(response.items))
       .catch(() => setSilentIndustries(DEFAULT_SILENT_INDUSTRIES));
@@ -1712,6 +1735,10 @@ function buildChecklist({
   musicFolder,
   addMusic,
   backendReady,
+  backendHealth,
+  translationProvider,
+  voiceoverEnabled,
+  voiceProvider,
   autoRender,
 }: {
   sourceFolder: string;
@@ -1722,8 +1749,16 @@ function buildChecklist({
   musicFolder: string;
   addMusic: boolean;
   backendReady: boolean;
+  backendHealth: HealthResponse | null;
+  translationProvider: string;
+  voiceoverEnabled: boolean;
+  voiceProvider: string;
   autoRender: boolean;
 }): StartChecklistItem[] {
+  const needsGemini = normalizeProviderId(translationProvider) === 'gemini';
+  const hasGemini = backendHealth?.capabilities?.translation === true;
+  const needsGoogleTts = voiceoverEnabled && normalizeProviderId(voiceProvider) === 'google_cloud_tts';
+  const hasGoogleTts = backendHealth?.capabilities?.google_cloud_tts === true;
   return [
     {
       id: 'source',
@@ -1760,12 +1795,38 @@ function buildChecklist({
         : 'Không thêm nhạc nền.',
     },
     {
+      id: 'translation',
+      label: 'Dịch thuật',
+      status: needsGemini ? (hasGemini ? 'ok' : 'warning') : 'ok',
+      message: needsGemini
+        ? hasGemini
+          ? 'Gemini đã sẵn sàng để dịch hoặc tạo nội dung.'
+          : 'Chưa xác nhận được Gemini API key. Nếu backend yêu cầu Gemini, render sẽ bị chặn trước khi chạy.'
+        : 'Flow hiện tại không yêu cầu Gemini.',
+    },
+    {
+      id: 'tts',
+      label: 'Giọng đọc',
+      status: needsGoogleTts ? (hasGoogleTts ? 'ok' : 'missing') : 'ok',
+      message: voiceoverEnabled
+        ? needsGoogleTts
+          ? hasGoogleTts
+            ? 'Google Cloud TTS đã có credential.'
+            : 'Bạn đã chọn Google Cloud TTS nhưng chưa cấu hình API key, access token hoặc file service account.'
+          : 'Đã chọn provider giọng đọc không cần Google credential.'
+        : 'Không tạo voiceover tiếng Việt.',
+    },
+    {
       id: 'backend',
       label: 'Backend',
       status: backendReady ? 'ok' : 'warning',
       message: backendReady ? 'Connected.' : 'Backend sẽ được kiểm tra lại khi start.',
     },
   ];
+}
+
+function normalizeProviderId(value: string | null | undefined): string {
+  return (value || '').trim().toLowerCase().replace(/-/g, '_');
 }
 
 function buildValidationMessages(
