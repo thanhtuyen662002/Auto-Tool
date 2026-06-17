@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 MAX_INTER_LINE_SILENCE = 0.28
 COMFORTABLE_SUBTITLE_LOCKED_SPEEDUP = 1.45
 MAX_SUBTITLE_LOCKED_SPEEDUP = 3.0
+MAX_GLOBAL_VOICE_SPEEDUP = 1.65
 MIN_SUBTITLE_SLOT_DURATION = 0.18
 
 
@@ -413,9 +414,16 @@ class VoiceGenerator:
         try:
             source_duration = probe_media_duration(input_path)
             if source_duration > target_duration > 0:
+                required_speed = source_duration / max(target_duration, 0.001)
+                applied_speed = min(required_speed, MAX_GLOBAL_VOICE_SPEEDUP)
+                if applied_speed > 1.01:
+                    self._add_warning_once(
+                        f"voice_global_speed_adjusted: Giọng đọc dài hơn video nên đã tăng tốc toàn đoạn "
+                        f"{applied_speed:.2f}x để hạn chế cắt ngang câu."
+                    )
                 warning = (
                     f"voice_longer_than_video: Giọng đọc ({source_duration:.3f}s) dài hơn video "
-                    f"({target_duration:.3f}s), audio sẽ được cắt theo thời lượng video."
+                    f"({target_duration:.3f}s); tool sẽ tăng tốc trước và chỉ cắt phần dư cuối nếu vẫn còn quá dài."
                 )
                 logger.warning(warning)
                 self.warnings.append(warning)
@@ -614,7 +622,14 @@ class VoiceGenerator:
             return "asetpts=PTS-STARTPTS"
 
         if source_duration > target_duration:
-            return f"atrim=0:{target_duration:.3f},asetpts=PTS-STARTPTS"
+            required_speed = source_duration / max(target_duration, 0.001)
+            applied_speed = min(max(required_speed, 1.0), MAX_GLOBAL_VOICE_SPEEDUP)
+            filters: list[str] = []
+            if applied_speed > 1.01:
+                filters.append(VoiceGenerator._atempo_filter(applied_speed))
+            filters.append(f"atrim=0:{target_duration:.3f}")
+            filters.append("asetpts=PTS-STARTPTS")
+            return ",".join(filters)
         return "asetpts=PTS-STARTPTS"
 
     @staticmethod

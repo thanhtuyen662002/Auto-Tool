@@ -7,7 +7,7 @@ from pathlib import Path
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_video, run_ffmpeg
 from app.modules.douyin_reup.bgm_mixer import BGMMixer
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem, TranslationResult
-from app.modules.douyin_reup.subtitle_timing_guard import parse_srt_blocks
+from app.modules.douyin_reup.subtitle_timing_guard import SubtitleBlock, parse_srt_blocks
 from app.modules.script_writer.script_writer import ProductVideoScript, SubtitleLine, VoiceoverLine
 from app.modules.subtitle_review import ApproveSubtitleDocumentRequest, SubtitleReviewService, SubtitleReviewStatus
 from app.modules.tts.settings_builder import voiceover_tts_settings
@@ -320,14 +320,8 @@ class DouyinRenderPipeline:
         blocks = [block for block in parse_srt_blocks(subtitle_srt_path) if block.text.strip()]
         if not blocks:
             raise RuntimeError("Đã bật tạo giọng đọc tiếng Việt nhưng subtitle Việt rỗng.")
-        voiceover = [
-            VoiceoverLine(time_hint=f"{block.start:.2f}-{block.end:.2f}s", text=block.text.strip())
-            for block in blocks
-        ]
-        subtitles = [
-            SubtitleLine(start_hint=block.start, end_hint=block.end, text=block.text.strip())
-            for block in blocks
-        ]
+        voiceover = _build_smooth_voiceover_lines(blocks)
+        subtitles = _subtitle_lines_from_voiceover(voiceover)
         script = ProductVideoScript(
             hook=voiceover[0].text,
             voiceover=voiceover,
@@ -354,6 +348,11 @@ class DouyinRenderPipeline:
             allow_script_shortening=False,
             lock_subtitle_timing=True,
         )
+        if len(voiceover) < len(blocks):
+            self.voice_generator.warnings.append(
+                f"voiceover_sentence_grouping: Đã gom {len(blocks)} dòng phụ đề thành {len(voiceover)} cụm đọc "
+                "để giọng đọc liền mạch hơn; subtitle hiển thị vẫn giữ timing gốc."
+            )
         result = self.voice_generator.last_tts_result
         if not result or result.provider == "silent":
             raise RuntimeError(
@@ -502,6 +501,90 @@ def _escape_filter_path(path: str) -> str:
 
 def _clamp_volume(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[VoiceoverLine]:
+    groups: list[VoiceoverLine] = []
+    current_texts: list[str] = []
+    current_start = 0.0
+    current_end = 0.0
+
+    def flush() -> None:
+        nonlocal current_texts, current_start, current_end
+        text = _clean_spoken_text(" ".join(current_texts))
+        if text:
+            groups.append(VoiceoverLine(time_hint=f"{current_start:.2f}-{current_end:.2f}s", text=text))
+        current_texts = []
+
+    for block in blocks:
+        text = _clean_spoken_text(block.text)
+        if not text:
+            continue
+        if not current_texts:
+            current_texts = [text]
+            current_start = float(block.start)
+            current_end = float(block.end)
+            continue
+
+        previous_text = _clean_spoken_text(" ".join(current_texts))
+        gap = max(0.0, float(block.start) - current_end)
+        span = max(0.0, float(block.end) - current_start)
+        combined_len = len(f"{previous_text} {text}".strip())
+        if _should_merge_spoken_subtitle_block(previous_text, text, gap, span, combined_len):
+            current_texts.append(text)
+            current_end = max(current_end, float(block.end))
+            continue
+
+        flush()
+        current_texts = [text]
+        current_start = float(block.start)
+        current_end = float(block.end)
+
+    flush()
+    return groups
+
+
+def _subtitle_lines_from_voiceover(lines: list[VoiceoverLine]) -> list[SubtitleLine]:
+    subtitles: list[SubtitleLine] = []
+    for line in lines:
+        try:
+            start_text, end_text = line.time_hint.rstrip("s").split("-", 1)
+            start = float(start_text)
+            end = float(end_text)
+        except (ValueError, AttributeError):
+            start = None
+            end = None
+        subtitles.append(SubtitleLine(start_hint=start, end_hint=end, text=line.text))
+    return subtitles
+
+
+def _should_merge_spoken_subtitle_block(
+    previous_text: str,
+    next_text: str,
+    gap: float,
+    span: float,
+    combined_len: int,
+) -> bool:
+    if gap > 0.65 or span > 8.0 or combined_len > 180:
+        return False
+    if len(previous_text) < 34:
+        return True
+    if previous_text.rstrip().endswith((",", ";", ":", "-", "–", "—")):
+        return True
+    if not _ends_sentence(previous_text):
+        return True
+    first = next_text[:1]
+    if first and first.islower():
+        return True
+    return False
+
+
+def _clean_spoken_text(text: str) -> str:
+    return " ".join(str(text).replace("\r", " ").replace("\n", " ").split()).strip()
+
+
+def _ends_sentence(text: str) -> bool:
+    return text.rstrip().endswith((".", "!", "?", "…"))
 
 
 def _allow_render_without_subtitle() -> bool:

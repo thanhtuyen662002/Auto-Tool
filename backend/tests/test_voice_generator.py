@@ -186,3 +186,10 @@ def test_subtitle_locked_voiceover_speeds_up_dense_line_without_dense_warning(tm
     assert "atempo=2.000,atempo=1.200" in filters[0]
     assert any("voice_line_speed_adjusted" in warning for warning in generator.warnings)
     assert not any("voice_line_too_dense_for_subtitle" in warning for warning in generator.warnings)
+
+
+def test_global_voice_fit_speeds_up_before_trimming():
+    audio_filter = VoiceGenerator._audio_trim_filter(source_duration=14.0, target_duration=10.0)
+
+    assert audio_filter.startswith("atempo=1.400")
+    assert "atrim=0:10.000" in audio_filter

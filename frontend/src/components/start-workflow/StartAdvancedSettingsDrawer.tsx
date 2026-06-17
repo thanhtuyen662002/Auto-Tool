@@ -36,14 +36,14 @@ export default function StartAdvancedSettingsDrawer({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-white">Cài đặt nâng cao</h2>
-                <p className="mt-1 text-sm text-slate-400">Các mục kỹ thuật được để riêng để màn start đơn giản hơn.</p>
+                <p className="mt-1 text-sm text-slate-400">Tinh chỉnh phụ đề, nhận diện giọng nói, OCR, âm thanh, overlay và giới hạn batch.</p>
               </div>
               <button className="rounded-md p-2 text-slate-300 hover:bg-white/10 hover:text-white" type="button" onClick={onClose} aria-label="Đóng">
                 <X size={18} />
               </button>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              {['Phụ đề', 'Nhận diện giọng nói', 'Nhận diện chữ', 'Âm thanh', 'Đầu ra', 'Kiểm tra cuối', 'Gói xuất bản'].map((item) => (
+              {['Phụ đề', 'Giọng nói', 'OCR', 'Âm thanh', 'Overlay', 'Đầu ra', 'Batch lớn'].map((item) => (
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-300" key={item}>{item}</span>
               ))}
             </div>

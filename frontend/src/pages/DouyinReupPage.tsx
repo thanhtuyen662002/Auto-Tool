@@ -1257,6 +1257,18 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               recommendationReason={recommendation?.reason ?? recommendationReason(workflowMode, sourceFolder, recommendedPresetCard)}
               onSelect={(presetId) => void handlePresetSelect(presetId)}
             />
+            <ProductContextCard
+              value={silentProductContext}
+              industries={silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES}
+              tone={settings.silent_caption_tone}
+              busy={busy || videos.length === 0}
+              hasPreview={Boolean(captionPreview)}
+              onChange={updateSilentProductContext}
+              onToneChange={(value) => updateSettings({ silent_caption_tone: value })}
+              onPreview={() => void handleGenerateCaptionPreview()}
+              onRegenerate={() => void handleRegenerateCaptionPreview()}
+              onCreateReview={() => void handleCreateCaptionReviewDocument()}
+            />
             <RenderFlowCard
               mode={workflowMode}
               reviewMode={usesManualSubtitleReview}
@@ -1315,20 +1327,6 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               onEnabledChange={updateVoiceoverEnabled}
               onVoiceChange={updateVoiceChoice}
             />
-            {workflowMode === 'silent_immersive' ? (
-              <ProductContextCard
-                value={silentProductContext}
-                industries={silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES}
-                tone={settings.silent_caption_tone}
-                busy={busy || videos.length === 0}
-                hasPreview={Boolean(captionPreview)}
-                onChange={updateSilentProductContext}
-                onToneChange={(value) => updateSettings({ silent_caption_tone: value })}
-                onPreview={() => void handleGenerateCaptionPreview()}
-                onRegenerate={() => void handleRegenerateCaptionPreview()}
-                onCreateReview={() => void handleCreateCaptionReviewDocument()}
-              />
-            ) : null}
             {captionPreview ? (
               <SilentPlanPreview
                 preview={captionPreview}
@@ -1346,6 +1344,15 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         }
         side={
           <>
+            <QuickTuningCard
+              mode={workflowMode}
+              hasCustomSettings={mode === 'advanced'}
+              autoRender={currentAutoRender}
+              addMusic={addMusicEnabled}
+              voiceoverEnabled={settings.generate_voiceover_for_silent_video}
+              autoRouteEnabled={workflowMode === 'silent_immersive' ? settings.auto_route_speech_to_voice_reup : settings.auto_route_no_speech_to_silent_reup}
+              onOpenAdvanced={() => setAdvancedOpen(true)}
+            />
             <WorkflowPreviewPanel mode={workflowMode} preset={workflowPreviewPreset} scanSummary={scanSummary} jobStatus={jobStatus} />
             <StartChecklistCard items={checklist} />
             <StartValidationAlert messages={validationMessages} />
@@ -1636,6 +1643,58 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         </section>
       ) : null}
     </>
+  );
+}
+
+function QuickTuningCard({
+  mode,
+  hasCustomSettings,
+  autoRender,
+  addMusic,
+  voiceoverEnabled,
+  autoRouteEnabled,
+  onOpenAdvanced,
+}: {
+  mode: StartWorkflowMode;
+  hasCustomSettings: boolean;
+  autoRender: boolean;
+  addMusic: boolean;
+  voiceoverEnabled: boolean;
+  autoRouteEnabled: boolean;
+  onOpenAdvanced: () => void;
+}) {
+  const routeLabel = mode === 'silent_immersive' ? 'Tự chuyển video có thoại' : 'Tự chuyển video không thoại';
+  const items = [
+    { label: 'Render', value: autoRender ? 'Tự động' : 'Duyệt trước' },
+    { label: 'Nhạc nền', value: addMusic ? 'Bật' : 'Tắt' },
+    { label: 'Giọng đọc', value: voiceoverEnabled ? 'Bật' : 'Tắt' },
+    { label: routeLabel, value: autoRouteEnabled ? 'Bật' : 'Tắt' },
+  ];
+
+  return (
+    <GlassCard className="grid content-start gap-4 p-5" strong>
+      <div>
+        <h2 className="font-semibold text-white">Tinh chỉnh nhanh</h2>
+        <p className="mt-1 text-sm leading-6 text-slate-400">
+          Các lựa chọn ảnh hưởng trực tiếp đến batch lớn được gom ở đây để bạn không phải kéo sâu xuống dưới.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-1">
+        {items.map((item) => (
+          <div className="rounded-md border border-white/10 bg-slate-950/45 px-3 py-2" key={item.label}>
+            <div className="text-xs uppercase tracking-wide text-slate-500">{item.label}</div>
+            <div className="mt-1 text-sm font-semibold text-slate-100">{item.value}</div>
+          </div>
+        ))}
+      </div>
+      <button
+        className="inline-flex min-h-10 items-center justify-center rounded-md border border-cyan-300/40 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/15"
+        type="button"
+        onClick={onOpenAdvanced}
+      >
+        {hasCustomSettings ? 'Mở cấu hình đã tùy chỉnh' : 'Mở cài đặt nâng cao'}
+      </button>
+    </GlassCard>
   );
 }
 

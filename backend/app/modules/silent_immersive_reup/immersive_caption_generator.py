@@ -72,13 +72,18 @@ class ImmersiveCaptionGenerator:
                     or "general_product"
                 )
             else:
-                industry_hint = (
-                    (segment.primary_industry if use_visual_tags else None)
-                    or selected_industry
-                    or video_recommended_industry
-                    or product_industry
-                    or "general_product"
-                )
+                if product_locked:
+                    industry_hint = selected_industry or product_industry or "general_product"
+                elif selected_industry == "general_product":
+                    industry_hint = "general_product"
+                else:
+                    industry_hint = (
+                        (segment.primary_industry if use_visual_tags else None)
+                        or selected_industry
+                        or video_recommended_industry
+                        or product_industry
+                        or "general_product"
+                    )
             segment_industry = normalize_industry(industry_hint)
             intent = _intent_for_segment(segment.segment_type, segment if use_visual_tags else None)
             if len(segments) > 1 and index == len(segments):
