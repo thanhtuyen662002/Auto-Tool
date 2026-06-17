@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   applyDouyinReupPreset,
   buildSilentReupPlan,
+  browsePath,
   createSilentReupReviewDocument,
   createDouyinExportPack,
   finalOutputQAReportUrl,
@@ -170,6 +171,10 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   visual_style_preset_id: 'clean_review_light',
   burn_subtitle: true,
   add_overlay: true,
+  overlay_mode: 'preset',
+  custom_overlay_path: 'examples/overlay',
+  custom_overlay_height_percent: 100,
+  custom_overlay_fit_mode: 'cover',
   keep_original_audio: true,
   add_bgm: true,
   music_folder: '',
@@ -794,6 +799,28 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     }
   }
 
+  async function browseCustomOverlay(mode: 'file' | 'folder') {
+    setError(null);
+    try {
+      const response = await browsePath({
+        mode,
+        title: mode === 'file' ? 'Chọn ảnh overlay custom' : 'Chọn thư mục overlay custom',
+        initial_path: settings.custom_overlay_path || 'examples/overlay',
+        extensions: mode === 'file' ? ['.png', '.jpg', '.jpeg', '.webp'] : [],
+      });
+      if (!response.cancelled && response.path) {
+        updateAdvancedSettings({
+          add_overlay: true,
+          overlay_mode: 'custom',
+          custom_overlay_path: response.path,
+          custom_overlay_height_percent: settings.custom_overlay_height_percent ?? 100,
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể mở hộp thoại chọn overlay custom.');
+    }
+  }
+
   function requestStart() {
     if (riskyPreset) {
       setRiskyConfirmOpen(true);
@@ -1038,8 +1065,72 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             />
             <Toggle label="Render MP4 ngay sau khi dịch" checked={currentAutoRender} onChange={(value) => updateRenderFlow(value ? 'auto' : 'review', true)} />
             <Toggle label="Burn subtitle vào video" checked={settings.burn_subtitle} onChange={(value) => updateAdvancedSettings({ burn_subtitle: value })} />
-            <Toggle label="Dùng overlay" checked={settings.add_overlay} onChange={(value) => updateAdvancedSettings({ add_overlay: value })} />
+            <Toggle label="Dùng overlay" checked={settings.add_overlay} onChange={(value) => updateAdvancedSettings({ add_overlay: value, overlay_mode: value ? settings.overlay_mode || 'preset' : 'none' })} />
           </div>
+        </GlassCard>
+
+        <GlassCard className="grid gap-4 p-4" strong>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-white">Overlay custom</h3>
+              <p className="mt-1 text-sm text-slate-400">
+                Dùng ảnh PNG/WebP nền trong suốt kích thước 1080x1920 để thay overlay mặc định.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'preset', label: 'Overlay mặc định' },
+                { value: 'custom', label: 'Overlay custom' },
+                { value: 'none', label: 'Không dùng' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  className={`rounded-md border px-3 py-2 text-xs font-semibold ${
+                    (settings.overlay_mode || 'preset') === option.value
+                      ? 'border-cyan-300 bg-cyan-300 text-slate-950'
+                      : 'border-white/15 bg-slate-950/70 text-slate-200 hover:border-cyan-300/60'
+                  }`}
+                  type="button"
+                  onClick={() => updateAdvancedSettings({ overlay_mode: option.value, add_overlay: option.value !== 'none' })}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {settings.overlay_mode === 'custom' ? (
+            <div className="grid gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-slate-200">Đường dẫn overlay custom</span>
+                <input
+                  className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                  type="text"
+                  value={settings.custom_overlay_path || ''}
+                  placeholder="examples/overlay hoặc D:\\Overlay\\khung_1080x1920.png"
+                  onChange={(event) => updateAdvancedSettings({ custom_overlay_path: event.target.value })}
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button className="rounded-md border border-white/15 px-3 py-2 text-sm font-semibold text-slate-100 hover:border-cyan-300/60" type="button" onClick={() => void browseCustomOverlay('file')}>
+                  Chọn ảnh
+                </button>
+                <button className="rounded-md border border-white/15 px-3 py-2 text-sm font-semibold text-slate-100 hover:border-cyan-300/60" type="button" onClick={() => void browseCustomOverlay('folder')}>
+                  Chọn thư mục
+                </button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <SliderInput label="Chiều cao overlay custom (%)" min={5} max={100} step={1} value={settings.custom_overlay_height_percent ?? 100} onChange={(value) => updateAdvancedSettings({ custom_overlay_height_percent: value })} />
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-200">Cách fit overlay</span>
+                  <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.custom_overlay_fit_mode || 'cover'} onChange={(event) => updateAdvancedSettings({ custom_overlay_fit_mode: event.target.value })}>
+                    <option value="cover">Phủ kín video</option>
+                    <option value="contain">Giữ toàn bộ ảnh</option>
+                    <option value="stretch">Kéo đúng 1080x1920</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          ) : null}
         </GlassCard>
 
         <GlassCard className="grid gap-4 p-4" strong>

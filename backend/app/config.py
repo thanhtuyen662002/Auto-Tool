@@ -51,11 +51,21 @@ def load_project_config(config_path: str) -> ProjectConfig:
         if visual_style_updates
         else config.visual_style
     )
+    douyin_reup = config.douyin_reup
+    if douyin_reup and douyin_reup.overlay_mode == "custom" and douyin_reup.custom_overlay_path:
+        douyin_reup = douyin_reup.model_copy(
+            update={
+                "custom_overlay_path": str(
+                    resolve_path(douyin_reup.custom_overlay_path, base_dir, must_exist=True)
+                )
+            }
+        )
     return config.model_copy(
         update={
             "source_folder": str(resolve_path(config.source_folder, base_dir, must_exist=True)),
             "output_folder": str(resolve_path(config.output_folder, base_dir)),
             "music": music,
             "visual_style": visual_style,
+            "douyin_reup": douyin_reup,
         }
     )

@@ -167,6 +167,7 @@ from app.modules.tts.tts_schema import TTSSettings
 from app.modules.tts.providers.google_cloud_tts_provider import list_google_cloud_voices
 from app.modules.tts.providers.base import TTSProviderError
 from app.modules.visual_style.style_registry import get_visual_style_preset, list_visual_style_presets
+from app.modules.visual_style.custom_overlay_asset import select_custom_overlay_asset
 from app.modules.visual_style.visual_style_service import VisualStyleService
 from app.local_app import (
     LocalAppConfig,
@@ -3979,9 +3980,10 @@ def _check_config_requirements(
                         field="settings.music_folder",
                         message=f"Thư mục nhạc nền không có file audio hợp lệ: {settings.music_folder}",
                         action="Thêm file .mp3/.wav/.m4a/.aac/.flac/.ogg/.opus hoặc tắt mục Thêm nhạc nền.",
-                    )
                 )
+            )
 
+    issues.extend(_overlay_requirement_issues(config, mode))
     issues.extend(_product_music_requirement_issues(config, mode))
 
     errors_count = sum(1 for issue in issues if issue.severity == "error")
@@ -4051,6 +4053,42 @@ def _has_valid_favorite_bgm_file(paths: list[str]) -> bool:
         except OSError:
             continue
     return False
+
+
+def _overlay_requirement_issues(config: ProjectConfig | None, mode: str) -> list[ConfigRequirementIssue]:
+    if config is None:
+        return []
+
+    normalized_mode = mode.strip().lower()
+    overlay_path: str | None = None
+    custom_overlay_required = False
+    field = "visual_style.custom_overlay_path"
+    if normalized_mode == "product_render" and config.visual_style.overlay_mode == "custom":
+        overlay_path = config.visual_style.custom_overlay_path
+        custom_overlay_required = True
+    elif normalized_mode in {"douyin_reup", "silent_reup"} and config.douyin_reup:
+        settings = config.douyin_reup
+        if settings.add_overlay and settings.overlay_mode == "custom":
+            overlay_path = settings.custom_overlay_path
+            custom_overlay_required = True
+            field = "douyin_reup.custom_overlay_path"
+
+    if not custom_overlay_required:
+        return []
+
+    try:
+        select_custom_overlay_asset(overlay_path)
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        return [
+            ConfigRequirementIssue(
+                severity="error",
+                code="custom_overlay_missing_or_invalid",
+                field=field,
+                message=f"Overlay custom không hợp lệ: {exc}",
+                action="Chọn file .png/.jpg/.jpeg/.webp hoặc thư mục có ảnh overlay nền trong suốt trước khi render.",
+            )
+        ]
+    return []
 
 
 def _product_music_requirement_issues(config: ProjectConfig | None, mode: str) -> list[ConfigRequirementIssue]:
@@ -4405,6 +4443,10 @@ def _normalize_douyin_settings(settings: DouyinReupSettings, base_dir: Path) -> 
     updates: dict[str, Any] = {}
     if settings.music_folder:
         updates["music_folder"] = str(resolve_path(settings.music_folder, base_dir, must_exist=True))
+    if settings.overlay_mode == "custom" and settings.custom_overlay_path:
+        updates["custom_overlay_path"] = str(
+            resolve_path(settings.custom_overlay_path, base_dir, must_exist=True)
+        )
     if settings.selected_video_paths:
         updates["selected_video_paths"] = [
             str(resolve_path(path, base_dir, must_exist=True)) for path in settings.selected_video_paths

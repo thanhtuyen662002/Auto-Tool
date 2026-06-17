@@ -7,6 +7,11 @@ from PIL import Image
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_media_duration, probe_video, run_ffmpeg
 from app.modules.cache.cache_service import CacheService
 from app.modules.script_writer.script_writer import ProductVideoScript
+from app.modules.visual_style.custom_overlay_asset import (
+    build_custom_overlay_asset,
+    fit_overlay_region,
+    select_custom_overlay_asset,
+)
 from app.modules.visual_style.overlay_asset_builder import build_overlay_asset
 from app.modules.visual_style.visual_style_service import VisualStyleService
 from app.schemas.project_schema import ProjectConfig
@@ -636,22 +641,14 @@ class OverlayRenderer:
         if not source_path:
             raise FileNotFoundError("Bạn đã chọn custom overlay nhưng chưa nhập đường dẫn ảnh/thư mục overlay.")
 
-        target = Path(output_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        source = Image.open(source_path).convert("RGBA")
-        alpha_bbox = source.getchannel("A").getbbox()
-        if alpha_bbox:
-            source = source.crop(alpha_bbox)
-
-        target_height = max(1, round(height * cls._custom_overlay_height_percent(config) / 100))
-        target_width = width
-        fit_mode = config.visual_style.custom_overlay_fit_mode
-        overlay_region = cls._fit_overlay_region(source, target_width, target_height, fit_mode)
-
-        canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        canvas.alpha_composite(overlay_region, (0, height - target_height))
-        canvas.save(target)
-        return str(target)
+        return build_custom_overlay_asset(
+            source_path=source_path,
+            output_path=output_path,
+            width=width,
+            height=height,
+            height_percent=cls._custom_overlay_height_percent(config),
+            fit_mode=config.visual_style.custom_overlay_fit_mode,
+        )
 
     @staticmethod
     def _fit_overlay_region(source: Image.Image, target_width: int, target_height: int, fit_mode: str) -> Image.Image:
@@ -693,6 +690,8 @@ class OverlayRenderer:
     def _select_custom_overlay_asset(path: str | None) -> str:
         if not path:
             raise FileNotFoundError("Bạn đã chọn custom overlay nhưng chưa nhập đường dẫn ảnh/thư mục overlay.")
+
+        return select_custom_overlay_asset(path)
 
         source = Path(path).expanduser()
         if source.is_dir():

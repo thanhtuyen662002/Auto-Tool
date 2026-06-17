@@ -52,6 +52,10 @@ class DouyinReupSettings(BaseModel):
     visual_style_preset_id: str = "clean_review_light"
     burn_subtitle: bool = True
     add_overlay: bool = True
+    overlay_mode: Literal["preset", "none", "custom"] = "preset"
+    custom_overlay_path: str | None = None
+    custom_overlay_height_percent: int | None = Field(default=100, ge=5, le=100)
+    custom_overlay_fit_mode: Literal["cover", "contain", "stretch"] = "cover"
     keep_original_audio: bool = True
     add_bgm: bool = True
     music_folder: str | None = None
@@ -137,6 +141,14 @@ class DouyinReupSettings(BaseModel):
         if not cleaned:
             raise ValueError("Không được để trống.")
         return cleaned
+
+    @field_validator("custom_overlay_path")
+    @classmethod
+    def clean_custom_overlay_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
     @field_validator("resolution")
     @classmethod

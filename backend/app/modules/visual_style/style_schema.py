@@ -71,7 +71,7 @@ class VisualStyleSettings(BaseModel):
     custom_overrides: dict[str, Any] | None = None
     overlay_mode: str = "preset"
     custom_overlay_path: str | None = None
-    custom_overlay_height_percent: int | None = Field(default=None, ge=5, le=100)
+    custom_overlay_height_percent: int | None = Field(default=100, ge=5, le=100)
     custom_overlay_fit_mode: str = "cover"
 
     @field_validator("preset_id")

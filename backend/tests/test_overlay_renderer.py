@@ -174,6 +174,31 @@ def test_custom_overlay_contain_keeps_whole_image_centered(tmp_path):
     assert image.getchannel("A").getbbox() == (223, 1286, 857, 1920)
 
 
+def test_custom_overlay_full_frame_preserves_transparent_canvas(tmp_path):
+    source_path = tmp_path / "source.png"
+    output_path = tmp_path / "overlay.png"
+    source = Image.new("RGBA", (108, 192), (0, 0, 0, 0))
+    for x in range(10, 21):
+        for y in range(10, 21):
+            source.putpixel((x, y), (255, 0, 0, 255))
+    source.save(source_path)
+
+    result = OverlayRenderer._build_custom_overlay_asset(
+        source_path=str(source_path),
+        output_path=str(output_path),
+        width=1080,
+        height=1920,
+        config=_config(overlay_mode="custom", custom_overlay_height_percent=100),
+    )
+
+    image = Image.open(result).convert("RGBA")
+    assert image.size == (1080, 1920)
+    assert image.getpixel((20, 20))[3] == 0
+    red, green, blue, alpha = image.getpixel((120, 120))
+    assert (red, green, blue) == (255, 0, 0)
+    assert alpha >= 200
+
+
 def test_render_final_video_can_disable_overlay(tmp_path, monkeypatch):
     renderer = OverlayRenderer()
     calls: list[dict] = []

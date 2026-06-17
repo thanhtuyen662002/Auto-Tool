@@ -156,6 +156,10 @@ export interface DouyinReupSettings {
   visual_style_preset_id: string;
   burn_subtitle: boolean;
   add_overlay: boolean;
+  overlay_mode: 'preset' | 'none' | 'custom' | string;
+  custom_overlay_path?: string | null;
+  custom_overlay_height_percent?: number | null;
+  custom_overlay_fit_mode?: 'cover' | 'contain' | 'stretch' | string;
   keep_original_audio: boolean;
   add_bgm: boolean;
   music_folder?: string | null;

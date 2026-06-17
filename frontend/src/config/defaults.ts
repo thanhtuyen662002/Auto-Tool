@@ -66,7 +66,7 @@ export const DEFAULT_VISUAL_STYLE_SETTINGS: VisualStyleSettings = {
   custom_overrides: null,
   overlay_mode: 'preset',
   custom_overlay_path: 'examples/overlay',
-  custom_overlay_height_percent: 33,
+  custom_overlay_height_percent: 100,
   custom_overlay_fit_mode: 'cover',
 };
 

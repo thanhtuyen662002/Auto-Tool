@@ -830,7 +830,7 @@ function OverlayModeControls({
   const mode = settings.overlay_mode ?? DEFAULT_VISUAL_STYLE_SETTINGS.overlay_mode ?? 'preset';
   const customPath = settings.custom_overlay_path ?? DEFAULT_VISUAL_STYLE_SETTINGS.custom_overlay_path ?? 'examples/overlay';
   const customHeight =
-    settings.custom_overlay_height_percent ?? DEFAULT_VISUAL_STYLE_SETTINGS.custom_overlay_height_percent ?? 33;
+    settings.custom_overlay_height_percent ?? DEFAULT_VISUAL_STYLE_SETTINGS.custom_overlay_height_percent ?? 100;
   const customFit = settings.custom_overlay_fit_mode ?? DEFAULT_VISUAL_STYLE_SETTINGS.custom_overlay_fit_mode ?? 'cover';
   const options = [
     { value: 'preset', label: 'Dùng overlay preset' },

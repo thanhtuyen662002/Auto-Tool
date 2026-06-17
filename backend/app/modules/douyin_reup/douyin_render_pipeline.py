@@ -12,6 +12,7 @@ from app.modules.script_writer.script_writer import ProductVideoScript, Subtitle
 from app.modules.subtitle_review import ApproveSubtitleDocumentRequest, SubtitleReviewService, SubtitleReviewStatus
 from app.modules.tts.settings_builder import voiceover_tts_settings
 from app.modules.tts.tts_schema import TTSSettings
+from app.modules.visual_style.custom_overlay_asset import build_custom_overlay_asset, select_custom_overlay_asset
 from app.modules.visual_style.overlay_asset_builder import build_overlay_asset
 from app.modules.visual_style.style_schema import VisualStyleSettings
 from app.modules.visual_style.subtitle_style_renderer import generate_ass_subtitle
@@ -153,8 +154,19 @@ class DouyinRenderPipeline:
         output_path = target_dir / output_name
         errors: list[str] = []
 
-        if settings.add_overlay:
+        overlay_mode = "none" if not settings.add_overlay else settings.overlay_mode
+        if overlay_mode == "preset":
             build_overlay_asset(preset, width, height, str(overlay_path))
+        elif overlay_mode == "custom":
+            custom_overlay_source = select_custom_overlay_asset(settings.custom_overlay_path)
+            build_custom_overlay_asset(
+                source_path=custom_overlay_source,
+                output_path=str(overlay_path),
+                width=width,
+                height=height,
+                height_percent=settings.custom_overlay_height_percent,
+                fit_mode=settings.custom_overlay_fit_mode,
+            )
         else:
             overlay_path = None  # type: ignore[assignment]
 
