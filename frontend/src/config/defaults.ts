@@ -39,7 +39,7 @@ export const DEFAULT_MUSIC_SETTINGS: MusicSettings = {
   source_folder: 'examples/music',
   source_file: null,
   favorite_music_paths: [],
-  volume: 0.12,
+  volume: 0.18,
   fade_in: 0.5,
   fade_out: 0.8,
   duck_under_voice: false,

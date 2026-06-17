@@ -4,6 +4,9 @@ import random
 from pathlib import Path
 
 SUPPORTED_BGM_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"}
+MASTER_AUDIO_GAIN = 1.6
+AUDIO_LIMITER_FILTER = "alimiter=limit=0.95"
+MASTER_LOUDNESS_FILTER = f"volume={MASTER_AUDIO_GAIN:.3f},loudnorm=I=-16:TP=-1.5:LRA=11,{AUDIO_LIMITER_FILTER}"
 
 
 class BGMMixer:
@@ -58,8 +61,15 @@ class BGMMixer:
         if not labels:
             return "", None
         if len(labels) == 1:
-            return ";".join(filters) + f";{labels[0]}anull[aout]", "[aout]"
-        return ";".join(filters) + f";{''.join(labels)}amix=inputs=2:duration=first:dropout_transition=0[aout]", "[aout]"
+            return (
+                ";".join(filters)
+                + f";{labels[0]}{MASTER_LOUDNESS_FILTER}[aout]"
+            ), "[aout]"
+        return (
+            ";".join(filters)
+            + f";{''.join(labels)}amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
+            f"{MASTER_LOUDNESS_FILTER}[aout]"
+        ), "[aout]"
 
 
 def _clamp_volume(value: float) -> float:

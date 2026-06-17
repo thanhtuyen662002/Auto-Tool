@@ -19,7 +19,10 @@ from app.utils.logger import get_logger
 
 
 logger = get_logger(__name__)
-VOICE_MIX_GAIN = 1.7
+VOICE_MIX_GAIN = 2.0
+MASTER_AUDIO_GAIN = 1.35
+AUDIO_LIMITER_FILTER = "alimiter=limit=0.95"
+MASTER_LOUDNESS_FILTER = f"volume={MASTER_AUDIO_GAIN:.3f},loudnorm=I=-16:TP=-1.5:LRA=11,{AUDIO_LIMITER_FILTER}"
 
 
 class OverlayRenderer:
@@ -581,14 +584,14 @@ class OverlayRenderer:
                 f"{music_filter};"
                 "[music][voice_for_duck]sidechaincompress=threshold=0.040:ratio=8:attack=20:release=350[music_ducked];"
                 "[voice_for_mix][music_ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
-                "alimiter=limit=0.95[aout]"
+                f"{MASTER_LOUDNESS_FILTER}[aout]"
             )
         else:
             audio_filter = (
                 f"[0:a]{self._voice_filter(voice_duration, duration)}[voice];"
                 f"{music_filter};"
                 "[voice][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
-                "alimiter=limit=0.95[aout]"
+                f"{MASTER_LOUDNESS_FILTER}[aout]"
             )
 
         run_ffmpeg(
@@ -740,7 +743,10 @@ class OverlayRenderer:
 
     @staticmethod
     def _voice_filter(source_duration: float, target_duration: float) -> str:
-        return f"{OverlayRenderer._audio_fit_filter(source_duration, target_duration)},volume={VOICE_MIX_GAIN:.2f},alimiter=limit=0.95"
+        return (
+            f"{OverlayRenderer._audio_fit_filter(source_duration, target_duration)},"
+            f"volume={VOICE_MIX_GAIN:.2f},loudnorm=I=-16:TP=-1.5:LRA=11,{AUDIO_LIMITER_FILTER}"
+        )
 
     @staticmethod
     def _escape_filter_path(path: str) -> str:

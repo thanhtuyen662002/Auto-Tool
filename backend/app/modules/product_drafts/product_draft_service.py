@@ -275,7 +275,7 @@ def _default_project_config_from_draft(
         music=MusicSettings(
             enabled=True,
             source_folder="examples/music",
-            volume=0.12,
+            volume=0.18,
             fade_in=0.5,
             fade_out=0.8,
             duck_under_voice=False,

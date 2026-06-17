@@ -127,7 +127,7 @@ class MusicSettings(BaseModel):
     source_folder: str | None = None
     source_file: str | None = None
     favorite_music_paths: list[str] = Field(default_factory=list)
-    volume: float = Field(default=0.12, ge=0, le=1)
+    volume: float = Field(default=0.18, ge=0, le=1)
     fade_in: float = Field(default=0.5, ge=0)
     fade_out: float = Field(default=0.8, ge=0)
     duck_under_voice: bool = False

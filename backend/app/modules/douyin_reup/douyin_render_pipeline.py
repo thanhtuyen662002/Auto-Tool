@@ -21,6 +21,12 @@ from app.modules.voice_generator.voice_generator import VoiceGenerator
 from app.utils.file_utils import ensure_dir
 
 
+VOICEOVER_AUDIO_GAIN = 1.8
+MASTER_AUDIO_GAIN = 1.6
+AUDIO_LIMITER_FILTER = "alimiter=limit=0.95"
+MASTER_LOUDNESS_FILTER = f"volume={MASTER_AUDIO_GAIN:.3f},loudnorm=I=-16:TP=-1.5:LRA=11,{AUDIO_LIMITER_FILTER}"
+
+
 class DouyinRenderPipeline:
     def __init__(self, bgm_mixer: BGMMixer | None = None, voice_generator: VoiceGenerator | None = None) -> None:
         self.bgm_mixer = bgm_mixer or BGMMixer()
@@ -464,13 +470,23 @@ class DouyinRenderPipeline:
             )
             labels.append("[a1]")
         if has_voiceover and voice_input_index is not None:
-            filters.append(f"[{voice_input_index}:a]volume=1.000,atrim=0:{duration:.3f},asetpts=PTS-STARTPTS[av]")
+            filters.append(
+                f"[{voice_input_index}:a]volume={VOICEOVER_AUDIO_GAIN:.3f},"
+                f"atrim=0:{duration:.3f},asetpts=PTS-STARTPTS,{AUDIO_LIMITER_FILTER}[av]"
+            )
             labels.append("[av]")
         if not labels:
             return "", None
         if len(labels) == 1:
-            return ";".join(filters) + f";{labels[0]}anull[aout]", "[aout]"
-        return ";".join(filters) + f";{''.join(labels)}amix=inputs={len(labels)}:duration=first:dropout_transition=0[aout]", "[aout]"
+            return (
+                ";".join(filters)
+                + f";{labels[0]}{MASTER_LOUDNESS_FILTER}[aout]"
+            ), "[aout]"
+        return (
+            ";".join(filters)
+            + f";{''.join(labels)}amix=inputs={len(labels)}:duration=first:dropout_transition=0:normalize=0,"
+            f"{MASTER_LOUDNESS_FILTER}[aout]"
+        ), "[aout]"
 
 
 def _escape_filter_path(path: str) -> str:
