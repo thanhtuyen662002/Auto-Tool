@@ -7,6 +7,7 @@ import inspect
 import random
 import threading
 import uuid
+import hashlib
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ from pydantic import ValidationError
 from app import database
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_media_duration
 from app.modules.media_scanner.scanner import MediaScanner
+from app.modules.source_media.source_media_thumbnail_service import SourceMediaThumbnailService
 from app.modules.content_manager.content_schema import build_content_summary
 from app.modules.content_manager.content_service import ContentService
 from app.modules.cache.cache_service import CacheService
@@ -2896,14 +2898,33 @@ def create_app() -> FastAPI:
     @app.get("/api/files/thumbnail", response_model=None)
     def get_thumbnail_file(path: str = Query(...)) -> FileResponse:
         image_path = Path(path).expanduser().resolve()
+        suffix = image_path.suffix.lower()
+        if suffix in {".jpg", ".jpeg", ".png"}:
+            if not image_path.exists() or not image_path.is_file():
+                raise HTTPException(status_code=404, detail=f"Thumbnail not found: {image_path}")
+            if "thumbnails" not in [part.lower() for part in image_path.parts]:
+                raise HTTPException(status_code=403, detail="Path is not an Auto Tool thumbnail.")
+            media_type = "image/png" if suffix == ".png" else "image/jpeg"
+            return FileResponse(image_path, media_type=media_type, filename=image_path.name)
+
+        if suffix != ".mp4":
+            raise HTTPException(status_code=400, detail="Only MP4 video paths or JPG/PNG thumbnail files are supported.")
         if not image_path.exists() or not image_path.is_file():
-            raise HTTPException(status_code=404, detail=f"Thumbnail not found: {image_path}")
-        if image_path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
-            raise HTTPException(status_code=400, detail="Only JPG/PNG thumbnail files are supported.")
-        if "thumbnails" not in [part.lower() for part in image_path.parts]:
-            raise HTTPException(status_code=403, detail="Path is not an Auto Tool thumbnail.")
-        media_type = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
-        return FileResponse(image_path, media_type=media_type, filename=image_path.name)
+            raise HTTPException(status_code=404, detail=f"Video file not found: {image_path}")
+        if not database.is_known_output_path(str(image_path)):
+            raise HTTPException(status_code=403, detail="Video path is not registered as a render output.")
+
+        thumbnail_dir = app_data_dir() / "thumbnails" / "outputs"
+        media_id = hashlib.sha1(str(image_path).encode("utf-8")).hexdigest()
+        thumbnail = SourceMediaThumbnailService().generate_thumbnail(
+            str(image_path),
+            str(thumbnail_dir),
+            at_second=1.0,
+            media_id=media_id,
+        )
+        if not thumbnail:
+            raise HTTPException(status_code=404, detail="Không thể tạo thumbnail cho video này.")
+        return FileResponse(Path(thumbnail), media_type="image/jpeg", filename=Path(thumbnail).name)
 
     @app.get("/api/presets", response_model=list[PresetItem])
     def get_presets() -> list[PresetItem]:

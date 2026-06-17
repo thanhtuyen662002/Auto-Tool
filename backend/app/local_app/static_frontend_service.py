@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from app.local_app.local_config_schema import LocalFrontendStatusData, LocalFrontendStatusResponse
-from app.local_app.local_config_service import LocalConfigService
+from app.local_app.local_config_service import LocalConfigService, project_root
 from app.utils.app_paths import frontend_dist_dir
 
 
@@ -24,7 +24,8 @@ class StaticFrontendService:
         config = self.config_service.load_config()
         path = Path(config.frontend_dist_path).expanduser()
         if not path.is_absolute():
-            path = self.config_service.root / path
+            base_dir = self.config_service.root if getattr(self.config_service, "uses_explicit_root", False) else project_root()
+            path = base_dir / path
         return path.resolve()
 
     def dist_exists(self) -> bool:

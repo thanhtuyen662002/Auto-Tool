@@ -16,6 +16,8 @@ import {
   saveLocalUiSettings,
 } from '../../utils/localSettings';
 
+const DEFAULT_OUTPUT_FOLDER = './examples/outputs';
+
 export default function PathSettingsCard({ onSaved }: { onSaved?: () => void }) {
   const initial = useMemo(() => getLocalUiSettings(), []);
   const [defaultOutputFolder, setDefaultOutputFolder] = useState(initial.defaultOutputFolder);
@@ -33,26 +35,38 @@ export default function PathSettingsCard({ onSaved }: { onSaved?: () => void }) 
   useEffect(() => {
     getLocalAppConfig()
       .then((config) => {
-        setLocalAppConfig(config);
-        setDefaultOutputFolder(config.default_output_folder || initial.defaultOutputFolder);
-        setDefaultMusicFolder(config.default_music_folder || initial.defaultMusicFolder);
-        setDefaultSourceFolder(config.default_source_folder || initial.defaultSourceFolder);
+        const merged = mergeFolderDefaults(config, getLocalUiSettings());
+        setLocalAppConfig({ ...config, ...merged });
+        setDefaultOutputFolder(merged.default_output_folder);
+        setDefaultMusicFolder(merged.default_music_folder);
+        setDefaultSourceFolder(merged.default_source_folder);
       })
       .catch(() => undefined);
-  }, [initial.defaultMusicFolder, initial.defaultOutputFolder, initial.defaultSourceFolder]);
+  }, []);
 
   async function save() {
     setSaving(true);
     setMessage(null);
-    saveLocalUiSettings({ defaultOutputFolder, defaultMusicFolder, defaultSourceFolder });
+    const folderDefaults = {
+      default_source_folder: defaultSourceFolder.trim(),
+      default_output_folder: defaultOutputFolder.trim() || DEFAULT_OUTPUT_FOLDER,
+      default_music_folder: defaultMusicFolder.trim(),
+    };
+    saveLocalUiSettings({
+      defaultOutputFolder: folderDefaults.default_output_folder,
+      defaultMusicFolder: folderDefaults.default_music_folder,
+      defaultSourceFolder: folderDefaults.default_source_folder,
+    });
     try {
       const saved = await saveLocalAppConfig({
         ...(localAppConfig ?? DEFAULT_LOCAL_APP_CONFIG),
-        default_output_folder: defaultOutputFolder,
-        default_music_folder: defaultMusicFolder,
-        default_source_folder: defaultSourceFolder,
+        ...folderDefaults,
       });
-      setLocalAppConfig(saved);
+      const merged = mergeFolderDefaults(saved, getLocalUiSettings());
+      setLocalAppConfig({ ...saved, ...merged });
+      setDefaultOutputFolder(merged.default_output_folder);
+      setDefaultMusicFolder(merged.default_music_folder);
+      setDefaultSourceFolder(merged.default_source_folder);
       setMessage('Đã lưu thư mục mặc định.');
       onSaved?.();
     } catch (err) {
@@ -70,7 +84,7 @@ export default function PathSettingsCard({ onSaved }: { onSaved?: () => void }) 
   return (
     <SettingsSection
       title="Thư mục & đường dẫn"
-      description="Các đường dẫn này được lưu trên máy của bạn và sẽ tự điền vào các lần tạo dự án tiếp theo."
+      description="Các đường dẫn này được lưu trong hồ sơ local của Auto Tool và sẽ tự điền vào các lần tạo dự án tiếp theo."
     >
       <div className="grid gap-4 lg:grid-cols-3">
         <PathInput
@@ -96,7 +110,7 @@ export default function PathSettingsCard({ onSaved }: { onSaved?: () => void }) 
         <GlassButton variant="primary" onClick={() => void save()} disabled={saving}>
           {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
         </GlassButton>
-        <GlassButton variant="secondary" onClick={() => setDefaultOutputFolder('./examples/outputs')}>
+        <GlassButton variant="secondary" onClick={() => setDefaultOutputFolder(DEFAULT_OUTPUT_FOLDER)}>
           Dùng mặc định
         </GlassButton>
         <GlassButton variant="ghost" onClick={clearRecent}>
@@ -123,4 +137,20 @@ export default function PathSettingsCard({ onSaved }: { onSaved?: () => void }) 
       </div>
     </SettingsSection>
   );
+}
+
+function mergeFolderDefaults(
+  config: LocalAppConfig,
+  local: ReturnType<typeof getLocalUiSettings>,
+): Pick<LocalAppConfig, 'default_output_folder' | 'default_music_folder' | 'default_source_folder'> {
+  const backendOutput = config.default_output_folder?.trim() || '';
+  const localOutput = local.defaultOutputFolder?.trim() || '';
+  return {
+    default_output_folder:
+      backendOutput && !(backendOutput === DEFAULT_OUTPUT_FOLDER && localOutput && localOutput !== DEFAULT_OUTPUT_FOLDER)
+        ? backendOutput
+        : localOutput || DEFAULT_OUTPUT_FOLDER,
+    default_music_folder: config.default_music_folder?.trim() || local.defaultMusicFolder || '',
+    default_source_folder: config.default_source_folder?.trim() || local.defaultSourceFolder || '',
+  };
 }

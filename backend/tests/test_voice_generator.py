@@ -157,3 +157,32 @@ def test_subtitle_locked_chunks_do_not_redistribute_to_full_video():
         (0.0, 3.0, "Cau mot"),
         (7.0, 10.0, "Cau hai"),
     ]
+
+
+def test_subtitle_locked_voiceover_speeds_up_dense_line_without_dense_warning(tmp_path, monkeypatch):
+    generator = VoiceGenerator()
+    input_path = tmp_path / "input.wav"
+    output_path = tmp_path / "output.wav"
+    input_path.write_bytes(b"voice")
+    filters: list[str] = []
+
+    def fake_run_ffmpeg(args):
+        filters.append(args[args.index("-af") + 1])
+        output_path.write_bytes(b"fitted")
+
+    monkeypatch.setattr(voice_generator, "run_ffmpeg", fake_run_ffmpeg)
+    monkeypatch.setattr(voice_generator, "probe_media_duration", lambda path: 1.0)
+
+    fitted_path, fitted_duration = generator._fit_audio_to_subtitle_slot(
+        input_path=input_path,
+        output_path=output_path,
+        measured_duration=2.4,
+        slot_duration=1.0,
+        max_speedup=3.0,
+    )
+
+    assert fitted_path == output_path
+    assert fitted_duration == 1.0
+    assert "atempo=2.000,atempo=1.200" in filters[0]
+    assert any("voice_line_speed_adjusted" in warning for warning in generator.warnings)
+    assert not any("voice_line_too_dense_for_subtitle" in warning for warning in generator.warnings)

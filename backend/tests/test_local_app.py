@@ -18,6 +18,19 @@ def test_local_config_is_created_and_recovers_from_invalid_json(tmp_path: Path) 
     assert list(service.config_dir.glob("local_app_config.invalid-*.bak"))
 
 
+def test_local_config_defaults_to_app_data(monkeypatch, tmp_path: Path) -> None:
+    data_dir = tmp_path / "app-data"
+    monkeypatch.setenv("AUTO_TOOL_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("AUTO_TOOL_ROOT", str(tmp_path / "install-root"))
+
+    service = LocalConfigService()
+    config = service.load_config()
+
+    assert config.default_output_folder == "./examples/outputs"
+    assert service.config_path == data_dir / "config" / "local_app_config.json"
+    assert service.config_path.exists()
+
+
 def test_recent_paths_are_normalized_deduplicated_and_limited(tmp_path: Path) -> None:
     config_service = LocalConfigService(tmp_path)
     config_service.save_config(LocalAppConfig(max_recent_items=2))

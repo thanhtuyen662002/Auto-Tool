@@ -20,7 +20,8 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 MAX_INTER_LINE_SILENCE = 0.28
-MAX_SUBTITLE_LOCKED_SPEEDUP = 1.25
+COMFORTABLE_SUBTITLE_LOCKED_SPEEDUP = 1.45
+MAX_SUBTITLE_LOCKED_SPEEDUP = 3.0
 MIN_SUBTITLE_SLOT_DURATION = 0.18
 
 
@@ -370,10 +371,15 @@ class VoiceGenerator:
 
         required_speed = measured_duration / max(slot_duration, MIN_SUBTITLE_SLOT_DURATION)
         applied_speed = min(max(required_speed, 1.0), max(1.0, float(max_speedup)))
+        if applied_speed > COMFORTABLE_SUBTITLE_LOCKED_SPEEDUP + 0.01:
+            self._add_warning_once(
+                "voice_line_speed_adjusted: Một số câu tiếng Việt được tăng tốc theo thời lượng subtitle gốc "
+                "để tránh lệch tiếng hoặc bị cắt ngang."
+            )
         if required_speed > applied_speed + 0.01:
             self._add_warning_once(
-                "voice_line_too_dense_for_subtitle: Một số câu tiếng Việt dài hơn thời lượng subtitle, "
-                "đã giới hạn tốc độ đọc và cắt trong đúng khung subtitle để tránh lệch tiếng."
+                "voice_line_too_dense_for_subtitle: Một số câu tiếng Việt vẫn quá dài so với khung subtitle gốc "
+                "dù đã tăng tốc tối đa. Hãy rút gọn câu dịch nếu nghe còn quá gấp."
             )
 
         audio_filter_parts: list[str] = []

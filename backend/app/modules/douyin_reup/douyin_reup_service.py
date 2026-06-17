@@ -1004,9 +1004,6 @@ class DouyinReupService:
             and settings.detect_speech_presence
         ):
             return None
-        if _has_blocking_subtitle_source_failure(source_result):
-            return None
-
         _step_progress(step_progress_callback, "speech_silent_route_check", 12)
         speech = speech_result_for_video(video.path, settings)
         if speech.has_speech:

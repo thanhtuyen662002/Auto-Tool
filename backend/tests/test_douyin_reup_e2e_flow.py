@@ -18,7 +18,7 @@ def _config(source_dir: Path, output_dir: Path) -> ProjectConfig:
             "render": {"output_count": 1, "duration": 8, "aspect_ratio": "9:16", "resolution": "1080x1920", "fps": 30},
             "effects": {"cut_intensity": 0, "speed_variation": 0, "grain": 0, "zoom_motion": 0, "overlay_height": 22, "subtitle_size": 54},
             "ai": {"text_model": "mock", "tone": "translator", "language": "vi", "gemini_api_keys": []},
-            "douyin_reup": DouyinReupSettings(enabled=True).model_dump(mode="json"),
+            "douyin_reup": DouyinReupSettings(enabled=True, auto_route_no_speech_to_silent_reup=False).model_dump(mode="json"),
         }
     )
 
