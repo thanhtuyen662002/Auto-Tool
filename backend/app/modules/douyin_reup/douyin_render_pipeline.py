@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import unicodedata
 from pathlib import Path
 
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_video, run_ffmpeg
@@ -27,6 +28,30 @@ MASTER_AUDIO_GAIN = 1.6
 AUDIO_LIMITER_FILTER = "alimiter=limit=0.95"
 MASTER_LOUDNESS_FILTER = f"volume={MASTER_AUDIO_GAIN:.3f},loudnorm=I=-16:TP=-1.5:LRA=11,{AUDIO_LIMITER_FILTER}"
 MIN_VIDEO_SLOWDOWN_DELTA = 0.015
+SPOKEN_TERMINAL_PUNCTUATION = (".", "!", "?", "…")
+SPOKEN_SOFT_PUNCTUATION = (",", ";", ":", "-", "–", "—")
+SPOKEN_CONTINUATION_STARTERS = {
+    "cac",
+    "cai",
+    "cho",
+    "cua",
+    "de",
+    "do",
+    "duoc",
+    "giup",
+    "khi",
+    "la",
+    "ma",
+    "mot",
+    "nay",
+    "nen",
+    "neu",
+    "nhung",
+    "nhu",
+    "thi",
+    "va",
+    "vi",
+}
 
 
 class DouyinRenderPipeline:
@@ -706,7 +731,7 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
 
     def flush() -> None:
         nonlocal current_texts, current_start, current_end
-        text = _clean_spoken_text(" ".join(current_texts))
+        text = _join_spoken_fragments(current_texts)
         if text:
             groups.append(VoiceoverLine(time_hint=f"{current_start:.2f}-{current_end:.2f}s", text=text))
         current_texts = []
@@ -778,8 +803,56 @@ def _clean_spoken_text(text: str) -> str:
     return " ".join(str(text).replace("\r", " ").replace("\n", " ").split()).strip()
 
 
+def _join_spoken_fragments(texts: list[str]) -> str:
+    fragments = [_clean_spoken_text(text) for text in texts]
+    fragments = [text for text in fragments if text]
+    if not fragments:
+        return ""
+
+    combined = fragments[0]
+    for fragment in fragments[1:]:
+        combined = f"{combined}{_spoken_fragment_separator(combined, fragment)}{fragment}"
+    return _ensure_spoken_terminal_punctuation(combined)
+
+
+def _spoken_fragment_separator(previous_text: str, next_text: str) -> str:
+    previous = previous_text.rstrip()
+    next_fragment = next_text.lstrip()
+    if not previous:
+        return ""
+    if previous.endswith(SPOKEN_TERMINAL_PUNCTUATION) or previous.endswith(SPOKEN_SOFT_PUNCTUATION):
+        return " "
+
+    previous_words = previous.split()
+    if len(previous_words) <= 3 and not _starts_with_spoken_continuation(next_fragment):
+        return ". "
+    if next_fragment[:1].islower() or _starts_with_spoken_continuation(next_fragment):
+        return " "
+    return ". "
+
+
+def _starts_with_spoken_continuation(text: str) -> bool:
+    words = text.split()
+    if not words:
+        return False
+    return _normalize_spoken_word(words[0]) in SPOKEN_CONTINUATION_STARTERS
+
+
+def _ensure_spoken_terminal_punctuation(text: str) -> str:
+    cleaned = _clean_spoken_text(text)
+    if not cleaned or cleaned.endswith(SPOKEN_TERMINAL_PUNCTUATION):
+        return cleaned
+    return f"{cleaned}."
+
+
+def _normalize_spoken_word(value: str) -> str:
+    text = unicodedata.normalize("NFKD", value)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return "".join(ch for ch in text.casefold() if ch.isalnum())
+
+
 def _ends_sentence(text: str) -> bool:
-    return text.rstrip().endswith((".", "!", "?", "…"))
+    return text.rstrip().endswith(SPOKEN_TERMINAL_PUNCTUATION)
 
 
 def _allow_render_without_subtitle() -> bool:

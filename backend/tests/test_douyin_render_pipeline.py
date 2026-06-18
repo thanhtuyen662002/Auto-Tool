@@ -31,6 +31,19 @@ def test_smooth_voiceover_groups_fragmented_subtitle_blocks():
     assert lines[1].text == "Xem kỹ trước khi chọn nhé."
 
 
+def test_smooth_voiceover_adds_sentence_breaks_between_short_utterances():
+    blocks = [
+        SubtitleBlock(index=1, start=0.0, end=0.4, text="Troi oi"),
+        SubtitleBlock(index=2, start=0.42, end=0.9, text="Sao lai the"),
+        SubtitleBlock(index=3, start=0.92, end=1.6, text="nhung van on"),
+    ]
+
+    lines = _build_smooth_voiceover_lines(blocks)
+
+    assert len(lines) == 1
+    assert lines[0].text == "Troi oi. Sao lai the nhung van on."
+
+
 def test_voiceover_timing_plan_slows_dense_vietnamese_voiceover():
     settings = DouyinReupSettings(
         enabled=True,

@@ -1,5 +1,17 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.19
+
+### Highlights
+
+- Improved Vietnamese voiceover subtitles so the burned subtitle timeline continues to follow the generated Vietnamese TTS.
+- Added punctuation repair when multiple short translated subtitle blocks are grouped into one voiceover line, preventing long merged text without sentence stops.
+- Improved subtitle line splitting to prefer sentence and clause boundaries before falling back to character-length splits.
+
+### QA
+
+- Douyin/voice/silent/visual-tag backend regression passed: 94 tests.
+
 ## v1.0.18
 
 ### Highlights

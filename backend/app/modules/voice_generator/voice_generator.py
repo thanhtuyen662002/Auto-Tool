@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,21 @@ MAX_SUBTITLE_LOCKED_SPEEDUP = 3.0
 MAX_GLOBAL_VOICE_SPEEDUP = 1.65
 MIN_SUBTITLE_SLOT_DURATION = 0.18
 GLOBAL_FIT_TOLERANCE_SECONDS = 0.12
+SUBTITLE_TERMINAL_PUNCTUATION = (".", "!", "?", "…")
+SUBTITLE_SOFT_PUNCTUATION = (",", ";", ":")
+SUBTITLE_BREAK_STARTERS = {
+    "de",
+    "do",
+    "giup",
+    "khi",
+    "ma",
+    "nen",
+    "neu",
+    "nhung",
+    "thi",
+    "va",
+    "vi",
+}
 
 
 class VoiceGenerator:
@@ -544,28 +560,21 @@ class VoiceGenerator:
         if not cleaned:
             return []
 
-        sentences = [
-            part.strip()
-            for part in re.split(r"(?<=[.!?…])\s+", cleaned)
-            if part.strip()
-        ] or [cleaned]
-
         chunks: list[str] = []
-        for sentence in sentences:
-            chunks.extend(VoiceGenerator._split_long_subtitle(sentence, max_chars=max_chars))
+        for sentence in VoiceGenerator._split_sentence_units(cleaned):
+            for chunk in VoiceGenerator._split_long_subtitle(sentence, max_chars=max_chars):
+                if chunk:
+                    chunks.append(chunk)
         return chunks
 
     @staticmethod
     def _split_long_subtitle(text: str, max_chars: int) -> list[str]:
+        text = text.strip()
         if len(text) <= max_chars:
             return [text]
 
-        pieces = [
-            piece.strip()
-            for piece in re.split(r"(?<=[,;:])\s+|\s+(?=và|nhưng|nên|giúp|để|khi|nếu)\s*", text, flags=re.IGNORECASE)
-            if piece.strip()
-        ]
         chunks: list[str] = []
+        pieces = VoiceGenerator._split_soft_units(text)
         current = ""
 
         for piece in pieces:
@@ -586,19 +595,84 @@ class VoiceGenerator:
     def _split_words(text: str, max_chars: int) -> list[str]:
         words = text.split()
         chunks: list[str] = []
-        current: list[str] = []
-
-        for word in words:
-            candidate = " ".join([*current, word])
-            if current and len(candidate) > max_chars:
-                chunks.append(" ".join(current))
-                current = [word]
-            else:
-                current.append(word)
-
-        if current:
-            chunks.append(" ".join(current))
+        while words:
+            if len(" ".join(words)) <= max_chars:
+                chunks.append(" ".join(words))
+                break
+            max_index = VoiceGenerator._largest_prefix_within_limit(words, max_chars)
+            break_index = VoiceGenerator._best_word_break(words, max_index)
+            chunks.append(" ".join(words[:break_index]))
+            words = words[break_index:]
         return chunks
+
+    @staticmethod
+    def _split_sentence_units(text: str) -> list[str]:
+        units: list[str] = []
+        start = 0
+        for index, char in enumerate(text):
+            if char not in SUBTITLE_TERMINAL_PUNCTUATION:
+                continue
+            end = index + 1
+            unit = text[start:end].strip()
+            if unit:
+                units.append(unit)
+            start = end
+            while start < len(text) and text[start].isspace():
+                start += 1
+        tail = text[start:].strip()
+        if tail:
+            units.append(tail)
+        return units or [text]
+
+    @staticmethod
+    def _split_soft_units(text: str) -> list[str]:
+        units: list[str] = []
+        words = text.split()
+        current: list[str] = []
+        for word in words:
+            if current and VoiceGenerator._is_break_starter(word):
+                units.append(" ".join(current))
+                current = [word]
+                continue
+            current.append(word)
+            if word.rstrip().endswith(SUBTITLE_SOFT_PUNCTUATION):
+                units.append(" ".join(current))
+                current = []
+        if current:
+            units.append(" ".join(current))
+        return units or [text]
+
+    @staticmethod
+    def _largest_prefix_within_limit(words: list[str], max_chars: int) -> int:
+        best = 1
+        for index in range(1, len(words) + 1):
+            if len(" ".join(words[:index])) <= max_chars:
+                best = index
+                continue
+            break
+        return best
+
+    @staticmethod
+    def _best_word_break(words: list[str], max_index: int) -> int:
+        max_index = max(1, min(max_index, len(words)))
+        if max_index >= len(words):
+            return max_index
+        for index in range(max_index, max(1, max_index - 4), -1):
+            if index < len(words) and VoiceGenerator._is_break_starter(words[index]):
+                return index
+            if words[index - 1].rstrip().endswith(SUBTITLE_SOFT_PUNCTUATION):
+                return index
+        return max_index
+
+    @staticmethod
+    def _is_break_starter(word: str) -> bool:
+        return VoiceGenerator._normalize_subtitle_word(word) in SUBTITLE_BREAK_STARTERS
+
+    @staticmethod
+    def _normalize_subtitle_word(value: str) -> str:
+        text = unicodedata.normalize("NFKD", value)
+        text = "".join(ch for ch in text if not unicodedata.combining(ch))
+        return "".join(ch for ch in text.casefold() if ch.isalnum())
 
     @staticmethod
     def _scale_timeline(

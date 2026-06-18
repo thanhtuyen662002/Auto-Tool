@@ -195,6 +195,18 @@ def test_global_voice_fit_speeds_up_before_trimming():
     assert "atrim=0:10.000" in audio_filter
 
 
+def test_display_subtitle_split_prefers_sentence_boundaries():
+    chunks = VoiceGenerator._split_subtitle_text(
+        "Troi oi. Sao lai the. Cau nay rat dai nhung van can hien thi tu nhien de nguoi xem de doc.",
+        max_chars=24,
+    )
+
+    assert chunks[:2] == ["Troi oi.", "Sao lai the."]
+    assert "Cau nay rat dai" in chunks
+    assert any(chunk.startswith("nhung") for chunk in chunks)
+    assert any(chunk.startswith("de nguoi") for chunk in chunks)
+
+
 def test_global_voice_fit_tolerates_tiny_duration_overrun():
     audio_filter = VoiceGenerator._audio_trim_filter(source_duration=10.04, target_duration=10.0)
 
