@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+import sys
 import threading
 import time
 import webbrowser
@@ -19,12 +20,15 @@ from app.utils.dependency_manager import (
 )
 from app.utils.env_loader import load_local_env
 from app.utils.logger import configure_logging, get_logger
+from app.utils.app_paths import app_data_dir
 
 
 logger = get_logger(__name__)
+_STDIO_FALLBACK_HANDLES = []
 
 
 def main() -> int:
+    _ensure_stdio_streams()
     load_local_env()
     configure_logging()
     local_config = LocalConfigService().load_config()
@@ -105,6 +109,25 @@ def _open_browser_enabled(default: bool = True) -> bool:
 def _strict_port_enabled() -> bool:
     value = os.getenv("AUTO_TOOL_STRICT_PORT", "0").strip().lower()
     return value not in {"0", "false", "no", "off"}
+
+
+def _ensure_stdio_streams() -> None:
+    """PyInstaller --noconsole sets stdout/stderr to None; Uvicorn expects streams."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+
+    log_dir = app_data_dir() / "logs" / "launcher"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    if sys.stdout is None:
+        stdout_file = (log_dir / "stdout.log").open("a", encoding="utf-8", buffering=1)
+        _STDIO_FALLBACK_HANDLES.append(stdout_file)
+        sys.stdout = stdout_file
+
+    if sys.stderr is None:
+        stderr_file = (log_dir / "stderr.log").open("a", encoding="utf-8", buffering=1)
+        _STDIO_FALLBACK_HANDLES.append(stderr_file)
+        sys.stderr = stderr_file
 
 
 if __name__ == "__main__":
