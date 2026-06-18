@@ -89,7 +89,7 @@ def test_douyin_one_click_batch_queues_job_with_preset_settings(tmp_path: Path, 
     assert settings["asr_model_size"] == "tiny"
     assert settings["asr_vad_filter"] is True
     assert settings["asr_max_audio_seconds"] == 90
-    assert settings["ocr_sample_fps"] == 1.0
+    assert settings["ocr_sample_fps"] == 2.0
     assert settings["batch_performance_mode"] == "balanced"
     assert settings["batch_chunk_size"] == 40
     assert settings["batch_ffmpeg_timeout_seconds"] == 600

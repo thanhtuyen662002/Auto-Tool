@@ -7,10 +7,11 @@ from pathlib import Path
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_video, run_ffmpeg
 from app.modules.douyin_reup.bgm_mixer import BGMMixer
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem, TranslationResult
-from app.modules.douyin_reup.subtitle_timing_guard import SubtitleBlock, parse_srt_blocks
+from app.modules.douyin_reup.subtitle_timing_guard import SubtitleBlock, parse_srt_blocks, write_srt_blocks
 from app.modules.script_writer.script_writer import ProductVideoScript, SubtitleLine, VoiceoverLine
 from app.modules.subtitle_review import ApproveSubtitleDocumentRequest, SubtitleReviewService, SubtitleReviewStatus
 from app.modules.tts.settings_builder import voiceover_tts_settings
+from app.modules.tts.text_cleanup import estimate_voice_duration
 from app.modules.tts.tts_schema import TTSSettings
 from app.modules.visual_style.custom_overlay_asset import build_custom_overlay_asset, select_custom_overlay_asset
 from app.modules.visual_style.overlay_asset_builder import build_overlay_asset
@@ -25,6 +26,7 @@ VOICEOVER_AUDIO_GAIN = 1.8
 MASTER_AUDIO_GAIN = 1.6
 AUDIO_LIMITER_FILTER = "alimiter=limit=0.95"
 MASTER_LOUDNESS_FILTER = f"volume={MASTER_AUDIO_GAIN:.3f},loudnorm=I=-16:TP=-1.5:LRA=11,{AUDIO_LIMITER_FILTER}"
+MIN_VIDEO_SLOWDOWN_DELTA = 0.015
 
 
 class DouyinRenderPipeline:
@@ -177,6 +179,33 @@ class DouyinRenderPipeline:
             overlay_path = None  # type: ignore[assignment]
 
         subtitle_blocks = parse_srt_blocks(subtitle_srt_path)
+        render_duration = float(video.duration)
+        video_slowdown_factor = 1.0
+        render_subtitle_srt_path: str | None = None
+        voiceover_timing: dict | None = None
+        voiceover_subtitle_srt_path = subtitle_srt_path
+        if settings.generate_voiceover_for_silent_video:
+            voiceover_timing = _plan_voiceover_video_slowdown(
+                subtitle_blocks,
+                settings=settings,
+                target_duration=render_duration,
+            )
+            video_slowdown_factor = float(voiceover_timing.get("slowdown_factor") or 1.0)
+            if video_slowdown_factor > 1.0 + MIN_VIDEO_SLOWDOWN_DELTA:
+                render_duration = round(render_duration * video_slowdown_factor, 3)
+                subtitle_blocks = _scale_subtitle_blocks(
+                    subtitle_blocks,
+                    scale=video_slowdown_factor,
+                    target_duration=render_duration,
+                )
+                render_subtitle_srt_path = str(target_dir / f"{Path(output_name).stem}_vi_voice_timing.srt")
+                write_srt_blocks(subtitle_blocks, render_subtitle_srt_path)
+                voiceover_subtitle_srt_path = render_subtitle_srt_path
+                voiceover_timing["scaled_duration"] = render_duration
+                warnings.append(
+                    "voiceover_video_slowdown: Tiếng Việt cần nhiều thời gian đọc hơn subtitle gốc, "
+                    f"đã tua chậm video/timeline {video_slowdown_factor:.2f}x để giảm ép tốc độ voice."
+                )
         subtitle_lines = [
             {"start_hint": block.start, "end_hint": block.end, "text": block.text}
             for block in subtitle_blocks
@@ -192,11 +221,11 @@ class DouyinRenderPipeline:
 
         if voiceover_path is None and settings.generate_voiceover_for_silent_video:
             voiceover_path = self._generate_voiceover_from_srt(
-                subtitle_srt_path=subtitle_srt_path,
+                subtitle_srt_path=voiceover_subtitle_srt_path,
                 output_dir=str(target_dir),
                 output_name=output_name,
                 settings=settings,
-                target_duration=video.duration,
+                target_duration=render_duration,
                 tts_settings=tts_settings,
             )
             warnings.extend(self.voice_generator.warnings)
@@ -225,6 +254,8 @@ class DouyinRenderPipeline:
                 subtitle_ass_path=str(subtitle_ass_path) if subtitle_ass_path else None,
                 bgm_path=bgm_path,
                 voiceover_path=voiceover_path,
+                render_duration=render_duration,
+                video_slowdown_factor=video_slowdown_factor,
             )
         except FFmpegError as exc:
             if subtitle_ass_path:
@@ -245,6 +276,8 @@ class DouyinRenderPipeline:
                         subtitle_ass_path=None,
                         bgm_path=bgm_path,
                         voiceover_path=voiceover_path,
+                        render_duration=render_duration,
+                        video_slowdown_factor=video_slowdown_factor,
                     )
                 except FFmpegError as retry_exc:
                     if not bgm_path:
@@ -266,6 +299,8 @@ class DouyinRenderPipeline:
                         subtitle_ass_path=None,
                         bgm_path=None,
                         voiceover_path=voiceover_path,
+                        render_duration=render_duration,
+                        video_slowdown_factor=video_slowdown_factor,
                     )
                 subtitle_ass_path = None  # type: ignore[assignment]
             elif bgm_path:
@@ -286,6 +321,8 @@ class DouyinRenderPipeline:
                     subtitle_ass_path=None,
                     bgm_path=None,
                     voiceover_path=voiceover_path,
+                    render_duration=render_duration,
+                    video_slowdown_factor=video_slowdown_factor,
                 )
             else:
                 raise
@@ -303,6 +340,9 @@ class DouyinRenderPipeline:
             "overlay_file": str(overlay_path) if overlay_path else None,
             "bgm_file": bgm_path,
             "voiceover_file": voiceover_path,
+            "render_subtitle_srt_file": render_subtitle_srt_path,
+            "video_slowdown_factor": video_slowdown_factor,
+            "voiceover_timing": voiceover_timing,
             "warnings": warnings,
             "errors": errors,
         }
@@ -373,7 +413,11 @@ class DouyinRenderPipeline:
         subtitle_ass_path: str | None,
         bgm_path: str | None,
         voiceover_path: str | None = None,
+        render_duration: float | None = None,
+        video_slowdown_factor: float = 1.0,
     ) -> None:
+        duration = max(0.1, float(render_duration or video.duration))
+        slowdown = max(1.0, float(video_slowdown_factor or 1.0))
         args = ["-y", "-i", video.path]
         next_input_index = 1
         overlay_input_index: int | None = None
@@ -392,9 +436,15 @@ class DouyinRenderPipeline:
             voice_input_index = next_input_index
             args.extend(["-i", voiceover_path])
 
-        video_filters = [
+        video_chain = (
             f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},fps={settings.fps},setsar=1[v0]"
+            f"crop={width}:{height}"
+        )
+        if slowdown > 1.0 + MIN_VIDEO_SLOWDOWN_DELTA:
+            video_chain += f",setpts={slowdown:.6f}*PTS"
+        video_chain += f",fps={settings.fps},setsar=1[v0]"
+        video_filters = [
+            video_chain
         ]
         current_label = "[v0]"
         if overlay_input_index is not None:
@@ -414,9 +464,10 @@ class DouyinRenderPipeline:
             has_voiceover=voice_input_index is not None,
             original_audio_volume=settings.original_audio_volume,
             bgm_volume=settings.bgm_volume,
-            duration=video.duration,
+            duration=duration,
             bgm_input_index=bgm_input_index,
             voice_input_index=voice_input_index,
+            video_slowdown_factor=slowdown,
         )
 
         filter_complex = ";".join(part for part in [*video_filters, audio_filter] if part)
@@ -428,7 +479,7 @@ class DouyinRenderPipeline:
         args.extend(
             [
                 "-t",
-                f"{video.duration:.3f}",
+                f"{duration:.3f}",
                 "-c:v",
                 "libx264",
                 "-preset",
@@ -455,11 +506,18 @@ class DouyinRenderPipeline:
         duration: float,
         bgm_input_index: int | None,
         voice_input_index: int | None,
+        video_slowdown_factor: float = 1.0,
     ) -> tuple[str, str | None]:
         filters: list[str] = []
         labels: list[str] = []
         if has_original_audio:
-            filters.append(f"[0:a]volume={_clamp_volume(original_audio_volume):.3f}[a0]")
+            original_parts = [f"volume={_clamp_volume(original_audio_volume):.3f}"]
+            slowdown = max(1.0, float(video_slowdown_factor or 1.0))
+            if slowdown > 1.0 + MIN_VIDEO_SLOWDOWN_DELTA:
+                original_parts.append(VoiceGenerator._atempo_filter(1.0 / slowdown))
+                original_parts.append(f"atrim=0:{duration:.3f}")
+                original_parts.append("asetpts=PTS-STARTPTS")
+            filters.append(f"[0:a]{','.join(original_parts)}[a0]")
             labels.append("[a0]")
         if has_bgm and bgm_input_index is not None:
             fade_out_start = max(0.0, float(duration) - 0.8)
@@ -501,6 +559,113 @@ def _escape_filter_path(path: str) -> str:
 
 def _clamp_volume(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+def _plan_voiceover_video_slowdown(
+    blocks: list[SubtitleBlock],
+    *,
+    settings: DouyinReupSettings,
+    target_duration: float,
+) -> dict:
+    voiceover = _build_smooth_voiceover_lines(blocks)
+    reports: list[dict] = []
+    required_speeds: list[float] = []
+    estimated_total = 0.0
+    slot_total = 0.0
+
+    for line in voiceover:
+        timing = _parse_voiceover_time_hint(line.time_hint)
+        if timing is None:
+            continue
+        start, end = timing
+        slot_duration = max(0.1, end - start)
+        estimated_duration = estimate_voice_duration(line.text, settings.target_language)
+        if estimated_duration <= 0:
+            continue
+        required_speed = estimated_duration / slot_duration
+        required_speeds.append(required_speed)
+        estimated_total += estimated_duration
+        slot_total += slot_duration
+        reports.append(
+            {
+                "start": round(start, 3),
+                "end": round(end, 3),
+                "slot_seconds": round(slot_duration, 3),
+                "estimated_voice_seconds": round(estimated_duration, 3),
+                "required_speed": round(required_speed, 3),
+                "text_chars": len(line.text),
+            }
+        )
+
+    comfort_speedup = max(1.0, float(settings.voiceover_comfort_speedup))
+    max_slowdown = max(1.0, float(settings.voiceover_max_video_slowdown))
+    max_required_speed = max(required_speeds) if required_speeds else 1.0
+    p90_required_speed = _percentile(required_speeds, 0.9) if required_speeds else 1.0
+    slowdown_factor = 1.0
+    if settings.voiceover_auto_slow_video and max_required_speed > comfort_speedup:
+        pressure_speed = max(p90_required_speed, max_required_speed)
+        slowdown_factor = min(max_slowdown, max(1.0, pressure_speed / comfort_speedup))
+    if slowdown_factor <= 1.0 + MIN_VIDEO_SLOWDOWN_DELTA:
+        slowdown_factor = 1.0
+
+    return {
+        "enabled": bool(settings.voiceover_auto_slow_video),
+        "line_count": len(reports),
+        "source_duration": round(max(0.0, float(target_duration)), 3),
+        "scaled_duration": round(max(0.0, float(target_duration)) * slowdown_factor, 3),
+        "estimated_voice_seconds": round(estimated_total, 3),
+        "source_slot_seconds": round(slot_total, 3),
+        "max_required_speed": round(max_required_speed, 3),
+        "p90_required_speed": round(p90_required_speed, 3),
+        "comfort_speedup": round(comfort_speedup, 3),
+        "max_slowdown": round(max_slowdown, 3),
+        "slowdown_factor": round(slowdown_factor, 3),
+        "lines": reports[:20],
+    }
+
+
+def _parse_voiceover_time_hint(value: str) -> tuple[float, float] | None:
+    try:
+        start_text, end_text = str(value).rstrip("s").split("-", 1)
+        start = float(start_text)
+        end = float(end_text)
+    except (TypeError, ValueError):
+        return None
+    if end <= start:
+        return None
+    return max(0.0, start), max(0.0, end)
+
+
+def _scale_subtitle_blocks(
+    blocks: list[SubtitleBlock],
+    *,
+    scale: float,
+    target_duration: float,
+) -> list[SubtitleBlock]:
+    scaled: list[SubtitleBlock] = []
+    duration = max(0.1, float(target_duration))
+    for block in blocks:
+        start = min(duration, max(0.0, float(block.start) * scale))
+        end = min(duration, max(start + 0.1, float(block.end) * scale))
+        if end <= start:
+            continue
+        scaled.append(
+            SubtitleBlock(
+                index=len(scaled) + 1,
+                start=round(start, 3),
+                end=round(end, 3),
+                text=block.text,
+            )
+        )
+    return scaled
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(float(value) for value in values)
+    index = int(round((len(ordered) - 1) * max(0.0, min(1.0, percentile))))
+    return ordered[index]
 
 
 def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[VoiceoverLine]:

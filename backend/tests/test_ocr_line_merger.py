@@ -34,3 +34,18 @@ def test_merger_splits_when_text_changes():
     )
 
     assert [line.text for line in lines] == ["这个真的很好用", "价格也很便宜"]
+
+
+def test_merger_keeps_useful_low_confidence_chinese_candidates():
+    settings = DouyinReupSettings(enabled=True, ocr_min_confidence=0.55)
+
+    lines = OCRLineMerger().merge_frames_to_lines(
+        [
+            _frame(0, "逑介全", confidence=0.0007),
+            _frame(1000, "家里一定要有一个好用的电炖锅", confidence=0.03),
+        ],
+        settings,
+    )
+
+    assert [line.text for line in lines] == ["家里一定要有一个好用的电炖锅"]
+    assert any("ocr_low_confidence_candidate" in warning for warning in lines[0].warnings)
