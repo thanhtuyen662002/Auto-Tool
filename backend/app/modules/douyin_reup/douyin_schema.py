@@ -42,7 +42,7 @@ class DouyinReupSettings(BaseModel):
     ocr_timeout_seconds: int = Field(default=1200, ge=60, le=24 * 60 * 60)
     ocr_region_mode: str = "bottom_auto"
     ocr_manual_region: dict | None = None
-    ocr_min_confidence: float = Field(default=0.55, ge=0, le=1)
+    ocr_min_confidence: float = Field(default=0.35, ge=0, le=1)
     ocr_dedupe_similarity: float = Field(default=0.86, ge=0, le=1)
     ocr_min_text_length: int = Field(default=2, ge=1, le=50)
     ocr_merge_gap_ms: int = Field(default=600, ge=0, le=10_000)

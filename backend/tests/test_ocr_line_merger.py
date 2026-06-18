@@ -36,6 +36,41 @@ def test_merger_splits_when_text_changes():
     assert [line.text for line in lines] == ["这个真的很好用", "价格也很便宜"]
 
 
+def test_merger_salvages_low_confidence_chinese_subtitle_lines():
+    settings = DouyinReupSettings(enabled=True, ocr_min_confidence=0.55, ocr_dedupe_similarity=0.86)
+
+    lines = OCRLineMerger().merge_frames_to_lines(
+        [
+            _frame(0, "陶瓷油的内胆 8。", 0.44),
+            _frame(1000, "点也不粘锅 盥", 0.47),
+            _frame(2000, "外观颜值高", 0.91),
+            _frame(3000, "要问它能手啥", 0.02),
+        ],
+        settings,
+    )
+
+    assert [line.text for line in lines] == ["陶瓷油的内胆 8。", "点也不粘锅 盥", "外观颜值高"]
+    assert lines[0].warnings
+    assert lines[1].warnings
+    assert not lines[2].warnings
+
+
+def test_merger_merges_ocr_variants_and_keeps_better_text():
+    settings = DouyinReupSettings(enabled=True, ocr_min_confidence=0.55, ocr_dedupe_similarity=0.9)
+
+    lines = OCRLineMerger().merge_frames_to_lines(
+        [
+            _frame(8000, "丽且 点都不粘", 0.46),
+            _frame(9000, "而且 点都不粘", 0.82),
+        ],
+        settings,
+    )
+
+    assert len(lines) == 1
+    assert lines[0].text == "而且 点都不粘"
+    assert lines[0].frame_count == 2
+
+
 def test_merger_keeps_useful_low_confidence_chinese_candidates():
     settings = DouyinReupSettings(enabled=True, ocr_min_confidence=0.55)
 

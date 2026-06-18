@@ -31,37 +31,60 @@ class OCRLineMerger:
         min_duration = int(settings.ocr_min_duration_ms)
         max_duration = int(settings.ocr_max_duration_ms)
 
-        candidates: list[tuple[int, str, float, bool]] = []
+        candidates: list[dict] = []
         for frame in sorted(frame_results, key=lambda item: item.timestamp_ms):
             text = self.cleaner.clean(frame.text)
             if not self.cleaner.looks_like_chinese_subtitle(text, min_text_length=min_text_length):
                 continue
-            is_low_confidence = frame.confidence < min_confidence
+            confidence = float(frame.confidence)
+            is_low_confidence = confidence < min_confidence
             if is_low_confidence and not _accept_low_confidence_candidate(
                 text,
-                confidence=float(frame.confidence),
+                confidence=confidence,
                 min_confidence=min_confidence,
                 min_text_length=min_text_length,
             ):
                 continue
-            candidates.append((frame.timestamp_ms, text, frame.confidence, is_low_confidence))
+            candidates.append(
+                {
+                    "timestamp_ms": int(frame.timestamp_ms),
+                    "text": text,
+                    "confidence": confidence,
+                    "is_low_confidence": is_low_confidence,
+                }
+            )
 
         lines: list[OCRSubtitleLine] = []
         current: dict | None = None
-        for timestamp_ms, text, confidence, is_low_confidence in candidates:
+        for candidate in candidates:
+            timestamp_ms = int(candidate["timestamp_ms"])
+            text = str(candidate["text"])
+            confidence = float(candidate["confidence"])
+            is_low_confidence = bool(candidate["is_low_confidence"])
             if current is None:
                 current = _new_line(timestamp_ms, text, confidence, is_low_confidence)
                 continue
 
             gap = timestamp_ms - int(current["last_ts"])
-            if similarity(str(current["text"]), text) >= threshold and gap <= max(max_gap, min_duration * 2):
+            same_text_threshold = _effective_similarity_threshold(
+                threshold,
+                bool(current.get("is_low_confidence")) or is_low_confidence,
+            )
+            if _same_subtitle_text(str(current["text"]), text, same_text_threshold) and gap <= max(max_gap, min_duration * 2):
                 current["last_ts"] = timestamp_ms
                 current["confidences"].append(confidence)
                 current["frame_count"] += 1
+                current["is_low_confidence"] = bool(current.get("is_low_confidence")) or is_low_confidence
                 if is_low_confidence and LOW_CONFIDENCE_WARNING not in current["warnings"]:
                     current["warnings"].append(LOW_CONFIDENCE_WARNING)
-                if len(text) > len(str(current["text"])):
+                if _is_better_text(
+                    str(current["text"]),
+                    float(current.get("best_confidence", 0.0)),
+                    text,
+                    confidence,
+                ):
                     current["text"] = text
+                    current["best_confidence"] = confidence
                 continue
 
             lines.append(_close_line(current, len(lines) + 1, min_duration, max_duration))
@@ -82,6 +105,8 @@ def _new_line(timestamp_ms: int, text: str, confidence: float, is_low_confidence
         "last_ts": int(timestamp_ms),
         "text": text,
         "confidences": [float(confidence)],
+        "best_confidence": float(confidence),
+        "is_low_confidence": bool(is_low_confidence),
         "frame_count": 1,
         "warnings": [LOW_CONFIDENCE_WARNING] if is_low_confidence else [],
     }
@@ -114,13 +139,62 @@ def _accept_low_confidence_candidate(
 ) -> bool:
     compact = re.sub(r"\s+", "", str(text or ""))
     cjk_count = len(CJK_RE.findall(compact))
-    if cjk_count < max(3, int(min_text_length)):
+    if cjk_count < max(2, int(min_text_length)):
+        return False
+    cjk_ratio = cjk_count / max(1, len(compact))
+    if cjk_ratio < 0.35:
+        return False
+    if len(compact) > 80 and cjk_ratio < 0.5:
         return False
 
     confidence_value = max(0.0, float(confidence))
     configured_floor = max(0.02, min(0.08, float(min_confidence) * 0.08))
     if confidence_value >= configured_floor:
         return True
-    if cjk_count >= 5 and confidence_value >= 0.005:
+    if cjk_count >= 10 and confidence_value >= 0.02:
         return True
-    return cjk_count >= 10 and confidence_value >= 0.002
+    if cjk_count >= 5 and confidence_value >= 0.03:
+        return True
+    return cjk_count >= 14 and confidence_value >= 0.005
+
+
+def _effective_similarity_threshold(configured_threshold: float, has_low_confidence: bool) -> float:
+    threshold = max(0.0, min(1.0, float(configured_threshold)))
+    if has_low_confidence:
+        return min(threshold, max(0.78, threshold - 0.08))
+    return threshold
+
+
+def _same_subtitle_text(a: str, b: str, threshold: float) -> bool:
+    left = _normalize_for_similarity(a)
+    right = _normalize_for_similarity(b)
+    if not left or not right:
+        return False
+    if similarity(left, right) >= threshold:
+        return True
+    return _common_substring_ratio(left, right) >= max(0.72, threshold - 0.08)
+
+
+def _normalize_for_similarity(text: str) -> str:
+    compact = re.sub(r"\s+", "", str(text or ""))
+    return re.sub(r"[^\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaffA-Za-z0-9]", "", compact)
+
+
+def _common_substring_ratio(a: str, b: str) -> float:
+    shorter = min(len(a), len(b))
+    if shorter <= 0:
+        return 0.0
+    match = SequenceMatcher(None, a, b).find_longest_match(0, len(a), 0, len(b))
+    return match.size / shorter
+
+
+def _is_better_text(current_text: str, current_confidence: float, new_text: str, new_confidence: float) -> bool:
+    if new_confidence >= current_confidence + 0.08:
+        return True
+    if current_confidence >= new_confidence + 0.08:
+        return False
+    current_cjk = len(CJK_RE.findall(current_text))
+    new_cjk = len(CJK_RE.findall(new_text))
+    if new_cjk != current_cjk:
+        return new_cjk > current_cjk
+    return len(new_text) > len(current_text)

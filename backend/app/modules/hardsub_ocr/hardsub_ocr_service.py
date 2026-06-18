@@ -133,6 +133,13 @@ class HardSubOCRService:
 
         _progress(progress_callback, "ocr_merging_lines", 95, len(frames), len(frames))
         lines = self.line_merger.merge_frames_to_lines(frame_results, settings)
+        text_frame_count = sum(1 for frame in frame_results if str(frame.text or "").strip())
+        accepted_frame_count = sum(line.frame_count for line in lines)
+        if text_frame_count and accepted_frame_count < max(1, int(text_frame_count * 0.35)):
+            warnings.append(
+                "ocr_low_coverage: OCR thấy nhiều frame có chữ nhưng chỉ giữ được ít dòng phụ đề tin cậy. "
+                "Hãy tăng Sample FPS, dùng vùng OCR thủ công hoặc kiểm tra lại độ rõ của chữ trên video."
+            )
         low_confidence_line_count = sum(
             1
             for line in lines

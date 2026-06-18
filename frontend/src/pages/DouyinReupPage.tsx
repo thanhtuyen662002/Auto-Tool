@@ -161,7 +161,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   ocr_timeout_seconds: 1200,
   ocr_region_mode: 'bottom_auto',
   ocr_manual_region: null,
-  ocr_min_confidence: 0.55,
+  ocr_min_confidence: 0.35,
   ocr_dedupe_similarity: 0.86,
   ocr_min_text_length: 2,
   ocr_merge_gap_ms: 600,
