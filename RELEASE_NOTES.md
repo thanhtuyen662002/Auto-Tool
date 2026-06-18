@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.17
+
+### Highlights
+
+- Improved Douyin hard-sub OCR coverage for fast Chinese subtitles by keeping useful low-confidence Chinese OCR candidates with review warnings.
+- Increased Fast Auto and OCR Priority sampling rates so short subtitle flashes are less likely to be missed.
+- Added ASR retry without VAD when VAD returns no speech segments, reducing false fallback to OCR on noisy or fast-dialogue clips.
+- Added Vietnamese voiceover timing analysis and optional light video/timeline slowdown to avoid over-compressing TTS into very short Chinese subtitle slots.
+- Logged voiceover timing and OCR low-confidence diagnostics for easier output QA.
+
+### QA
+
+- Focused backend test suite passed: 27 tests.
+
 ## v1.0.11
 
 ### Highlights
