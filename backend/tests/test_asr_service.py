@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 from app.modules.douyin_reup.asr_service import ASRService, _asr_audio_limit_seconds, _is_missing_vad_asset_error
@@ -51,6 +53,48 @@ def test_asr_retries_without_vad_when_silero_asset_is_missing():
     assert model.calls == [True, False]
     assert segments[0].text == "你好"
     assert service.warnings
+
+
+def test_asr_retries_without_vad_when_vad_returns_no_segments(tmp_path, monkeypatch):
+    class FakeModel:
+        def __init__(self) -> None:
+            self.calls: list[bool] = []
+
+        def transcribe(self, audio_path, **kwargs):
+            self.calls.append(kwargs["vad_filter"])
+            if kwargs["vad_filter"]:
+                return [], None
+            return [SimpleNamespace(start=0.0, end=1.0, text="你好")], None
+
+    output = tmp_path / "asr.srt"
+    audio_outputs: list[Path] = []
+
+    def fake_run_ffmpeg(args):
+        audio_path = Path(args[-1])
+        audio_path.write_bytes(b"wav")
+        audio_outputs.append(audio_path)
+
+    model = FakeModel()
+    monkeypatch.setattr("app.modules.douyin_reup.asr_service.run_ffmpeg", fake_run_ffmpeg)
+    ASRService._model_cache = {("tiny", "cpu"): (model, threading.Lock())}
+
+    try:
+        result = ASRService().transcribe_to_srt(
+            "video.mp4",
+            str(output),
+            language="zh",
+            model_size="tiny",
+            device="cpu",
+            vad_filter=True,
+            max_audio_seconds=0,
+        )
+    finally:
+        ASRService._model_cache = {}
+
+    assert result == str(output)
+    assert model.calls == [True, False]
+    assert "你好" in output.read_text(encoding="utf-8")
+    assert audio_outputs
 
 
 def test_missing_vad_asset_error_detection():

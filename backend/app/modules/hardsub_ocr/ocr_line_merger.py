@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import re
 from difflib import SequenceMatcher
 
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
 from app.modules.hardsub_ocr.chinese_text_cleaner import ChineseTextCleaner
 from app.modules.hardsub_ocr.hardsub_ocr_schema import OCRFrameResult, OCRSubtitleLine
+
+
+LOW_CONFIDENCE_WARNING = (
+    "ocr_low_confidence_candidate: OCR confidence thấp hơn ngưỡng cấu hình nhưng text có đủ chữ Trung; "
+    "hãy review kỹ dòng này."
+)
+CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 
 class OCRLineMerger:
@@ -23,20 +31,26 @@ class OCRLineMerger:
         min_duration = int(settings.ocr_min_duration_ms)
         max_duration = int(settings.ocr_max_duration_ms)
 
-        candidates: list[tuple[int, str, float]] = []
+        candidates: list[tuple[int, str, float, bool]] = []
         for frame in sorted(frame_results, key=lambda item: item.timestamp_ms):
             text = self.cleaner.clean(frame.text)
-            if frame.confidence < min_confidence:
-                continue
             if not self.cleaner.looks_like_chinese_subtitle(text, min_text_length=min_text_length):
                 continue
-            candidates.append((frame.timestamp_ms, text, frame.confidence))
+            is_low_confidence = frame.confidence < min_confidence
+            if is_low_confidence and not _accept_low_confidence_candidate(
+                text,
+                confidence=float(frame.confidence),
+                min_confidence=min_confidence,
+                min_text_length=min_text_length,
+            ):
+                continue
+            candidates.append((frame.timestamp_ms, text, frame.confidence, is_low_confidence))
 
         lines: list[OCRSubtitleLine] = []
         current: dict | None = None
-        for timestamp_ms, text, confidence in candidates:
+        for timestamp_ms, text, confidence, is_low_confidence in candidates:
             if current is None:
-                current = _new_line(timestamp_ms, text, confidence)
+                current = _new_line(timestamp_ms, text, confidence, is_low_confidence)
                 continue
 
             gap = timestamp_ms - int(current["last_ts"])
@@ -44,12 +58,14 @@ class OCRLineMerger:
                 current["last_ts"] = timestamp_ms
                 current["confidences"].append(confidence)
                 current["frame_count"] += 1
+                if is_low_confidence and LOW_CONFIDENCE_WARNING not in current["warnings"]:
+                    current["warnings"].append(LOW_CONFIDENCE_WARNING)
                 if len(text) > len(str(current["text"])):
                     current["text"] = text
                 continue
 
             lines.append(_close_line(current, len(lines) + 1, min_duration, max_duration))
-            current = _new_line(timestamp_ms, text, confidence)
+            current = _new_line(timestamp_ms, text, confidence, is_low_confidence)
 
         if current is not None:
             lines.append(_close_line(current, len(lines) + 1, min_duration, max_duration))
@@ -60,13 +76,14 @@ def similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
-def _new_line(timestamp_ms: int, text: str, confidence: float) -> dict:
+def _new_line(timestamp_ms: int, text: str, confidence: float, is_low_confidence: bool = False) -> dict:
     return {
         "start_ms": int(timestamp_ms),
         "last_ts": int(timestamp_ms),
         "text": text,
         "confidences": [float(confidence)],
         "frame_count": 1,
+        "warnings": [LOW_CONFIDENCE_WARNING] if is_low_confidence else [],
     }
 
 
@@ -84,4 +101,26 @@ def _close_line(current: dict, index: int, min_duration_ms: int, max_duration_ms
         text=str(current["text"]),
         confidence=sum(confidences) / len(confidences),
         frame_count=int(current["frame_count"]),
+        warnings=list(current.get("warnings") or []),
     )
+
+
+def _accept_low_confidence_candidate(
+    text: str,
+    *,
+    confidence: float,
+    min_confidence: float,
+    min_text_length: int,
+) -> bool:
+    compact = re.sub(r"\s+", "", str(text or ""))
+    cjk_count = len(CJK_RE.findall(compact))
+    if cjk_count < max(3, int(min_text_length)):
+        return False
+
+    confidence_value = max(0.0, float(confidence))
+    configured_floor = max(0.02, min(0.08, float(min_confidence) * 0.08))
+    if confidence_value >= configured_floor:
+        return True
+    if cjk_count >= 5 and confidence_value >= 0.005:
+        return True
+    return cjk_count >= 10 and confidence_value >= 0.002

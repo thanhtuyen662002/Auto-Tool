@@ -343,6 +343,7 @@ class DouyinReupService:
         failed_step: str | None = None
         result_status = "success"
         final_qa_report = None
+        render_payload: dict[str, Any] | None = None
         retry_steps = retry_steps or {"asr", "translation", "render"}
         cached_output = cached_output or {}
         retry_history = _retry_history(cached_output, settings, started_at.isoformat())
@@ -540,9 +541,12 @@ class DouyinReupService:
                 source_srt_file=source_result.source_srt_path,
                 translated_srt_file=fixed_srt,
                 subtitle_ass_file=render_payload.get("subtitle_ass_file"),
+                render_subtitle_srt_file=render_payload.get("render_subtitle_srt_file"),
                 overlay_file=render_payload.get("overlay_file"),
                 bgm_file=render_payload.get("bgm_file"),
                 voiceover_file=render_payload.get("voiceover_file"),
+                video_slowdown_factor=render_payload.get("video_slowdown_factor"),
+                voiceover_timing=render_payload.get("voiceover_timing"),
                 log_file=str(log_path),
                 ocr_debug_json_path=source_result.ocr_debug_json_path,
                 ocr_frame_count=source_result.ocr_frame_count,
@@ -631,6 +635,14 @@ class DouyinReupService:
                     }
                 if final_qa_report is not None:
                     payload["final_output_qa"] = _final_qa_summary(final_qa_report)
+                if render_payload:
+                    payload["render"] = {
+                        "path": render_payload.get("path"),
+                        "duration": render_payload.get("duration"),
+                        "render_subtitle_srt_file": render_payload.get("render_subtitle_srt_file"),
+                        "video_slowdown_factor": render_payload.get("video_slowdown_factor"),
+                        "voiceover_timing": render_payload.get("voiceover_timing"),
+                    }
                 write_json(log_path, payload)
 
     def _process_one_silent_video(

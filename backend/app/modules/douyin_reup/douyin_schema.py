@@ -102,6 +102,9 @@ class DouyinReupSettings(BaseModel):
     generate_voiceover_for_silent_video: bool = False
     silent_voiceover_provider: str = "edge_tts"
     silent_voiceover_voice: str = "vi-VN-HoaiMyNeural"
+    voiceover_auto_slow_video: bool = True
+    voiceover_max_video_slowdown: float = Field(default=1.18, ge=1.0, le=1.5)
+    voiceover_comfort_speedup: float = Field(default=1.35, ge=1.0, le=3.0)
     keep_immersive_original_audio: bool = True
     immersive_original_audio_volume: float = Field(default=0.75, ge=0, le=1)
     add_bgm_for_silent_video: bool = True

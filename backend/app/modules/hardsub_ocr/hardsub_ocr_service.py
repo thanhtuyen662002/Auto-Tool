@@ -133,6 +133,16 @@ class HardSubOCRService:
 
         _progress(progress_callback, "ocr_merging_lines", 95, len(frames), len(frames))
         lines = self.line_merger.merge_frames_to_lines(frame_results, settings)
+        low_confidence_line_count = sum(
+            1
+            for line in lines
+            if any("ocr_low_confidence_candidate" in warning for warning in line.warnings)
+        )
+        if low_confidence_line_count:
+            warnings.append(
+                f"ocr_low_confidence_lines: Đã giữ {low_confidence_line_count} dòng OCR confidence thấp "
+                "vì vẫn có đủ dấu hiệu chữ Trung; cần review kỹ bản dịch."
+            )
         average_confidence = sum(line.confidence for line in lines) / len(lines) if lines else 0.0
         source_srt_path = None
         if lines:

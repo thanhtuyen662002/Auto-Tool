@@ -83,29 +83,29 @@ class ASRService:
                 self._model_cache[cache_key] = cached
         model, inference_lock = cached
         _progress(progress_callback, "asr_transcribing", 35)
+        language_code = language.strip() or None
         with inference_lock:
             segments = self._transcribe_with_vad_fallback(
                 model=model,
                 audio_path=str(audio_path),
-                language=language.strip() or None,
+                language=language_code,
                 vad_filter=vad_filter,
             )
-
-        blocks: list[SubtitleBlock] = []
-        for segment in segments:
-            text = " ".join(str(segment.text or "").split())
-            if not text:
-                continue
-            start = max(0.0, float(segment.start))
-            end = max(start + 0.1, float(segment.end))
-            blocks.append(
-                SubtitleBlock(
-                    index=len(blocks) + 1,
-                    start=start,
-                    end=end,
-                    text=text,
+            blocks = self._segments_to_blocks(segments)
+            if not blocks and vad_filter:
+                warning = (
+                    "ASR bật VAD nhưng không nhận diện được câu nào; đã thử lại không dùng VAD "
+                    "để tránh bỏ sót thoại nhanh hoặc nền âm ồn."
                 )
-            )
+                logger.warning(warning)
+                self.warnings.append(warning)
+                segments = self._transcribe_segments(
+                    model,
+                    str(audio_path),
+                    language_code,
+                    vad_filter=False,
+                )
+                blocks = self._segments_to_blocks(segments)
 
         if not blocks:
             raise RuntimeError(f"ASR không nhận diện được subtitle từ video: {video_path}")
@@ -150,6 +150,25 @@ class ASRService:
             condition_on_previous_text=True,
         )
         return list(segments)
+
+    @staticmethod
+    def _segments_to_blocks(segments: list[Any]) -> list[SubtitleBlock]:
+        blocks: list[SubtitleBlock] = []
+        for segment in segments:
+            text = " ".join(str(segment.text or "").split())
+            if not text:
+                continue
+            start = max(0.0, float(segment.start))
+            end = max(start + 0.1, float(segment.end))
+            blocks.append(
+                SubtitleBlock(
+                    index=len(blocks) + 1,
+                    start=start,
+                    end=end,
+                    text=text,
+                )
+            )
+        return blocks
 
 
 def _asr_audio_limit_seconds(video_path: str, max_audio_seconds: int | float | None = None) -> float | None:
