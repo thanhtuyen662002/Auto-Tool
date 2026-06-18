@@ -64,3 +64,25 @@ def test_generate_ass_subtitle_splits_long_lines_without_dropping_text(tmp_path)
     assert content.count("Dialogue: 0,") > 1
     for phrase in ["Một câu rất dài", "thông", "tin", "quan", "trọng", "render subtitle"]:
         assert phrase in content
+
+
+def test_generate_ass_subtitle_can_draw_cover_background(tmp_path) -> None:
+    preset = get_visual_style_preset("clean_review_light")
+    output_path = tmp_path / "video_001_cover.ass"
+
+    generate_ass_subtitle(
+        [{"start_hint": 0, "end_hint": 2, "text": "Chỉ còn phụ đề Việt"}],
+        preset,
+        1080,
+        1920,
+        str(output_path),
+        cover_background_enabled=True,
+        cover_background_height_ratio=0.22,
+        cover_background_opacity=0.9,
+    )
+
+    content = output_path.read_text(encoding="utf-8")
+    assert "Style: SubtitleCover," in content
+    assert "Dialogue: 0,0:00:00.00,0:00:02.00,SubtitleCover" in content
+    assert r"{\p1\pos(0,0)}m 0 " in content
+    assert "Dialogue: 1,0:00:00.00,0:00:02.00,Default" in content

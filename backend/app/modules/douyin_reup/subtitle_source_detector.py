@@ -196,6 +196,21 @@ class SubtitleSourceDetector:
         )
         return {"path": path, "warnings": list(getattr(self.asr_service, "warnings", []))}
 
+    def probe_ocr_debug(
+        self,
+        video: DouyinVideoItem,
+        settings: DouyinReupSettings,
+        target_dir: Path,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> HardSubOCRResult | None:
+        try:
+            result = self._run_ocr(video, settings, target_dir, progress_callback)
+        except Exception:
+            return None
+        if not result.debug_json_path:
+            return None
+        return result
+
     def _run_ocr(
         self,
         video: DouyinVideoItem,

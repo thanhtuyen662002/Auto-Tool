@@ -162,6 +162,8 @@ class HardSubOCRService:
             "language": settings.ocr_language,
             "region_mode": settings.ocr_region_mode,
             "region": region.model_dump(mode="json"),
+            "frame_width": frame_width,
+            "frame_height": frame_height,
             "sample_fps": settings.ocr_sample_fps,
             "frame_count": len(frames),
             "detected_line_count": len(lines),
@@ -170,8 +172,10 @@ class HardSubOCRService:
             "frames": [
                 {
                     "timestamp_ms": frame.timestamp_ms,
+                    "region": frame.region.model_dump(mode="json"),
                     "text": frame.text,
                     "confidence": frame.confidence,
+                    "raw_blocks": frame.raw_blocks,
                     "warnings": frame.warnings,
                 }
                 for frame in frame_results

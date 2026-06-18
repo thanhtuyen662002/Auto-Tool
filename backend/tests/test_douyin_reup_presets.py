@@ -55,6 +55,16 @@ def test_apply_clean_subtitle_only_disables_bgm_and_overlay():
     assert settings.burn_subtitle is True
 
 
+def test_voice_reup_presets_hide_image_overlay_and_cover_chinese_subtitles():
+    service = DouyinReupPresetService()
+
+    for preset_id in ["safe_review", "fast_auto", "ocr_priority", "voice_priority", "music_recut"]:
+        settings = service.apply_preset(preset_id)
+        assert settings.add_overlay is False
+        assert settings.overlay_mode == "none"
+        assert settings.subtitle_cover_enabled is True
+
+
 def test_apply_silent_product_voiceover_enables_silent_voiceover():
     settings = DouyinReupPresetService().apply_preset("silent_product_voiceover")
 

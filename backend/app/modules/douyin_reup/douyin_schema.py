@@ -51,17 +51,29 @@ class DouyinReupSettings(BaseModel):
     prefer_ocr_over_asr_when_text_visible: bool = False
     visual_style_preset_id: str = "clean_review_light"
     burn_subtitle: bool = True
-    add_overlay: bool = True
-    overlay_mode: Literal["preset", "none", "custom"] = "preset"
+    add_overlay: bool = False
+    overlay_mode: Literal["preset", "none", "custom"] = "none"
     custom_overlay_path: str | None = None
     custom_overlay_height_percent: int | None = Field(default=100, ge=5, le=100)
     custom_overlay_fit_mode: Literal["cover", "contain", "stretch"] = "cover"
+    subtitle_cover_enabled: bool = True
+    subtitle_cover_color: str = "#000000"
+    subtitle_cover_opacity: float = Field(default=0.86, ge=0, le=1)
+    subtitle_cover_auto_position: bool = True
+    subtitle_cover_probe_if_no_ocr: bool = True
+    subtitle_cover_probe_sample_fps: float = Field(default=0.6, gt=0, le=2.0)
+    subtitle_cover_height_ratio: float = Field(default=0.22, ge=0.08, le=0.45)
+    subtitle_cover_bottom_ratio: float = Field(default=0.0, ge=0, le=0.2)
+    subtitle_cover_padding_ratio: float = Field(default=0.035, ge=0, le=0.12)
     keep_original_audio: bool = True
     add_bgm: bool = True
     music_folder: str | None = None
     favorite_music_paths: list[str] = Field(default_factory=list)
     bgm_volume: float = Field(default=0.16, ge=0, le=1)
     original_audio_volume: float = Field(default=0.85, ge=0, le=1)
+    reduce_original_voice: bool = False
+    original_voice_reduction_strength: float = Field(default=0.65, ge=0, le=1)
+    original_voice_reduction_fallback_volume: float = Field(default=0.35, ge=0, le=1)
     duck_bgm_when_voice: bool = False
     resolution: str = "1080x1920"
     fps: int = Field(default=30, gt=0, le=120)

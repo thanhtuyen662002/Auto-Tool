@@ -4200,6 +4200,9 @@ def _silent_settings_from_payload(payload: dict[str, Any] | None = None) -> Douy
     updates.setdefault("preset_name", "Không thoại - Chill immersive")
     updates.setdefault("enable_silent_immersive_mode", True)
     updates.setdefault("silent_mode_strategy", "chill_immersive")
+    updates.setdefault("add_overlay", True)
+    updates.setdefault("overlay_mode", "preset")
+    updates.setdefault("subtitle_cover_enabled", False)
     return DouyinReupSettings.model_validate({**base, **updates})
 
 

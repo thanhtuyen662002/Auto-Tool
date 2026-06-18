@@ -170,17 +170,29 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   prefer_ocr_over_asr_when_text_visible: false,
   visual_style_preset_id: 'clean_review_light',
   burn_subtitle: true,
-  add_overlay: true,
-  overlay_mode: 'preset',
+  add_overlay: false,
+  overlay_mode: 'none',
   custom_overlay_path: 'examples/overlay',
   custom_overlay_height_percent: 100,
   custom_overlay_fit_mode: 'cover',
+  subtitle_cover_enabled: true,
+  subtitle_cover_color: '#000000',
+  subtitle_cover_opacity: 0.86,
+  subtitle_cover_auto_position: true,
+  subtitle_cover_probe_if_no_ocr: true,
+  subtitle_cover_probe_sample_fps: 0.6,
+  subtitle_cover_height_ratio: 0.22,
+  subtitle_cover_bottom_ratio: 0,
+  subtitle_cover_padding_ratio: 0.035,
   keep_original_audio: true,
   add_bgm: true,
   music_folder: '',
   favorite_music_paths: [],
   bgm_volume: 0.16,
   original_audio_volume: 0.85,
+  reduce_original_voice: false,
+  original_voice_reduction_strength: 0.65,
+  original_voice_reduction_fallback_volume: 0.35,
   duck_bgm_when_voice: false,
   resolution: '1080x1920',
   fps: 30,
@@ -729,6 +741,20 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       immersive_original_audio_volume: settings.immersive_original_audio_volume,
       keep_original_audio: settings.keep_original_audio,
       keep_immersive_original_audio: settings.keep_immersive_original_audio,
+      reduce_original_voice: settings.reduce_original_voice,
+      original_voice_reduction_strength: settings.original_voice_reduction_strength,
+      original_voice_reduction_fallback_volume: settings.original_voice_reduction_fallback_volume,
+      subtitle_cover_enabled: settings.subtitle_cover_enabled,
+      subtitle_cover_color: settings.subtitle_cover_color,
+      subtitle_cover_opacity: settings.subtitle_cover_opacity,
+      subtitle_cover_auto_position: settings.subtitle_cover_auto_position,
+      subtitle_cover_probe_if_no_ocr: settings.subtitle_cover_probe_if_no_ocr,
+      subtitle_cover_probe_sample_fps: settings.subtitle_cover_probe_sample_fps,
+      subtitle_cover_height_ratio: settings.subtitle_cover_height_ratio,
+      subtitle_cover_bottom_ratio: settings.subtitle_cover_bottom_ratio,
+      subtitle_cover_padding_ratio: settings.subtitle_cover_padding_ratio,
+      add_overlay: settings.add_overlay,
+      overlay_mode: settings.overlay_mode,
       generate_voiceover_for_silent_video: settings.generate_voiceover_for_silent_video,
       silent_voiceover_provider: settings.silent_voiceover_provider,
       silent_voiceover_voice: settings.silent_voiceover_voice,
@@ -1065,8 +1091,74 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             />
             <Toggle label="Render MP4 ngay sau khi dịch" checked={currentAutoRender} onChange={(value) => updateRenderFlow(value ? 'auto' : 'review', true)} />
             <Toggle label="Burn subtitle vào video" checked={settings.burn_subtitle} onChange={(value) => updateAdvancedSettings({ burn_subtitle: value })} />
+            <Toggle
+              label="Che phụ đề Trung bằng nền phụ đề Việt"
+              checked={settings.subtitle_cover_enabled}
+              onChange={(value) => updateAdvancedSettings({ subtitle_cover_enabled: value })}
+            />
             <Toggle label="Dùng overlay" checked={settings.add_overlay} onChange={(value) => updateAdvancedSettings({ add_overlay: value, overlay_mode: value ? settings.overlay_mode || 'preset' : 'none' })} />
           </div>
+          {settings.subtitle_cover_enabled ? (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Toggle
+                label="Tự tìm vị trí phụ đề Trung"
+                checked={settings.subtitle_cover_auto_position}
+                onChange={(value) => updateAdvancedSettings({ subtitle_cover_auto_position: value })}
+              />
+              {settings.subtitle_cover_auto_position ? (
+                <Toggle
+                  label="Quét nhanh nếu chưa có OCR"
+                  checked={settings.subtitle_cover_probe_if_no_ocr}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_cover_probe_if_no_ocr: value })}
+                />
+              ) : null}
+              <SliderInput
+                label={`${settings.subtitle_cover_auto_position ? 'Chiều cao fallback' : 'Chiều cao nền che sub'}: ${Math.round(settings.subtitle_cover_height_ratio * 100)}%`}
+                min={0.12}
+                max={0.36}
+                step={0.01}
+                value={settings.subtitle_cover_height_ratio}
+                onChange={(value) => updateAdvancedSettings({ subtitle_cover_height_ratio: value })}
+              />
+              <SliderInput
+                label={`Độ đậm nền che sub: ${Math.round(settings.subtitle_cover_opacity * 100)}%`}
+                min={0.2}
+                max={1}
+                step={0.01}
+                value={settings.subtitle_cover_opacity}
+                onChange={(value) => updateAdvancedSettings({ subtitle_cover_opacity: value })}
+              />
+              {settings.subtitle_cover_auto_position ? (
+                <SliderInput
+                  label={`Đệm vùng che OCR: ${Math.round(settings.subtitle_cover_padding_ratio * 100)}%`}
+                  min={0.01}
+                  max={0.08}
+                  step={0.005}
+                  value={settings.subtitle_cover_padding_ratio}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_cover_padding_ratio: value })}
+                />
+              ) : null}
+              {settings.subtitle_cover_auto_position && settings.subtitle_cover_probe_if_no_ocr ? (
+                <SliderInput
+                  label={`FPS quét vị trí sub: ${settings.subtitle_cover_probe_sample_fps.toFixed(1)}`}
+                  min={0.2}
+                  max={1.5}
+                  step={0.1}
+                  value={settings.subtitle_cover_probe_sample_fps}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_cover_probe_sample_fps: value })}
+                />
+              ) : null}
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-slate-200">Màu nền che sub</span>
+                <input
+                  className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                  type="color"
+                  value={settings.subtitle_cover_color || '#000000'}
+                  onChange={(event) => updateAdvancedSettings({ subtitle_cover_color: event.target.value })}
+                />
+              </label>
+            </div>
+          ) : null}
         </GlassCard>
 
         <GlassCard className="grid gap-4 p-4" strong>
@@ -1202,6 +1294,21 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           <div className="grid gap-3 sm:grid-cols-2">
             <SliderInput label="Âm lượng nhạc nền" min={0} max={1} step={0.01} value={settings.bgm_volume} onChange={(value) => updateAdvancedSettings({ bgm_volume: value })} />
             <SliderInput label="Âm lượng audio gốc" min={0} max={1} step={0.01} value={settings.original_audio_volume} onChange={(value) => updateAdvancedSettings({ original_audio_volume: value })} />
+            <Toggle
+              label="Giảm giọng Trung trong audio gốc"
+              checked={settings.reduce_original_voice}
+              onChange={(value) => updateAdvancedSettings({ reduce_original_voice: value })}
+            />
+            {settings.reduce_original_voice ? (
+              <SliderInput
+                label={`Mức giảm giọng Trung: ${Math.round(settings.original_voice_reduction_strength * 100)}%`}
+                min={0.2}
+                max={0.95}
+                step={0.05}
+                value={settings.original_voice_reduction_strength}
+                onChange={(value) => updateAdvancedSettings({ original_voice_reduction_strength: value })}
+              />
+            ) : null}
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-slate-200">Visual style</span>
               <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.visual_style_preset_id} onChange={(event) => updateAdvancedSettings({ visual_style_preset_id: event.target.value })}>

@@ -67,6 +67,54 @@ class DouyinReupService:
         self.subtitle_review_service = subtitle_review_service or SubtitleReviewService()
         self.silent_pipeline = silent_pipeline or SilentReupPipeline(render_pipeline=self.render_pipeline)
 
+    def _probe_cover_ocr_debug(
+        self,
+        *,
+        video: DouyinVideoItem,
+        settings: DouyinReupSettings,
+        video_dir: Path,
+        warnings: list[str],
+        progress_callback: ProgressCallback | None = None,
+    ) -> str | None:
+        if not (
+            settings.subtitle_cover_enabled
+            and settings.subtitle_cover_auto_position
+            and settings.subtitle_cover_probe_if_no_ocr
+            and settings.burn_subtitle
+        ):
+            return None
+        probe_settings = settings.model_copy(
+            update={
+                "ocr_sample_fps": min(settings.ocr_sample_fps, settings.subtitle_cover_probe_sample_fps),
+                "ocr_region_mode": settings.ocr_region_mode or "bottom_auto",
+            }
+        )
+        probe_dir = ensure_dir(video_dir / "subtitle_cover_probe")
+        probe = getattr(self.source_detector, "probe_ocr_debug", None)
+        if not callable(probe):
+            return None
+        try:
+            result = probe(video, probe_settings, probe_dir, progress_callback)
+        except Exception:
+            result = None
+        if not result or not result.debug_json_path:
+            warnings.append(
+                "subtitle_cover_probe_fallback: Không quét được tọa độ phụ đề Trung, "
+                "đã dùng vùng che đáy mặc định cho video này."
+            )
+            return None
+        if result.detected_line_count <= 0:
+            warnings.append(
+                "subtitle_cover_probe_empty: Quét nhanh không thấy phụ đề Trung rõ ràng, "
+                "đã dùng vùng che đáy mặc định cho video này."
+            )
+            return result.debug_json_path
+        warnings.append(
+            "subtitle_cover_probe: Đã quét nhanh OCR để tự tìm vị trí phụ đề Trung "
+            f"({result.detected_line_count} dòng, confidence {result.average_confidence:.2f})."
+        )
+        return result.debug_json_path
+
     def process_folder(
         self,
         config: ProjectConfig,
@@ -507,8 +555,17 @@ class DouyinReupService:
                 "output_dir": str(video_dir),
                 "output_name": f"douyin_{index:03d}.mp4",
             }
+            source_ocr_debug_path = source_result.ocr_debug_json_path or self._probe_cover_ocr_debug(
+                video=video,
+                settings=settings,
+                video_dir=video_dir,
+                warnings=warnings,
+                progress_callback=step_progress_callback,
+            )
             if "tts_settings" in inspect.signature(self.render_pipeline.render_video_with_translated_subtitle).parameters:
                 render_kwargs["tts_settings"] = config.tts
+            if "source_ocr_debug_path" in inspect.signature(self.render_pipeline.render_video_with_translated_subtitle).parameters:
+                render_kwargs["source_ocr_debug_path"] = source_ocr_debug_path
             render_payload = self.render_pipeline.render_video_with_translated_subtitle(**render_kwargs)
             durations["render_seconds"] = time.perf_counter() - render_started
             warnings.extend(render_payload.get("warnings") or [])

@@ -16,6 +16,7 @@ from app.modules.tts.tts_schema import TTSSettings
 from app.modules.visual_style.custom_overlay_asset import build_custom_overlay_asset, select_custom_overlay_asset
 from app.modules.visual_style.overlay_asset_builder import build_overlay_asset
 from app.modules.visual_style.style_schema import VisualStyleSettings
+from app.modules.visual_style.subtitle_cover_detector import detect_subtitle_cover_from_ocr_debug
 from app.modules.visual_style.subtitle_style_renderer import generate_ass_subtitle
 from app.modules.visual_style.visual_style_service import VisualStyleService, parse_resolution
 from app.modules.voice_generator.voice_generator import VoiceGenerator
@@ -42,6 +43,7 @@ class DouyinRenderPipeline:
         output_dir: str,
         output_name: str,
         tts_settings: TTSSettings | None = None,
+        source_ocr_debug_path: str | None = None,
     ) -> dict:
         return self._render_video_with_subtitle(
             video=video,
@@ -53,6 +55,7 @@ class DouyinRenderPipeline:
             output_name=output_name,
             voiceover_path=None,
             tts_settings=tts_settings,
+            source_ocr_debug_path=source_ocr_debug_path,
         )
 
     def render_video_with_srt(
@@ -65,6 +68,7 @@ class DouyinRenderPipeline:
         warnings: list[str] | None = None,
         voiceover_path: str | None = None,
         tts_settings: TTSSettings | None = None,
+        source_ocr_debug_path: str | None = None,
     ) -> dict:
         return self._render_video_with_subtitle(
             video=video,
@@ -76,6 +80,7 @@ class DouyinRenderPipeline:
             output_name=output_name,
             voiceover_path=voiceover_path,
             tts_settings=tts_settings,
+            source_ocr_debug_path=source_ocr_debug_path,
         )
 
     def render_from_review_document(
@@ -118,6 +123,7 @@ class DouyinRenderPipeline:
             output_name=f"{Path(document.video_path).stem}_reviewed.mp4",
             voiceover_path=voiceover_path,
             tts_settings=tts_settings,
+            source_ocr_debug_path=None,
         )
         result.update(
             {
@@ -140,6 +146,7 @@ class DouyinRenderPipeline:
         output_name: str,
         voiceover_path: str | None,
         tts_settings: TTSSettings | None,
+        source_ocr_debug_path: str | None,
     ) -> dict:
         target_dir = ensure_dir(output_dir)
         width, height = parse_resolution(settings.resolution)
@@ -213,7 +220,20 @@ class DouyinRenderPipeline:
         if settings.burn_subtitle and subtitle_ass_path_override and Path(subtitle_ass_path_override).exists():
             subtitle_ass_path = Path(subtitle_ass_path_override)
         elif settings.burn_subtitle and subtitle_lines:
-            generate_ass_subtitle(subtitle_lines, preset, width, height, str(subtitle_ass_path))
+            cover_options = self._subtitle_cover_options(
+                settings=settings,
+                video=video,
+                source_ocr_debug_path=source_ocr_debug_path,
+                warnings=warnings,
+            )
+            generate_ass_subtitle(
+                subtitle_lines,
+                preset,
+                width,
+                height,
+                str(subtitle_ass_path),
+                **cover_options,
+            )
         else:
             subtitle_ass_path = None  # type: ignore[assignment]
             if settings.burn_subtitle:
@@ -244,7 +264,7 @@ class DouyinRenderPipeline:
                     warnings.append(f"Không tìm thấy file nhạc nền hợp lệ trong thư mục: {settings.music_folder}")
 
         try:
-            self._run_render(
+            self._run_render_with_audio_fallback(
                 video=video,
                 settings=settings,
                 output_path=str(output_path),
@@ -256,6 +276,7 @@ class DouyinRenderPipeline:
                 voiceover_path=voiceover_path,
                 render_duration=render_duration,
                 video_slowdown_factor=video_slowdown_factor,
+                warnings=warnings,
             )
         except FFmpegError as exc:
             if subtitle_ass_path:
@@ -266,7 +287,7 @@ class DouyinRenderPipeline:
                     ) from exc
                 warnings.append(f"Burn subtitle thất bại, thử render lại không subtitle: {exc}")
                 try:
-                    self._run_render(
+                    self._run_render_with_audio_fallback(
                         video=video,
                         settings=settings,
                         output_path=str(output_path),
@@ -278,6 +299,7 @@ class DouyinRenderPipeline:
                         voiceover_path=voiceover_path,
                         render_duration=render_duration,
                         video_slowdown_factor=video_slowdown_factor,
+                        warnings=warnings,
                     )
                 except FFmpegError as retry_exc:
                     if not bgm_path:
@@ -289,7 +311,7 @@ class DouyinRenderPipeline:
                         ) from retry_exc
                     warnings.append(f"Render với nhạc nền thất bại, thử render lại chỉ giữ audio gốc: {retry_exc}")
                     bgm_path = None
-                    self._run_render(
+                    self._run_render_with_audio_fallback(
                         video=video,
                         settings=settings,
                         output_path=str(output_path),
@@ -301,6 +323,7 @@ class DouyinRenderPipeline:
                         voiceover_path=voiceover_path,
                         render_duration=render_duration,
                         video_slowdown_factor=video_slowdown_factor,
+                        warnings=warnings,
                     )
                 subtitle_ass_path = None  # type: ignore[assignment]
             elif bgm_path:
@@ -311,7 +334,7 @@ class DouyinRenderPipeline:
                     ) from exc
                 warnings.append(f"Render với nhạc nền thất bại, thử render lại chỉ giữ audio gốc: {exc}")
                 bgm_path = None
-                self._run_render(
+                self._run_render_with_audio_fallback(
                     video=video,
                     settings=settings,
                     output_path=str(output_path),
@@ -323,6 +346,7 @@ class DouyinRenderPipeline:
                     voiceover_path=voiceover_path,
                     render_duration=render_duration,
                     video_slowdown_factor=video_slowdown_factor,
+                    warnings=warnings,
                 )
             else:
                 raise
@@ -402,6 +426,104 @@ class DouyinRenderPipeline:
             raise RuntimeError("TTS báo thành công nhưng file voiceover không tồn tại hoặc bị rỗng.")
         return voiceover_path
 
+    def _subtitle_cover_options(
+        self,
+        *,
+        settings: DouyinReupSettings,
+        video: DouyinVideoItem,
+        source_ocr_debug_path: str | None,
+        warnings: list[str],
+    ) -> dict:
+        height_ratio = settings.subtitle_cover_height_ratio
+        bottom_ratio = settings.subtitle_cover_bottom_ratio
+        if settings.subtitle_cover_enabled and settings.subtitle_cover_auto_position and source_ocr_debug_path:
+            placement = detect_subtitle_cover_from_ocr_debug(
+                source_ocr_debug_path,
+                fallback_height_ratio=settings.subtitle_cover_height_ratio,
+                fallback_bottom_ratio=settings.subtitle_cover_bottom_ratio,
+                padding_ratio=settings.subtitle_cover_padding_ratio,
+            )
+            if placement:
+                height_ratio = placement.height_ratio
+                bottom_ratio = placement.bottom_ratio
+                warnings.append(
+                    "subtitle_cover_auto_position: Đã tự đặt nền phụ đề Việt theo vị trí chữ Trung "
+                    f"từ OCR ({placement.block_count} vùng chữ, confidence {placement.confidence:.2f})."
+                )
+            else:
+                warnings.append(
+                    "subtitle_cover_auto_position_fallback: Không đủ tọa độ OCR để tự đặt nền che sub Trung; "
+                    "đã dùng vùng che đáy mặc định cho video này."
+                )
+        return {
+            "cover_background_enabled": settings.subtitle_cover_enabled,
+            "cover_background_color": settings.subtitle_cover_color,
+            "cover_background_opacity": settings.subtitle_cover_opacity,
+            "cover_background_height_ratio": height_ratio,
+            "cover_background_bottom_ratio": bottom_ratio,
+        }
+
+    def _run_render_with_audio_fallback(
+        self,
+        *,
+        video: DouyinVideoItem,
+        settings: DouyinReupSettings,
+        output_path: str,
+        width: int,
+        height: int,
+        overlay_path: str | None,
+        subtitle_ass_path: str | None,
+        bgm_path: str | None,
+        voiceover_path: str | None = None,
+        render_duration: float | None = None,
+        video_slowdown_factor: float = 1.0,
+        warnings: list[str] | None = None,
+    ) -> None:
+        try:
+            self._run_render(
+                video=video,
+                settings=settings,
+                output_path=output_path,
+                width=width,
+                height=height,
+                overlay_path=overlay_path,
+                subtitle_ass_path=subtitle_ass_path,
+                bgm_path=bgm_path,
+                voiceover_path=voiceover_path,
+                render_duration=render_duration,
+                video_slowdown_factor=video_slowdown_factor,
+            )
+        except FFmpegError:
+            if not settings.reduce_original_voice:
+                raise
+            retry_settings = settings.model_copy(
+                update={
+                    "reduce_original_voice": False,
+                    "original_audio_volume": min(
+                        settings.original_audio_volume,
+                        settings.original_voice_reduction_fallback_volume,
+                    ),
+                }
+            )
+            self._run_render(
+                video=video,
+                settings=retry_settings,
+                output_path=output_path,
+                width=width,
+                height=height,
+                overlay_path=overlay_path,
+                subtitle_ass_path=subtitle_ass_path,
+                bgm_path=bgm_path,
+                voiceover_path=voiceover_path,
+                render_duration=render_duration,
+                video_slowdown_factor=video_slowdown_factor,
+            )
+            if warnings is not None:
+                warnings.append(
+                    "Giảm giọng Trung bằng bộ lọc center-cancel không chạy ổn với file này; "
+                    "đã render lại bằng cách hạ âm lượng audio gốc để giữ batch tiếp tục."
+                )
+
     def _run_render(
         self,
         video: DouyinVideoItem,
@@ -468,6 +590,8 @@ class DouyinRenderPipeline:
             bgm_input_index=bgm_input_index,
             voice_input_index=voice_input_index,
             video_slowdown_factor=slowdown,
+            reduce_original_voice=settings.reduce_original_voice,
+            original_voice_reduction_strength=settings.original_voice_reduction_strength,
         )
 
         filter_complex = ";".join(part for part in [*video_filters, audio_filter] if part)
@@ -507,11 +631,22 @@ class DouyinRenderPipeline:
         bgm_input_index: int | None,
         voice_input_index: int | None,
         video_slowdown_factor: float = 1.0,
+        reduce_original_voice: bool = False,
+        original_voice_reduction_strength: float = 0.65,
     ) -> tuple[str, str | None]:
         filters: list[str] = []
         labels: list[str] = []
         if has_original_audio:
-            original_parts = [f"volume={_clamp_volume(original_audio_volume):.3f}"]
+            original_parts: list[str] = []
+            if reduce_original_voice:
+                strength = max(0.0, min(1.0, float(original_voice_reduction_strength)))
+                original_parts.extend(
+                    [
+                        "aformat=channel_layouts=stereo",
+                        f"pan=stereo|c0=c0-{strength:.3f}*c1|c1=c1-{strength:.3f}*c0",
+                    ]
+                )
+            original_parts.append(f"volume={_clamp_volume(original_audio_volume):.3f}")
             slowdown = max(1.0, float(video_slowdown_factor or 1.0))
             if slowdown > 1.0 + MIN_VIDEO_SLOWDOWN_DELTA:
                 original_parts.append(VoiceGenerator._atempo_filter(1.0 / slowdown))

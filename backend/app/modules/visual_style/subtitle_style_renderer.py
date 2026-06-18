@@ -15,16 +15,36 @@ def generate_ass_subtitle(
     video_width: int,
     video_height: int,
     output_path: str,
+    *,
+    cover_background_enabled: bool = False,
+    cover_background_color: str = "#000000",
+    cover_background_opacity: float = 0.86,
+    cover_background_height_ratio: float | None = None,
+    cover_background_bottom_ratio: float = 0.0,
 ) -> str:
     target = Path(output_path)
     ensure_dir(target.parent)
     lines = _normalize_subtitle_lines(srt_or_script_subtitles)
     subtitle = preset.subtitle
     overlay = preset.overlay
-    panel_height = int(video_height * overlay.height_ratio)
-    panel_margin_bottom = max(18, min(video_height // 24, overlay.padding_y // 2))
-    panel_top = video_height - panel_height - panel_margin_bottom
-    subtitle_y = int(panel_top + panel_height / 2)
+    if cover_background_enabled:
+        cover_height_ratio = _clamp_float(
+            cover_background_height_ratio if cover_background_height_ratio is not None else overlay.height_ratio,
+            0.08,
+            0.45,
+        )
+        cover_bottom_ratio = _clamp_float(cover_background_bottom_ratio, 0.0, 0.2)
+        cover_bottom = max(1, video_height - int(video_height * cover_bottom_ratio))
+        cover_height = max(1, int(video_height * cover_height_ratio))
+        cover_top = max(0, cover_bottom - cover_height)
+        subtitle_y = int(cover_top + (cover_bottom - cover_top) / 2)
+    else:
+        panel_height = int(video_height * overlay.height_ratio)
+        panel_margin_bottom = max(18, min(video_height // 24, overlay.padding_y // 2))
+        panel_top = video_height - panel_height - panel_margin_bottom
+        subtitle_y = int(panel_top + panel_height / 2)
+        cover_top = 0
+        cover_bottom = 0
     margin_l = max(40, overlay.padding_x)
     margin_r = max(40, overlay.padding_x)
     margin_v = max(24, video_height - subtitle_y)
@@ -53,21 +73,51 @@ def generate_ass_subtitle(
         f"{subtitle.stroke_width},"
         f"{shadow},"
         f"5,{margin_l},{margin_r},{margin_v},1",
-        "",
-        "[Events]",
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
 
+    if cover_background_enabled:
+        content.append(
+            "Style: SubtitleCover,"
+            f"{subtitle.font_family},"
+            "20,"
+            f"{hex_to_ass_color(cover_background_color, cover_background_opacity)},"
+            "&H000000FF,"
+            f"{hex_to_ass_color(cover_background_color, cover_background_opacity)},"
+            "&H00000000,"
+            "0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1"
+        )
+
+    content.extend(
+        [
+            "",
+            "[Events]",
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+        ]
+    )
+
     for line in _expand_lines_for_display(lines, subtitle.max_chars_per_line, subtitle.max_lines):
+        start = _format_ass_timestamp(float(line.start_hint or 0.0))
+        end = _format_ass_timestamp(float(line.end_hint or 0.0))
+        if cover_background_enabled:
+            cover_shape = (
+                rf"{{\p1\pos(0,0)}}m 0 {cover_top} l {video_width} {cover_top} "
+                rf"l {video_width} {cover_bottom} l 0 {cover_bottom}{{\p0}}"
+            )
+            content.append(
+                "Dialogue: 0,"
+                f"{start},"
+                f"{end},"
+                f"SubtitleCover,,0,0,0,,{cover_shape}"
+            )
         wrapped = r"\N".join(
             _escape_ass_text(part)
             for part in wrap_subtitle_text(line.text, subtitle.max_chars_per_line, subtitle.max_lines)
         )
         positioned = rf"{{\pos({video_width // 2},{subtitle_y})}}{wrapped}"
         content.append(
-            "Dialogue: 0,"
-            f"{_format_ass_timestamp(float(line.start_hint or 0.0))},"
-            f"{_format_ass_timestamp(float(line.end_hint or 0.0))},"
+            f"Dialogue: {1 if cover_background_enabled else 0},"
+            f"{start},"
+            f"{end},"
             f"Default,,0,0,0,,{positioned}"
         )
 
@@ -84,6 +134,10 @@ def hex_to_ass_color(hex_color: str, alpha: float = 1.0) -> str:
     blue = cleaned[4:6]
     ass_alpha = int(round((1.0 - max(0.0, min(1.0, alpha))) * 255))
     return f"&H{ass_alpha:02X}{blue}{green}{red}"
+
+
+def _clamp_float(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, float(value)))
 
 
 def wrap_subtitle_text(text: str, max_chars_per_line: int, max_lines: int) -> list[str]:

@@ -196,7 +196,7 @@ def _parse_paddle_blocks(raw: Any) -> list[dict[str, Any]]:
             payload = item[1]
             text = str(payload[0])
             confidence = float(payload[1])
-            blocks.append({"box": box, "text": text, "confidence": confidence})
+            blocks.append({"box": _normalize_box(box), "text": text, "confidence": confidence})
         except Exception:
             continue
     return blocks
@@ -204,7 +204,7 @@ def _parse_paddle_blocks(raw: Any) -> list[dict[str, Any]]:
 
 def _parse_easyocr_blocks(raw: Any) -> tuple[list[dict[str, Any]], str, float]:
     blocks = [
-        {"box": item[0], "text": str(item[1]), "confidence": float(item[2])}
+        {"box": _normalize_box(item[0]), "text": str(item[1]), "confidence": float(item[2])}
         for item in (raw or [])
         if len(item) >= 3
     ]
@@ -215,3 +215,13 @@ def _parse_easyocr_blocks(raw: Any) -> tuple[list[dict[str, Any]], str, float]:
 
 def _average(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _normalize_box(box: Any) -> list[list[float]]:
+    points: list[list[float]] = []
+    for point in box or []:
+        try:
+            points.append([float(point[0]), float(point[1])])
+        except Exception:
+            continue
+    return points
