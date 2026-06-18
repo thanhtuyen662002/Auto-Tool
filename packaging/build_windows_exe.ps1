@@ -175,6 +175,7 @@ try {
     --clean `
     --name $Name `
     --onedir `
+    --noconsole `
     --add-data "$Dist;frontend/dist" `
     --add-data "$FfmpegVendor;vendor/ffmpeg" `
     --add-data "$PiperVendor;vendor/piper" `

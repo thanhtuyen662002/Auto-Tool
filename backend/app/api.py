@@ -6,6 +6,7 @@ import os
 import inspect
 import random
 import threading
+import time
 import uuid
 import hashlib
 from collections import Counter
@@ -474,12 +475,18 @@ def create_app() -> FastAPI:
         res = download_and_prepare_update(info)
         if not res.success:
             raise HTTPException(status_code=500, detail=res.error or "Tải bản cập nhật thất bại.")
+        _schedule_process_exit(delay_seconds=2.5)
         return UpdateDownloadResponse(
             success=True,
             extract_dir=res.extract_dir,
             updater_script=res.updater_script,
-            message="Đã tải và chuẩn bị bản cập nhật. Vui lòng đóng ứng dụng để tự động cập nhật.",
+            message="Đã tải bản cập nhật. Auto Tool sẽ tự tắt, cập nhật và mở lại.",
         )
+
+    @app.post("/api/system/shutdown")
+    def system_shutdown() -> dict[str, bool | str]:
+        _schedule_process_exit(delay_seconds=0.8)
+        return {"success": True, "message": "Auto Tool đang tắt."}
 
     @app.get("/api/local-app/config", response_model=LocalAppConfig)
     def get_local_app_config() -> LocalAppConfig:
@@ -4879,6 +4886,15 @@ def _latest_crop_safety_report_path(project_id: str) -> Path | None:
             if report_path.exists():
                 return report_path
     return None
+
+
+def _schedule_process_exit(delay_seconds: float) -> None:
+    def _exit_later() -> None:
+        time.sleep(max(0.1, float(delay_seconds)))
+        logging.getLogger(__name__).info("Auto Tool process exit requested by system endpoint.")
+        os._exit(0)
+
+    threading.Thread(target=_exit_later, daemon=True).start()
 
 
 def _mount_frontend(app: FastAPI, service: StaticFrontendService | None = None) -> None:

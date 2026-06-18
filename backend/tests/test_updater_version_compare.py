@@ -118,6 +118,7 @@ def test_launch_updater_script_uses_valid_windows_process_flags(tmp_path, monkey
     exe_dir.mkdir()
     bat_path.write_text("@echo off\n", encoding="utf-8")
 
+    monkeypatch.setattr("app.utils.updater.subprocess.CREATE_NO_WINDOW", 0x08000000, raising=False)
     monkeypatch.setattr("app.utils.updater.subprocess.CREATE_NEW_CONSOLE", 0x00000010, raising=False)
     monkeypatch.setattr("app.utils.updater.subprocess.DETACHED_PROCESS", 0x00000008, raising=False)
 
@@ -138,5 +139,5 @@ def test_launch_updater_script_uses_valid_windows_process_flags(tmp_path, monkey
     assert call["args"] == ["cmd.exe", "/d", "/c", str(bat_path)]
     assert call["cwd"] == str(exe_dir)
     assert call["shell"] is False
-    assert call["creationflags"] == subprocess.CREATE_NEW_CONSOLE
+    assert call["creationflags"] == subprocess.CREATE_NO_WINDOW
     assert call["creationflags"] & subprocess.DETACHED_PROCESS == 0

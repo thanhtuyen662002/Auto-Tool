@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { DownloadCloud, Info, X, Loader2 } from 'lucide-react';
+import { DownloadCloud, Info, Loader2 } from 'lucide-react';
 import { checkSystemUpdate, downloadSystemUpdate, type UpdateCheckResponse } from '../api/client';
+import { getHealth } from '../services/healthApi';
 import GlassButton from './glass/GlassButton';
 
 interface UpdateBannerProps {
@@ -12,6 +13,7 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,16 +22,12 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
       return;
     }
 
-    // Kiểm tra xem có phiên bản update đã được bỏ qua chưa
     const checkUpdate = async () => {
       try {
         const info = await checkSystemUpdate(false);
         if (info.has_update && info.latest_version) {
-          const ignoredVersion = localStorage.getItem('ignored_update_version');
-          if (ignoredVersion !== info.latest_version) {
-            setUpdateInfo(info);
-            setIsVisible(true);
-          }
+          setUpdateInfo(info);
+          setIsVisible(true);
         }
       } catch (err) {
         console.error('Lỗi khi kiểm tra cập nhật:', err);
@@ -39,20 +37,18 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
     void checkUpdate();
   }, [connected]);
 
-  const handleIgnore = () => {
-    if (updateInfo?.latest_version) {
-      localStorage.setItem('ignored_update_version', updateInfo.latest_version);
-    }
-    setIsVisible(false);
-  };
-
   const handleDownloadAndInstall = async () => {
     setIsDownloading(true);
     setError(null);
     try {
       const res = await downloadSystemUpdate();
       if (res.success) {
+        const targetVersion = updateInfo?.latest_version;
         setDownloadSuccess(true);
+        setIsRestarting(true);
+        if (targetVersion) {
+          void waitForRestartAndReload(targetVersion);
+        }
       } else {
         setError(res.error || 'Có lỗi xảy ra trong quá trình tải xuống.');
       }
@@ -61,6 +57,29 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
     } finally {
       setIsDownloading(false);
     }
+  };
+
+  const waitForRestartAndReload = async (targetVersion: string) => {
+    const normalizedTarget = targetVersion.replace(/^v/i, '');
+    const deadline = Date.now() + 10 * 60 * 1000;
+    let sawBackendOffline = false;
+
+    while (Date.now() < deadline) {
+      await sleep(sawBackendOffline ? 2000 : 1200);
+      try {
+        const health = await getHealth();
+        const normalizedCurrent = (health.version || '').replace(/^v/i, '');
+        if (normalizedCurrent === normalizedTarget) {
+          window.location.reload();
+          return;
+        }
+      } catch {
+        sawBackendOffline = true;
+      }
+    }
+
+    setError('Cập nhật đã chạy nhưng giao diện chưa kết nối lại được. Hãy mở lại Auto Tool thủ công nếu cần.');
+    setIsRestarting(false);
   };
 
   if (!isVisible || !updateInfo) return null;
@@ -79,7 +98,7 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
             </div>
             <div>
               <h4 className="font-semibold text-white text-sm md:text-base flex items-center gap-2">
-                🚀 Phát hiện phiên bản mới: v{updateInfo.latest_version}
+                Phát hiện phiên bản mới: v{updateInfo.latest_version}
                 <span className="inline-flex items-center rounded-full bg-purple-400/10 px-2 py-0.5 text-xs font-medium text-purple-300 ring-1 ring-inset ring-purple-400/20">
                   Mới
                 </span>
@@ -88,7 +107,7 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
                 Phiên bản hiện tại của bạn là v{updateInfo.current_version}. 
                 {downloadSuccess ? (
                   <strong className="text-emerald-400 font-medium ml-1">
-                    Tải thành công! Vui lòng đóng phần mềm để tự động cài đặt bản cập nhật.
+                    Auto Tool đang tự cập nhật và sẽ mở lại sau khi hoàn tất.
                   </strong>
                 ) : (
                   isDownloading
@@ -116,50 +135,33 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
           <div className="flex items-center gap-2 md:self-center">
             {downloadSuccess ? (
               <div className="flex items-center gap-2 text-emerald-400 font-medium bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg text-sm">
-                <Info size={16} className="animate-pulse" />
-                <span>Hãy tắt ứng dụng để cập nhật</span>
+                {isRestarting ? <Loader2 size={16} className="animate-spin" /> : <Info size={16} className="animate-pulse" />}
+                <span>Đang cập nhật...</span>
               </div>
             ) : (
-              <>
-                {updateInfo.html_url && (
-                  <GlassButton
-                    variant="ghost"
-                    className="min-h-9 px-4 text-xs font-semibold text-purple-200 hover:text-white"
-                    onClick={() => window.open(updateInfo.html_url || '', '_blank')}
-                  >
-                    Xem thay đổi
-                  </GlassButton>
+              <GlassButton
+                variant="primary"
+                className="min-h-9 px-4 text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 border-none shadow-md shadow-purple-500/10"
+                onClick={handleDownloadAndInstall}
+                disabled={isDownloading}
+              >
+                {isDownloading ? (
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Đang cập nhật...
+                  </span>
+                ) : (
+                  'Cập nhật'
                 )}
-
-                <GlassButton
-                  variant="primary"
-                  className="min-h-9 px-4 text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 border-none shadow-md shadow-purple-500/10"
-                  onClick={handleDownloadAndInstall}
-                  disabled={isDownloading}
-                >
-                  {isDownloading ? (
-                    <span className="flex items-center gap-1.5">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Đang tải...
-                    </span>
-                  ) : (
-                    'Cập nhật ngay'
-                  )}
-                </GlassButton>
-              </>
+              </GlassButton>
             )}
-
-            <button
-              type="button"
-              className="ml-2 rounded-lg p-1.5 text-slate-400 hover:bg-white/5 hover:text-white transition-colors"
-              onClick={handleIgnore}
-              aria-label="Bỏ qua phiên bản này"
-            >
-              <X size={16} />
-            </button>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }

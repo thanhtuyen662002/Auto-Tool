@@ -1,4 +1,4 @@
-import { HelpCircle, Menu, Plus, Server, WifiOff } from 'lucide-react';
+import { HelpCircle, Menu, Plus, Power, Server, WifiOff } from 'lucide-react';
 import GlassBadge from '../glass/GlassBadge';
 import GlassButton from '../glass/GlassButton';
 import StudioBreadcrumbs, { type StudioBreadcrumbItem } from './StudioBreadcrumbs';
@@ -11,6 +11,8 @@ export default function StudioTopBar({
   onNewBatch,
   onHelp,
   onStatus,
+  onShutdown,
+  shuttingDown = false,
 }: {
   title: string;
   connected: boolean;
@@ -19,6 +21,8 @@ export default function StudioTopBar({
   onNewBatch: () => void;
   onHelp: () => void;
   onStatus: () => void;
+  onShutdown: () => void;
+  shuttingDown?: boolean;
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-[#070a13]/72 backdrop-blur-xl">
@@ -46,6 +50,16 @@ export default function StudioTopBar({
           <GlassButton variant="ghost" className="min-h-9 px-3 text-xs hover:scale-[1.03] active:scale-[0.97] transition-all duration-300" onClick={onHelp}>
             <HelpCircle size={15} />
             Trợ giúp
+          </GlassButton>
+          <GlassButton
+            variant="ghost"
+            className="min-h-9 px-3 text-xs text-rose-100 hover:scale-[1.03] active:scale-[0.97] transition-all duration-300"
+            onClick={onShutdown}
+            disabled={shuttingDown || !connected}
+            title="Tắt Auto Tool"
+          >
+            <Power size={15} />
+            Tắt
           </GlassButton>
         </div>
       </div>

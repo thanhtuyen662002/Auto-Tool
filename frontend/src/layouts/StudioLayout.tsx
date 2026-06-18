@@ -12,6 +12,7 @@ import type { StudioBreadcrumbItem } from '../components/studio/StudioBreadcrumb
 import { getSystemStatus, offlineStatus, type NormalizedSystemStatus } from '../services/healthApi';
 import { applyAppearanceSettings, getLocalUiSettings } from '../utils/localSettings';
 import UpdateBanner from '../components/UpdateBanner';
+import { shutdownSystem } from '../api/client';
 
 const FALLBACK_VERSION = '1.0.0-rc1';
 
@@ -40,6 +41,8 @@ export default function StudioLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [shutdownOpen, setShutdownOpen] = useState(false);
+  const [shuttingDown, setShuttingDown] = useState(false);
   const [statusLoading, setStatusLoading] = useState(true);
   const [systemStatus, setSystemStatus] = useState<NormalizedSystemStatus>(() => offlineStatus());
   const title = useMemo(() => resolveTitle(location.pathname), [location.pathname]);
@@ -79,6 +82,8 @@ export default function StudioLayout() {
           onNewBatch={() => setCommandOpen(true)}
           onHelp={() => navigate('/help')}
           onStatus={() => setStatusOpen(true)}
+          onShutdown={() => setShutdownOpen(true)}
+          shuttingDown={shuttingDown}
         />
         <UpdateBanner connected={connected} />
         {!connected && !statusLoading ? (
@@ -111,8 +116,37 @@ export default function StudioLayout() {
       <GlassModal open={statusOpen} title="Trạng thái hệ thống" onClose={() => setStatusOpen(false)}>
         <StudioSystemStatus status={systemStatus} loading={statusLoading} onRefresh={() => void refreshStatus()} />
       </GlassModal>
+      <GlassModal open={shutdownOpen} title="Tắt Auto Tool" onClose={() => (shuttingDown ? undefined : setShutdownOpen(false))}>
+        <div className="space-y-4 text-sm text-slate-300">
+          <p>Auto Tool sẽ dừng backend local. Những tác vụ đang chạy có thể bị gián đoạn.</p>
+          <div className="flex justify-end gap-2">
+            <GlassButton variant="ghost" className="min-h-9 px-3 text-xs" disabled={shuttingDown} onClick={() => setShutdownOpen(false)}>
+              Hủy
+            </GlassButton>
+            <GlassButton
+              variant="primary"
+              className="min-h-9 px-3 text-xs"
+              loading={shuttingDown}
+              onClick={() => void handleShutdown()}
+            >
+              Tắt ứng dụng
+            </GlassButton>
+          </div>
+        </div>
+      </GlassModal>
     </div>
   );
+
+  async function handleShutdown() {
+    setShuttingDown(true);
+    try {
+      await shutdownSystem();
+      setShutdownOpen(false);
+      window.setTimeout(() => setSystemStatus(offlineStatus()), 1200);
+    } catch {
+      setShuttingDown(false);
+    }
+  }
 }
 
 function resolveTitle(pathname: string): string {

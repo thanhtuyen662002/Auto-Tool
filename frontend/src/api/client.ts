@@ -1179,12 +1179,23 @@ export interface UpdateDownloadResponse {
   error?: string | null;
 }
 
+export interface SystemShutdownResponse {
+  success: boolean;
+  message: string;
+}
+
 export function checkSystemUpdate(force = false): Promise<UpdateCheckResponse> {
   return request<UpdateCheckResponse>(`/api/system/update-check?force=${force}`);
 }
 
 export function downloadSystemUpdate(): Promise<UpdateDownloadResponse> {
   return request<UpdateDownloadResponse>('/api/system/update-download', {
+    method: 'POST',
+  });
+}
+
+export function shutdownSystem(): Promise<SystemShutdownResponse> {
+  return request<SystemShutdownResponse>('/api/system/shutdown', {
     method: 'POST',
   });
 }
