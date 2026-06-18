@@ -6,6 +6,7 @@ from app.adapters.ffmpeg_adapter import probe_video
 from app.modules.douyin_reup.subtitle_timing_guard import parse_srt_blocks
 from app.modules.silent_caption_templates import SilentCaptionIntent, SilentCaptionTemplateService
 from app.modules.silent_caption_templates.caption_template_service import normalize_industry
+from app.modules.silent_immersive_reup.product_context import has_real_product_context, sanitize_product_context
 from app.modules.silent_immersive_reup.silent_schema import ImmersiveCaptionLine, SilentVisualSegment, VisualSegmentType
 from app.modules.subtitle_quality.subtitle_quality_scorer import SubtitleQualityScorer
 from app.modules.subtitle_review.subtitle_review_schema import SubtitleLine
@@ -34,6 +35,7 @@ class ImmersiveCaptionGenerator:
         video_recommended_industry: str | None = None,
         use_visual_tags: bool = True,
     ) -> list[ImmersiveCaptionLine]:
+        product_context = sanitize_product_context(product_context)
         product_locked = _product_lock_enabled(product_context)
         if ocr_translated_srt_path and Path(ocr_translated_srt_path).exists() and not product_locked:
             captions = self._captions_from_ocr(ocr_translated_srt_path, video_path)
@@ -284,22 +286,7 @@ def _product_lock_enabled(product_context: dict | None) -> bool:
 
 
 def _has_product_context(product_context: dict | None) -> bool:
-    if not product_context:
-        return False
-    values = [
-        product_context.get("product_name"),
-        product_context.get("name"),
-        product_context.get("description"),
-        product_context.get("features"),
-    ]
-    for value in values:
-        if isinstance(value, list) and any(str(item).strip() for item in value):
-            return True
-        if isinstance(value, str) and value.strip():
-            return True
-        if value and not isinstance(value, (str, list)):
-            return True
-    return False
+    return has_real_product_context(product_context)
 
 
 def _first_feature(product_context: dict | None) -> str:

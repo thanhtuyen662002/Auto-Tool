@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from app.modules.silent_immersive_reup.product_context import sanitize_product_context
 from app.modules.silent_immersive_reup.silent_schema import SilentReupPlan
 
 
@@ -12,6 +13,7 @@ class ImmersiveScriptGenerator:
         product_context: dict | None,
         style: str,
     ) -> str:
+        product_context = sanitize_product_context(product_context)
         duration = _plan_duration(plan)
         target_count = 3 if duration <= 10 else 5 if duration <= 18 else 7
         captions = [caption.text for caption in plan.captions if caption.text.strip()]
@@ -20,16 +22,21 @@ class ImmersiveScriptGenerator:
         features = _features(product_context)
 
         lines: list[str] = []
+        caption_cursor = 0
         if name:
             lines.append(f"Nếu bạn đang cân nhắc {name}, hãy xem nhanh cách sản phẩm xuất hiện trong video này.")
             if features:
                 lines.append(f"Điểm đáng chú ý là {features[0]}.")
+        elif captions:
+            intro_count = min(len(captions), max(1, target_count - 1), 2)
+            lines.extend(captions[:intro_count])
+            caption_cursor = intro_count
         else:
             lines.append("Mình giữ lại các cảnh rõ nhất để bạn xem cách sản phẩm được dùng trong thực tế.")
             lines.append("Hãy chú ý phần thao tác, kích thước và chi tiết xuất hiện trực tiếp trên video.")
 
         remaining = max(0, target_count - len(lines) - 1)
-        lines.extend(_safe_caption_lines(captions, remaining, has_product_context=bool(name or features)))
+        lines.extend(_safe_caption_lines(captions[caption_cursor:], remaining, has_product_context=bool(name or features)))
         lines.append(cta or "Bạn có thể lưu lại để so sánh thêm trước khi chọn mua.")
         return " ".join(_clean_sentence(line) for line in lines[:target_count] if _clean_sentence(line))
 
@@ -63,7 +70,7 @@ def _features(product_context: dict | None) -> list[str]:
 def _safe_caption_lines(captions: list[str], limit: int, *, has_product_context: bool) -> list[str]:
     if limit <= 0:
         return []
-    if has_product_context:
+    if captions:
         return captions[:limit]
     generic = [
         "Phần quay cận cảnh giúp nhìn rõ hơn chất liệu và kiểu dáng.",

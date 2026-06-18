@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.modules.silent_immersive_reup.silent_schema import SilentVisualSegment
+from app.modules.silent_immersive_reup.product_context import sanitize_product_context
 from app.modules.silent_visual_tagging.keyword_tag_mapper import KeywordTagMapper
 from app.modules.silent_visual_tagging.visual_tag_rules import VisualTagRules
 from app.modules.silent_visual_tagging.visual_tag_schema import (
@@ -37,6 +38,7 @@ class VisualTagService:
         job_id: str | None = None,
     ) -> VideoVisualTagReport:
         path = Path(video_path)
+        product_context = sanitize_product_context(product_context)
         product_text = _product_context_text(product_context)
         folder_text = folder_name if folder_name is not None else path.parent.name
         filename_text = filename if filename is not None else path.stem

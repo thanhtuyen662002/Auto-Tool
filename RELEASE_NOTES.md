@@ -1,5 +1,20 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.18
+
+### Highlights
+
+- Fixed uneven Vietnamese voiceover pacing by no longer forcing each grouped Douyin subtitle segment into its original micro-slot.
+- Regenerated burned voiceover subtitles from the actual TTS timeline so subtitle display follows the Vietnamese voice instead of stale source timing.
+- Added a small global voice duration tolerance to avoid unnecessary speedup/trim warnings when FFmpeg reports near-identical durations.
+- Improved Silent Mode context handling so default app placeholders such as "Douyin Reup" and "Dich subtitle" do not become generated captions or voice scripts.
+- Let Silent Mode use filename/visual tags again when product context is only a placeholder, so videos with hashtags such as storage/organizing route to the right caption templates.
+
+### QA
+
+- Focused backend regression passed: 42 tests.
+- Silent/Douyin/visual/voice filtered backend regression passed: 92 tests.
+
 ## v1.0.17
 
 ### Highlights

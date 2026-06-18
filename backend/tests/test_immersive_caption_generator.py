@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from app.modules.silent_immersive_reup.immersive_caption_generator import ImmersiveCaptionGenerator
-from app.modules.silent_immersive_reup.silent_schema import SilentVisualSegment, VisualSegmentType
+from app.modules.silent_immersive_reup.immersive_script_generator import ImmersiveScriptGenerator
+from app.modules.silent_immersive_reup.silent_schema import (
+    ImmersiveCaptionLine,
+    SilentReupPlan,
+    SilentVisualSegment,
+    VisualSegmentType,
+)
 
 
 def test_caption_generator_uses_product_context():
@@ -89,3 +95,63 @@ def test_ocr_caption_has_priority(tmp_path):
 
     assert captions[0].source == "ocr_translation"
     assert captions[0].text == "Caption từ OCR"
+
+
+def test_caption_generator_ignores_placeholder_product_context():
+    segment = SilentVisualSegment(
+        id="seg_001",
+        video_path="clip.mp4",
+        start=0,
+        end=2,
+        duration=2,
+        segment_type=VisualSegmentType.product_reveal,
+        primary_industry="storage_organization",
+    )
+
+    captions = ImmersiveCaptionGenerator().generate_captions(
+        video_path="clip.mp4",
+        segments=[segment],
+        strategy="chill_immersive",
+        product_context={
+            "product_name": "Douyin Reup",
+            "name": "Douyin Reup",
+            "features": ["D\u1ecbch subtitle"],
+            "product_context_lock_enabled": True,
+        },
+        video_recommended_industry="storage_organization",
+    )
+
+    assert "Douyin Reup" not in captions[0].text
+    assert captions[0].selected_industry == "storage_organization"
+
+
+def test_silent_voiceover_script_uses_visual_captions_without_product_context():
+    plan = SilentReupPlan(
+        video_path="clip.mp4",
+        strategy="product_review_voiceover",
+        has_speech=False,
+        speech_score=0.05,
+        visual_segments=[],
+        captions=[
+            ImmersiveCaptionLine(index=1, start=0, end=2, text="Goc nho gon lai thay ro"),
+            ImmersiveCaptionLine(index=2, start=2, end=4, text="Tung mon vao dung cho hon"),
+        ],
+        generate_voiceover=True,
+        recommended_audio_mode="voiceover_plus_original_audio_plus_bgm",
+    )
+
+    script = ImmersiveScriptGenerator().generate_voiceover_script(
+        plan,
+        product_context={
+            "product_name": "Douyin Reup",
+            "name": "Douyin Reup",
+            "features": ["D\u1ecbch subtitle"],
+            "product_context_lock_enabled": True,
+        },
+        style="natural_short",
+    )
+
+    assert "Douyin Reup" not in script
+    assert "D\u1ecbch subtitle" not in script
+    assert "Goc nho gon lai thay ro" in script
+    assert "Tung mon vao dung cho hon" in script

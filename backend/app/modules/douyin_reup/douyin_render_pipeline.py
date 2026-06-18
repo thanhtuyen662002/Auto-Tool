@@ -206,6 +206,23 @@ class DouyinRenderPipeline:
                     "voiceover_video_slowdown: Tiếng Việt cần nhiều thời gian đọc hơn subtitle gốc, "
                     f"đã tua chậm video/timeline {video_slowdown_factor:.2f}x để giảm ép tốc độ voice."
                 )
+        if voiceover_path is None and settings.generate_voiceover_for_silent_video:
+            voiceover_path = self._generate_voiceover_from_srt(
+                subtitle_srt_path=voiceover_subtitle_srt_path,
+                output_dir=str(target_dir),
+                output_name=output_name,
+                settings=settings,
+                target_duration=render_duration,
+                tts_settings=tts_settings,
+            )
+            warnings.extend(self.voice_generator.warnings)
+            voice_timeline = list(self.voice_generator.last_subtitle_timeline)
+            voice_subtitle_blocks = _subtitle_blocks_from_timeline(voice_timeline, target_duration=render_duration)
+            if voice_subtitle_blocks:
+                subtitle_blocks = voice_subtitle_blocks
+                render_subtitle_srt_path = str(target_dir / f"{Path(output_name).stem}_vi_voiceover.srt")
+                write_srt_blocks(subtitle_blocks, render_subtitle_srt_path)
+
         subtitle_lines = [
             {"start_hint": block.start, "end_hint": block.end, "text": block.text}
             for block in subtitle_blocks
@@ -218,17 +235,6 @@ class DouyinRenderPipeline:
             subtitle_ass_path = None  # type: ignore[assignment]
             if settings.burn_subtitle:
                 raise RuntimeError("Đã bật burn subtitle nhưng không có subtitle hợp lệ để đưa vào video.")
-
-        if voiceover_path is None and settings.generate_voiceover_for_silent_video:
-            voiceover_path = self._generate_voiceover_from_srt(
-                subtitle_srt_path=voiceover_subtitle_srt_path,
-                output_dir=str(target_dir),
-                output_name=output_name,
-                settings=settings,
-                target_duration=render_duration,
-                tts_settings=tts_settings,
-            )
-            warnings.extend(self.voice_generator.warnings)
 
         bgm_path = None
         if settings.add_bgm:
@@ -386,12 +392,12 @@ class DouyinRenderPipeline:
             target_duration=target_duration,
             tts_settings=merged_tts_settings,
             allow_script_shortening=False,
-            lock_subtitle_timing=True,
+            lock_subtitle_timing=False,
         )
         if len(voiceover) < len(blocks):
             self.voice_generator.warnings.append(
                 f"voiceover_sentence_grouping: Đã gom {len(blocks)} dòng phụ đề thành {len(voiceover)} cụm đọc "
-                "để giọng đọc liền mạch hơn; subtitle hiển thị vẫn giữ timing gốc."
+                "để giọng đọc liền mạch hơn; subtitle voiceover sẽ bám theo nhịp TTS thực tế."
             )
         result = self.voice_generator.last_tts_result
         if not result or result.provider == "silent":
@@ -658,6 +664,30 @@ def _scale_subtitle_blocks(
             )
         )
     return scaled
+
+
+def _subtitle_blocks_from_timeline(
+    lines: list[SubtitleLine],
+    *,
+    target_duration: float,
+) -> list[SubtitleBlock]:
+    blocks: list[SubtitleBlock] = []
+    duration = max(0.1, float(target_duration))
+    for line in lines:
+        start = max(0.0, min(duration, float(line.start_hint or 0.0)))
+        end = max(0.0, min(duration, float(line.end_hint or 0.0)))
+        text = _clean_spoken_text(line.text)
+        if not text or end <= start:
+            continue
+        blocks.append(
+            SubtitleBlock(
+                index=len(blocks) + 1,
+                start=round(start, 3),
+                end=round(end, 3),
+                text=text,
+            )
+        )
+    return blocks
 
 
 def _percentile(values: list[float], percentile: float) -> float:

@@ -15,6 +15,7 @@ from app.modules.douyin_reup.subtitle_translator import SubtitleTranslator
 from app.modules.hardsub_ocr import HardSubOCRService
 from app.modules.hardsub_ocr.hardsub_ocr_schema import HardSubOCRResult
 from app.modules.script_writer.script_writer import ProductVideoScript, SubtitleLine, VoiceoverLine
+from app.modules.silent_immersive_reup.product_context import sanitize_product_context
 from app.modules.silent_immersive_reup.immersive_caption_generator import ImmersiveCaptionGenerator
 from app.modules.silent_immersive_reup.immersive_scene_classifier import ImmersiveSceneClassifier
 from app.modules.silent_immersive_reup.immersive_script_generator import ImmersiveScriptGenerator
@@ -103,6 +104,7 @@ class SilentReupPipeline:
         self.last_visual_tag_report_id = None
         target_dir = ensure_dir(output_dir)
         warnings: list[str] = []
+        product_context = sanitize_product_context(product_context)
 
         _progress(progress_callback, "speech_detection", 5)
         detector = self.speech_detector or SpeechPresenceDetector(threshold=settings.speech_detection_threshold)
@@ -873,7 +875,7 @@ def _review_caption_source(source_type: str | None) -> str:
 def normalize_silent_industry(product_context: dict | None) -> str:
     from app.modules.silent_caption_templates.caption_template_service import normalize_industry
 
-    context = product_context or {}
+    context = sanitize_product_context(product_context) or {}
     return normalize_industry(context.get("industry") or context.get("category"))
 
 

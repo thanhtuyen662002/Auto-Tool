@@ -24,6 +24,7 @@ COMFORTABLE_SUBTITLE_LOCKED_SPEEDUP = 1.45
 MAX_SUBTITLE_LOCKED_SPEEDUP = 3.0
 MAX_GLOBAL_VOICE_SPEEDUP = 1.65
 MIN_SUBTITLE_SLOT_DURATION = 0.18
+GLOBAL_FIT_TOLERANCE_SECONDS = 0.12
 
 
 class VoiceGenerator:
@@ -413,9 +414,12 @@ class VoiceGenerator:
     def _fit_voice_duration(self, input_path: str, output_path: str, target_duration: float) -> float:
         try:
             source_duration = probe_media_duration(input_path)
-            if source_duration > target_duration > 0:
+            timeline_scale = 1.0
+            if source_duration > target_duration + GLOBAL_FIT_TOLERANCE_SECONDS > 0:
                 required_speed = source_duration / max(target_duration, 0.001)
                 applied_speed = min(required_speed, MAX_GLOBAL_VOICE_SPEEDUP)
+                if applied_speed > 1.01:
+                    timeline_scale = 1.0 / applied_speed
                 if applied_speed > 1.01:
                     self._add_warning_once(
                         f"voice_global_speed_adjusted: Giọng đọc dài hơn video nên đã tăng tốc toàn đoạn "
@@ -442,7 +446,7 @@ class VoiceGenerator:
                     output_path,
                 ]
             )
-            return 1.0
+            return timeline_scale
         except (Exception, FFmpegError) as exc:
             warning = f"Không thể căn thời lượng giọng đọc, đang dùng thời lượng TTS gốc. Lý do: {exc}"
             logger.warning(warning)
@@ -619,6 +623,11 @@ class VoiceGenerator:
     @staticmethod
     def _audio_trim_filter(source_duration: float, target_duration: float) -> str:
         if source_duration <= 0 or target_duration <= 0:
+            return "asetpts=PTS-STARTPTS"
+
+        if source_duration <= target_duration + GLOBAL_FIT_TOLERANCE_SECONDS:
+            if source_duration > target_duration:
+                return f"atrim=0:{target_duration:.3f},asetpts=PTS-STARTPTS"
             return "asetpts=PTS-STARTPTS"
 
         if source_duration > target_duration:

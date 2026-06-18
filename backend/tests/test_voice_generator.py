@@ -193,3 +193,28 @@ def test_global_voice_fit_speeds_up_before_trimming():
 
     assert audio_filter.startswith("atempo=1.400")
     assert "atrim=0:10.000" in audio_filter
+
+
+def test_global_voice_fit_tolerates_tiny_duration_overrun():
+    audio_filter = VoiceGenerator._audio_trim_filter(source_duration=10.04, target_duration=10.0)
+
+    assert "atempo" not in audio_filter
+    assert audio_filter == "atrim=0:10.000,asetpts=PTS-STARTPTS"
+
+
+def test_global_voice_fit_returns_timeline_scale_when_speeding(tmp_path, monkeypatch):
+    generator = VoiceGenerator()
+    input_path = tmp_path / "raw.wav"
+    output_path = tmp_path / "fit.wav"
+    input_path.write_bytes(b"raw")
+
+    def fake_run_ffmpeg(args):
+        output_path.write_bytes(b"fit")
+
+    monkeypatch.setattr(voice_generator, "run_ffmpeg", fake_run_ffmpeg)
+    monkeypatch.setattr(voice_generator, "probe_media_duration", lambda path: 14.0)
+
+    scale = generator._fit_voice_duration(str(input_path), str(output_path), target_duration=10.0)
+
+    assert round(scale, 3) == round(1 / 1.4, 3)
+    assert any("voice_global_speed_adjusted" in warning for warning in generator.warnings)
