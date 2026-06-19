@@ -70,7 +70,7 @@ def generate_ass_subtitle(
     margin_l = max(40, overlay.padding_x)
     margin_r = max(40, overlay.padding_x)
     margin_v = max(24, video_height - subtitle_y)
-    shadow = 2 if subtitle.shadow_enabled else 0
+    shadow = int(getattr(subtitle, "shadow_size", 2)) if subtitle.shadow_enabled else 0
     back_alpha = max(0.0, min(1.0, subtitle.shadow_opacity)) if subtitle.shadow_enabled else 0.0
 
     content = [

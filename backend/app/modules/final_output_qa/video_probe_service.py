@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.modules.final_output_qa.final_output_qa_schema import VideoProbeInfo
 from app.utils.dependency_manager import DependencyError, resolve_tool
+from app.utils.subprocess_utils import run_hidden
 
 
 class VideoProbeService:
@@ -16,7 +17,7 @@ class VideoProbeService:
             return VideoProbeInfo(path=str(path), exists=False, readable=False, error="Video file does not exist.")
         try:
             ffprobe = resolve_tool("ffprobe")
-            result = subprocess.run(
+            result = run_hidden(
                 [
                     ffprobe,
                     "-v", "error",

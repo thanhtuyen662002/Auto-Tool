@@ -11,6 +11,7 @@ from typing import Iterator
 
 from app.schemas.media_schema import MediaFile
 from app.utils.dependency_manager import DependencyError, resolve_tool
+from app.utils.subprocess_utils import run_hidden
 
 
 class FFmpegError(RuntimeError):
@@ -43,7 +44,7 @@ def _run_process(command: list[str], timeout_seconds: float | int | None = None)
 
     timeout = _normalize_timeout(timeout_seconds) or _process_timeout_seconds()
     try:
-        result = subprocess.run(
+        result = run_hidden(
             command,
             check=False,
             capture_output=True,

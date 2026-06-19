@@ -88,6 +88,26 @@ def test_generate_ass_subtitle_can_draw_cover_background(tmp_path) -> None:
     assert "Dialogue: 1,0:00:00.00,0:00:02.00,Default" in content
 
 
+def test_generate_ass_subtitle_uses_custom_shadow_size(tmp_path) -> None:
+    preset = get_visual_style_preset("clean_review_light")
+    preset = preset.model_copy(
+        update={"subtitle": preset.subtitle.model_copy(update={"shadow_enabled": True, "shadow_size": 6})}
+    )
+    output_path = tmp_path / "video_001_shadow.ass"
+
+    generate_ass_subtitle(
+        [{"start_hint": 0, "end_hint": 2, "text": "Bóng chữ lớn hơn"}],
+        preset,
+        1080,
+        1920,
+        str(output_path),
+    )
+
+    content = output_path.read_text(encoding="utf-8")
+
+    assert ",2,6,5," in content
+
+
 def test_generate_ass_subtitle_uses_timed_cover_segments(tmp_path) -> None:
     preset = get_visual_style_preset("clean_review_light")
     output_path = tmp_path / "video_001_dynamic_cover.ass"

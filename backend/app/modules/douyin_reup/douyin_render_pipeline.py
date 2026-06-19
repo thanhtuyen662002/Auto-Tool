@@ -31,6 +31,26 @@ MASTER_LOUDNESS_FILTER = f"volume={MASTER_AUDIO_GAIN:.3f},loudnorm=I=-16:TP=-1.5
 MIN_VIDEO_SLOWDOWN_DELTA = 0.015
 
 
+def _visual_style_overrides(settings: DouyinReupSettings) -> dict:
+    overrides: dict = {"overlay": {"enabled": settings.add_overlay}}
+    if settings.subtitle_style_custom_enabled:
+        overrides["subtitle"] = {
+            "font_family": settings.subtitle_font_family,
+            "font_size": settings.subtitle_font_size,
+            "font_color": settings.subtitle_font_color,
+            "stroke_color": settings.subtitle_stroke_color,
+            "stroke_width": settings.subtitle_stroke_width,
+            "shadow_enabled": settings.subtitle_shadow_enabled,
+            "shadow_color": settings.subtitle_shadow_color,
+            "shadow_opacity": settings.subtitle_shadow_opacity,
+            "shadow_size": settings.subtitle_shadow_size,
+            "max_chars_per_line": settings.subtitle_max_chars_per_line,
+            "max_lines": settings.subtitle_max_lines,
+            "position": settings.subtitle_position,
+        }
+    return overrides
+
+
 class DouyinRenderPipeline:
     def __init__(self, bgm_mixer: BGMMixer | None = None, voice_generator: VoiceGenerator | None = None) -> None:
         self.bgm_mixer = bgm_mixer or BGMMixer()
@@ -154,7 +174,7 @@ class DouyinRenderPipeline:
         preset = VisualStyleService().resolve_preset(
             VisualStyleSettings(
                 preset_id=settings.visual_style_preset_id,
-                custom_overrides={"overlay": {"enabled": settings.add_overlay}},
+                custom_overrides=_visual_style_overrides(settings),
             )
         )
 

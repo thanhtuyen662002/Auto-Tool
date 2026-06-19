@@ -175,6 +175,18 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   custom_overlay_path: 'examples/overlay',
   custom_overlay_height_percent: 100,
   custom_overlay_fit_mode: 'cover',
+  subtitle_style_custom_enabled: false,
+  subtitle_font_family: 'Arial',
+  subtitle_font_size: 54,
+  subtitle_font_color: '#FFFFFF',
+  subtitle_stroke_color: '#000000',
+  subtitle_stroke_width: 2,
+  subtitle_shadow_enabled: true,
+  subtitle_shadow_color: '#000000',
+  subtitle_shadow_opacity: 0.35,
+  subtitle_shadow_size: 2,
+  subtitle_max_chars_per_line: 22,
+  subtitle_max_lines: 2,
   subtitle_cover_enabled: true,
   subtitle_cover_color: '#000000',
   subtitle_cover_opacity: 0.86,
@@ -744,6 +756,18 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       reduce_original_voice: settings.reduce_original_voice,
       original_voice_reduction_strength: settings.original_voice_reduction_strength,
       original_voice_reduction_fallback_volume: settings.original_voice_reduction_fallback_volume,
+      subtitle_style_custom_enabled: settings.subtitle_style_custom_enabled,
+      subtitle_font_family: settings.subtitle_font_family,
+      subtitle_font_size: settings.subtitle_font_size,
+      subtitle_font_color: settings.subtitle_font_color,
+      subtitle_stroke_color: settings.subtitle_stroke_color,
+      subtitle_stroke_width: settings.subtitle_stroke_width,
+      subtitle_shadow_enabled: settings.subtitle_shadow_enabled,
+      subtitle_shadow_color: settings.subtitle_shadow_color,
+      subtitle_shadow_opacity: settings.subtitle_shadow_opacity,
+      subtitle_shadow_size: settings.subtitle_shadow_size,
+      subtitle_max_chars_per_line: settings.subtitle_max_chars_per_line,
+      subtitle_max_lines: settings.subtitle_max_lines,
       subtitle_cover_enabled: settings.subtitle_cover_enabled,
       subtitle_cover_color: settings.subtitle_cover_color,
       subtitle_cover_opacity: settings.subtitle_cover_opacity,
@@ -1159,6 +1183,128 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               </label>
             </div>
           ) : null}
+          <div className="grid gap-3 border-t border-white/10 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Toggle
+                label="Tùy chỉnh style sub Việt"
+                checked={settings.subtitle_style_custom_enabled}
+                onChange={(value) => updateAdvancedSettings({ subtitle_style_custom_enabled: value })}
+              />
+              <div
+                className="min-w-[220px] rounded-md border border-white/10 px-4 py-3 text-center"
+                style={{
+                  backgroundColor: settings.subtitle_cover_enabled ? settings.subtitle_cover_color : 'rgba(15, 23, 42, 0.85)',
+                  color: settings.subtitle_font_color,
+                  fontFamily: settings.subtitle_font_family || 'Arial',
+                  fontSize: `${Math.max(18, Math.min(34, Math.round(settings.subtitle_font_size * 0.5)))}px`,
+                  fontWeight: 700,
+                  textShadow: settings.subtitle_shadow_enabled
+                    ? `0 2px ${settings.subtitle_shadow_size}px ${settings.subtitle_shadow_color}`
+                    : 'none',
+                  WebkitTextStroke: `${Math.max(0, Math.min(3, settings.subtitle_stroke_width))}px ${settings.subtitle_stroke_color}`,
+                }}
+              >
+                Sub Việt mẫu
+              </div>
+            </div>
+            {settings.subtitle_style_custom_enabled ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-200">Font sub Việt</span>
+                  <input
+                    className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                    value={settings.subtitle_font_family}
+                    onChange={(event) => updateAdvancedSettings({ subtitle_font_family: event.target.value })}
+                  />
+                </label>
+                <SliderInput
+                  label={`Cỡ chữ sub Việt: ${settings.subtitle_font_size}px`}
+                  min={28}
+                  max={96}
+                  step={1}
+                  value={settings.subtitle_font_size}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_font_size: Math.round(value) })}
+                />
+                <SliderInput
+                  label={`Ký tự mỗi dòng: ${settings.subtitle_max_chars_per_line}`}
+                  min={12}
+                  max={42}
+                  step={1}
+                  value={settings.subtitle_max_chars_per_line}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_max_chars_per_line: Math.round(value) })}
+                />
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-200">Màu chữ sub Việt</span>
+                  <input
+                    className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                    type="color"
+                    value={settings.subtitle_font_color || '#FFFFFF'}
+                    onChange={(event) => updateAdvancedSettings({ subtitle_font_color: event.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-200">Màu viền chữ</span>
+                  <input
+                    className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                    type="color"
+                    value={settings.subtitle_stroke_color || '#000000'}
+                    onChange={(event) => updateAdvancedSettings({ subtitle_stroke_color: event.target.value })}
+                  />
+                </label>
+                <SliderInput
+                  label={`Độ dày viền: ${settings.subtitle_stroke_width}px`}
+                  min={0}
+                  max={8}
+                  step={1}
+                  value={settings.subtitle_stroke_width}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_stroke_width: Math.round(value) })}
+                />
+                <Toggle
+                  label="Bật đổ bóng chữ"
+                  checked={settings.subtitle_shadow_enabled}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_shadow_enabled: value })}
+                />
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-200">Màu đổ bóng</span>
+                  <input
+                    className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                    type="color"
+                    value={settings.subtitle_shadow_color || '#000000'}
+                    onChange={(event) => updateAdvancedSettings({ subtitle_shadow_color: event.target.value })}
+                    disabled={!settings.subtitle_shadow_enabled}
+                  />
+                </label>
+                <SliderInput
+                  label={`Độ mờ bóng: ${Math.round(settings.subtitle_shadow_opacity * 100)}%`}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={settings.subtitle_shadow_opacity}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_shadow_opacity: value })}
+                />
+                <SliderInput
+                  label={`Độ lớn bóng: ${settings.subtitle_shadow_size}px`}
+                  min={0}
+                  max={8}
+                  step={1}
+                  value={settings.subtitle_shadow_size}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_shadow_size: Math.round(value) })}
+                />
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-200">Số dòng tối đa</span>
+                  <select
+                    className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                    value={settings.subtitle_max_lines}
+                    onChange={(event) => updateAdvancedSettings({ subtitle_max_lines: Number(event.target.value) })}
+                  >
+                    <option value={1}>1 dòng</option>
+                    <option value={2}>2 dòng</option>
+                    <option value={3}>3 dòng</option>
+                  </select>
+                </label>
+              </div>
+            ) : null}
+          </div>
         </GlassCard>
 
         <GlassCard className="grid gap-4 p-4" strong>

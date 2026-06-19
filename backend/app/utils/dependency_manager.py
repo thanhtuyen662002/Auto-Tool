@@ -22,6 +22,7 @@ from app.utils.app_paths import (
     project_root,
     unique_paths,
 )
+from app.utils.subprocess_utils import run_hidden
 
 
 FFMPEG_WINDOWS_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
@@ -375,7 +376,7 @@ def _install_python_packages(packages: list[str], target_dir: Path) -> None:
     ]
     logger.info("Installing OCR packages into %s: %s", target_dir, " ".join(packages))
     try:
-        result = subprocess.run(
+        result = run_hidden(
             command,
             check=False,
             capture_output=True,

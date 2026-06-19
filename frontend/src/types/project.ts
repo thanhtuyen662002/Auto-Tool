@@ -88,6 +88,7 @@ export interface SubtitleStyle {
   shadow_enabled: boolean;
   shadow_color: string;
   shadow_opacity: number;
+  shadow_size: number;
   max_chars_per_line: number;
   max_lines: number;
   position: string;
@@ -160,6 +161,18 @@ export interface DouyinReupSettings {
   custom_overlay_path?: string | null;
   custom_overlay_height_percent?: number | null;
   custom_overlay_fit_mode?: 'cover' | 'contain' | 'stretch' | string;
+  subtitle_style_custom_enabled: boolean;
+  subtitle_font_family: string;
+  subtitle_font_size: number;
+  subtitle_font_color: string;
+  subtitle_stroke_color: string;
+  subtitle_stroke_width: number;
+  subtitle_shadow_enabled: boolean;
+  subtitle_shadow_color: string;
+  subtitle_shadow_opacity: number;
+  subtitle_shadow_size: number;
+  subtitle_max_chars_per_line: number;
+  subtitle_max_lines: number;
   subtitle_cover_enabled: boolean;
   subtitle_cover_color: string;
   subtitle_cover_opacity: number;

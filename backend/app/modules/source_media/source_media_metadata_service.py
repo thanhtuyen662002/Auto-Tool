@@ -7,6 +7,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from app.utils.dependency_manager import DependencyError, resolve_tool
+from app.utils.subprocess_utils import run_hidden
 
 from .source_media_schema import (
     SourceMediaItem,
@@ -34,7 +35,7 @@ class SourceMediaMetadataService:
 
         try:
             ffprobe = resolve_tool("ffprobe")
-            result = subprocess.run(
+            result = run_hidden(
                 [
                     ffprobe,
                     "-v",

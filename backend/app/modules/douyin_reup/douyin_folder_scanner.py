@@ -8,6 +8,7 @@ from pathlib import Path
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_video
 from app.modules.douyin_reup.douyin_schema import DouyinVideoItem
 from app.utils.dependency_manager import DependencyError, resolve_tool
+from app.utils.subprocess_utils import run_hidden
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ def has_embedded_text_subtitle(video_path: str) -> bool:
     except DependencyError:
         return False
 
-    result = subprocess.run(
+    result = run_hidden(
         [
             ffprobe,
             "-v",

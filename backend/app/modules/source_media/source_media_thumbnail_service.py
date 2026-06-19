@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from app.utils.dependency_manager import DependencyError, resolve_tool
+from app.utils.subprocess_utils import run_hidden
 
 
 class SourceMediaThumbnailService:
@@ -25,7 +26,7 @@ class SourceMediaThumbnailService:
             return str(target)
         try:
             ffmpeg = resolve_tool("ffmpeg")
-            result = subprocess.run(
+            result = run_hidden(
                 [
                     ffmpeg,
                     "-y",

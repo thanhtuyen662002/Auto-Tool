@@ -20,6 +20,10 @@ if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>nul
 for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss" 2^>nul`) do set "TIMESTAMP=%%I"
 if not defined TIMESTAMP set "TIMESTAMP=%RANDOM%_%RANDOM%"
 set "LOG_FILE=%LOG_DIR%\launcher_%TIMESTAMP%.log"
+set "SERVER_APP_LOG_FILE=%LOG_DIR%\server_%TIMESTAMP%.app.log"
+set "SERVER_STDOUT_LOG=%LOG_DIR%\server_%TIMESTAMP%.out.log"
+set "SERVER_STDERR_LOG=%LOG_DIR%\server_%TIMESTAMP%.err.log"
+set "SERVER_PID_FILE=%LOG_DIR%\server_%TIMESTAMP%.pid"
 
 echo ============================================================
 echo   Auto Tool Studio - Windows One-Click Launcher
@@ -153,12 +157,14 @@ set "AUTO_TOOL_HOST=%API_HOST%"
 set "AUTO_TOOL_PORT=%API_PORT%"
 set "AUTO_TOOL_STRICT_PORT=1"
 set "AUTO_TOOL_OPEN_BROWSER=0"
-set "AUTO_TOOL_LOG_FILE=%LOG_FILE%"
-call :log "Backend start command: python -m app.launcher with AUTO_TOOL_HOST=%API_HOST%, AUTO_TOOL_PORT=%API_PORT%"
+set "AUTO_TOOL_LOG_FILE=%SERVER_APP_LOG_FILE%"
+call :log "Backend start command: python -m app.launcher with AUTO_TOOL_HOST=%API_HOST%, AUTO_TOOL_PORT=%API_PORT%, AUTO_TOOL_LOG_FILE=%SERVER_APP_LOG_FILE%"
 if /i "%AUTO_TOOL_LAUNCHER_DEBUG%"=="1" goto :debug_server
 
 echo [INFO] Starting local server...
-start "Auto Tool Studio Server" cmd /k call "%PROJECT_ROOT%\launcher\_run_server.bat"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $process = Start-Process -FilePath $env:VENV_PYTHON -ArgumentList @('-m','app.launcher') -WorkingDirectory (Join-Path $env:PROJECT_ROOT 'backend') -WindowStyle Hidden -RedirectStandardOutput $env:SERVER_STDOUT_LOG -RedirectStandardError $env:SERVER_STDERR_LOG -PassThru; Set-Content -Path $env:SERVER_PID_FILE -Value $process.Id -Encoding ASCII"
+if errorlevel 1 goto :server_start_failed
+if exist "%SERVER_PID_FILE%" for /f "usebackq delims=" %%P in ("%SERVER_PID_FILE%") do call :log "Backend server PID: %%P"
 "%VENV_PYTHON%" "%DIAGNOSTICS%" wait-health "%APP_URL%" --timeout 45 >nul 2>nul
 if errorlevel 1 goto :server_not_ready
 echo [OK] Local server is ready.
@@ -227,8 +233,12 @@ exit /b 1
 call :fail "Port 8000 is already in use by another program." "Close that program or the old server window, then run this launcher again."
 exit /b 1
 
+:server_start_failed
+call :fail "The local server process could not be started." "Check launcher, server app, stdout, and stderr logs in logs\launcher."
+exit /b 1
+
 :server_not_ready
-call :fail "The local server did not become ready." "Check the server window and log file for the first ERROR line."
+call :fail "The local server did not become ready." "Check server logs in logs\launcher: server_*.app.log, server_*.out.log, and server_*.err.log."
 exit /b 1
 
 :debug_server_failed
@@ -241,8 +251,11 @@ echo ============================================================
 echo   Auto Tool Studio is running
 echo   %APP_URL%
 echo ============================================================
-echo Close the server window to stop the app.
+echo Use the "Tat Auto Tool" button in the app to stop the hidden server.
 echo Launcher log: %LOG_FILE%
+echo Server app log: %SERVER_APP_LOG_FILE%
+echo Server stdout log: %SERVER_STDOUT_LOG%
+echo Server stderr log: %SERVER_STDERR_LOG%
 call :log "Launcher completed successfully"
 if /i not "%AUTO_TOOL_LAUNCHER_NO_PAUSE%"=="1" timeout /t 5 /nobreak >nul
 exit /b 0

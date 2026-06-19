@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.modules.tts.providers.base import BaseTTSProvider, TTSProviderError
 from app.modules.tts.tts_schema import TTSResult, TTSSettings
+from app.utils.subprocess_utils import run_hidden
 
 
 class PiperProvider(BaseTTSProvider):
@@ -46,7 +47,7 @@ class PiperProvider(BaseTTSProvider):
             str(target),
         ]
         try:
-            result = subprocess.run(
+            result = run_hidden(
                 command,
                 input=text,
                 check=False,

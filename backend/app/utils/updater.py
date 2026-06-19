@@ -17,6 +17,7 @@ from pathlib import Path
 import requests
 
 from app.utils.app_paths import executable_dir
+from app.utils.subprocess_utils import popen_hidden
 from app.version import APP_VERSION
 
 logger = logging.getLogger(__name__)
@@ -274,13 +275,9 @@ def download_and_prepare_update(info: UpdateInfo) -> DownloadResult:
 
 def _launch_updater_script(bat_path: Path, exe_dir: Path) -> None:
     """Launch the updater batch file hidden so users only see the app UI."""
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    if not flags:
-        flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-    subprocess.Popen(
+    popen_hidden(
         ["cmd.exe", "/d", "/c", str(bat_path)],
         cwd=str(exe_dir),
-        creationflags=flags,
         shell=False,
     )
 

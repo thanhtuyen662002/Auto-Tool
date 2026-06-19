@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.modules.final_output_qa.final_output_qa_schema import AudioQualityInfo
 from app.utils.dependency_manager import DependencyError, resolve_tool
+from app.utils.subprocess_utils import run_hidden
 
 
 VOLUME_RE = re.compile(r"(mean_volume|max_volume):\s*(-?inf|-?\d+(?:\.\d+)?)\s*dB", re.IGNORECASE)
@@ -20,7 +21,7 @@ class AudioQualityChecker:
             return AudioQualityInfo(has_audio=False, warnings=["Audio analysis skipped because video file is missing."])
         try:
             ffmpeg = resolve_tool("ffmpeg")
-            result = subprocess.run(
+            result = run_hidden(
                 [ffmpeg, "-hide_banner", "-i", str(path), "-af", "volumedetect", "-f", "null", "-"],
                 capture_output=True,
                 text=True,

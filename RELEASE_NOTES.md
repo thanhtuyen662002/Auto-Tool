@@ -1,5 +1,21 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.26
+
+### Highlights
+
+- Added custom Vietnamese subtitle style controls for font, size, text color, stroke, shadow, wrapping and max lines.
+- Applied custom subtitle style overrides during Douyin render so exported ASS subtitles follow the UI settings.
+- Started the Windows one-click backend as a hidden process with separate launcher, server app, stdout and stderr logs.
+- Hid backend child processes such as FFmpeg, ffprobe, Piper and dependency checks to avoid repeated terminal flashes.
+- Kept desktop folder/file open actions visible while making background processing no-console friendly.
+
+### QA
+
+- Backend test suite passed: 472 tests.
+- Frontend production build passed.
+- Windows launcher hidden-start smoke test passed: health OK, shutdown OK, no terminal/file-lock loop.
+
 ## v1.0.25
 
 ### Highlights

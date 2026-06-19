@@ -56,6 +56,18 @@ class DouyinReupSettings(BaseModel):
     custom_overlay_path: str | None = None
     custom_overlay_height_percent: int | None = Field(default=100, ge=5, le=100)
     custom_overlay_fit_mode: Literal["cover", "contain", "stretch"] = "cover"
+    subtitle_style_custom_enabled: bool = False
+    subtitle_font_family: str = "Arial"
+    subtitle_font_size: int = Field(default=54, ge=18, le=120)
+    subtitle_font_color: str = "#FFFFFF"
+    subtitle_stroke_color: str = "#000000"
+    subtitle_stroke_width: int = Field(default=2, ge=0, le=12)
+    subtitle_shadow_enabled: bool = True
+    subtitle_shadow_color: str = "#000000"
+    subtitle_shadow_opacity: float = Field(default=0.35, ge=0, le=1)
+    subtitle_shadow_size: int = Field(default=2, ge=0, le=12)
+    subtitle_max_chars_per_line: int = Field(default=22, ge=10, le=48)
+    subtitle_max_lines: int = Field(default=2, ge=1, le=3)
     subtitle_cover_enabled: bool = True
     subtitle_cover_color: str = "#000000"
     subtitle_cover_opacity: float = Field(default=0.86, ge=0, le=1)
@@ -164,6 +176,25 @@ class DouyinReupSettings(BaseModel):
             return None
         cleaned = value.strip()
         return cleaned or None
+
+    @field_validator(
+        "subtitle_font_color",
+        "subtitle_stroke_color",
+        "subtitle_shadow_color",
+        "subtitle_cover_color",
+    )
+    @classmethod
+    def clean_hex_color(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned.startswith("#"):
+            cleaned = f"#{cleaned}"
+        if len(cleaned) != 7:
+            raise ValueError(f"Màu phải dùng định dạng #RRGGBB: {value}")
+        try:
+            int(cleaned[1:], 16)
+        except ValueError as exc:
+            raise ValueError(f"Màu phải dùng định dạng #RRGGBB: {value}") from exc
+        return cleaned.upper()
 
     @field_validator("resolution")
     @classmethod

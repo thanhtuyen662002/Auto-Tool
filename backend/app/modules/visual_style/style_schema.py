@@ -16,6 +16,7 @@ class SubtitleStyle(BaseModel):
     shadow_enabled: bool = True
     shadow_color: str = "#000000"
     shadow_opacity: float = Field(default=0.35, ge=0.0, le=1.0)
+    shadow_size: int = Field(default=2, ge=0, le=12)
     max_chars_per_line: int = Field(default=22, ge=10, le=48)
     max_lines: int = Field(default=2, ge=1, le=3)
     position: str = "bottom_overlay"

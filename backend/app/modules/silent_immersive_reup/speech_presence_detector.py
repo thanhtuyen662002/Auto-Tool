@@ -11,6 +11,7 @@ from app.modules.douyin_reup.subtitle_timing_guard import parse_srt_blocks
 from app.modules.silent_immersive_reup.silent_schema import SpeechPresenceResult
 from app.utils.dependency_manager import DependencyError, resolve_tool
 from app.utils.process_isolation import run_in_isolated_process
+from app.utils.subprocess_utils import run_hidden
 
 
 class SpeechPresenceDetector:
@@ -107,7 +108,7 @@ class SpeechPresenceDetector:
             "NUL" if os.name == "nt" else "/dev/null",
         ]
         try:
-            result = subprocess.run(
+            result = run_hidden(
                 command,
                 check=False,
                 capture_output=True,

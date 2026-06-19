@@ -4,6 +4,7 @@ import json
 
 from app.modules.douyin_reup.douyin_render_pipeline import (
     DouyinRenderPipeline,
+    _visual_style_overrides,
     _build_smooth_voiceover_lines,
     _plan_voiceover_video_slowdown,
     _scale_subtitle_blocks,
@@ -87,6 +88,33 @@ def test_audio_filter_can_reduce_original_voice_with_center_cancel():
     assert label == "[aout]"
     assert "aformat=channel_layouts=stereo" in audio_filter
     assert "pan=stereo|c0=c0-0.700*c1|c1=c1-0.700*c0" in audio_filter
+
+
+def test_visual_style_overrides_include_custom_vietnamese_subtitle_style():
+    settings = DouyinReupSettings(
+        enabled=True,
+        subtitle_style_custom_enabled=True,
+        subtitle_font_family="Arial",
+        subtitle_font_size=64,
+        subtitle_font_color="#ffe100",
+        subtitle_stroke_color="#101010",
+        subtitle_stroke_width=4,
+        subtitle_shadow_enabled=True,
+        subtitle_shadow_color="#222222",
+        subtitle_shadow_opacity=0.6,
+        subtitle_shadow_size=5,
+        subtitle_max_chars_per_line=18,
+        subtitle_max_lines=3,
+    )
+
+    overrides = _visual_style_overrides(settings)
+
+    assert overrides["subtitle"]["font_size"] == 64
+    assert overrides["subtitle"]["font_color"] == "#FFE100"
+    assert overrides["subtitle"]["stroke_width"] == 4
+    assert overrides["subtitle"]["shadow_size"] == 5
+    assert overrides["subtitle"]["max_chars_per_line"] == 18
+    assert overrides["subtitle"]["max_lines"] == 3
 
 
 def test_subtitle_cover_options_use_ocr_debug_position(tmp_path):
