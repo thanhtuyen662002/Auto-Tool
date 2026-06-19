@@ -117,6 +117,81 @@ def test_detect_subtitle_cover_from_ocr_debug_keeps_per_timestamp_positions(tmp_
     assert 0.05 <= placement.segments[0].bottom_edge_ratio - placement.segments[0].top_ratio <= 0.09
 
 
+def test_detect_subtitle_cover_ignores_moving_channel_watermark(tmp_path: Path) -> None:
+    debug_path = tmp_path / "ocr_debug_watermark.json"
+    debug_path.write_text(
+        json.dumps(
+            {
+                "frame_width": 1080,
+                "frame_height": 1920,
+                "region": {"x": 0, "y": 0, "width": 1080, "height": 1920},
+                "average_confidence": 0.7,
+                "frames": [
+                    {
+                        "timestamp_ms": 0,
+                        "raw_blocks": [
+                            {
+                                "box": [[160, 1320], [920, 1320], [920, 1390], [160, 1390]],
+                                "text": "这个收纳真的很方便",
+                                "confidence": 0.72,
+                            },
+                            {
+                                "box": [[760, 1760], [1040, 1760], [1040, 1815], [760, 1815]],
+                                "text": "小店好物推荐",
+                                "confidence": 0.94,
+                            },
+                        ],
+                    },
+                    {
+                        "timestamp_ms": 1000,
+                        "raw_blocks": [
+                            {
+                                "box": [[150, 1326], [930, 1326], [930, 1395], [150, 1395]],
+                                "text": "放在厨房也不占地方",
+                                "confidence": 0.75,
+                            },
+                            {
+                                "box": [[20, 1680], [250, 1680], [250, 1738], [20, 1738]],
+                                "text": "关注我",
+                                "confidence": 0.96,
+                            },
+                        ],
+                    },
+                    {
+                        "timestamp_ms": 2000,
+                        "raw_blocks": [
+                            {
+                                "box": [[155, 1322], [925, 1322], [925, 1392], [155, 1392]],
+                                "text": "这款可以折叠起来",
+                                "confidence": 0.73,
+                            },
+                            {
+                                "box": [[830, 1600], [1060, 1600], [1060, 1656], [830, 1656]],
+                                "text": "直播间同款",
+                                "confidence": 0.92,
+                            },
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    placement = detect_subtitle_cover_from_ocr_debug(
+        str(debug_path),
+        fallback_height_ratio=0.12,
+        fallback_bottom_ratio=0.0,
+        padding_ratio=0.03,
+    )
+
+    assert placement is not None
+    assert placement.source == "ocr_debug_timed_blocks"
+    assert 0.22 <= placement.bottom_ratio <= 0.32
+    assert all(segment.bottom_edge_ratio < 0.78 for segment in placement.segments)
+    assert placement.block_count == 3
+
+
 def test_detect_subtitle_cover_uses_bottom_fallback_for_noisy_midframe_ocr(tmp_path: Path) -> None:
     debug_path = tmp_path / "ocr_debug_noisy_midframe.json"
     debug_path.write_text(

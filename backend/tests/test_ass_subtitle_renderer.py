@@ -24,6 +24,16 @@ def test_wrap_subtitle_text_preserves_all_lines() -> None:
     assert " ".join(lines) == "Đây là một câu subtitle dài cần được xuống dòng hợp lý"
 
 
+def test_wrap_subtitle_text_rebalances_short_last_word() -> None:
+    lines = wrap_subtitle_text(
+        "Dòng này cần được chia nhưng không để rơi một chữ cuối nha",
+        max_chars_per_line=18,
+        max_lines=2,
+    )
+
+    assert len(lines[-1].split()) >= 2
+
+
 def test_generate_ass_subtitle_writes_positioned_ass_file(tmp_path) -> None:
     preset = get_visual_style_preset("sale_bold_red")
     output_path = tmp_path / "video_001_sub.ass"
@@ -196,3 +206,24 @@ def test_generate_ass_subtitle_can_cover_source_timing_separately_from_voice_tex
 
     assert "Dialogue: 0,0:00:00.20,0:00:00.90,SubtitleCover" in content
     assert "Dialogue: 1,0:00:01.00,0:00:02.00,Default" in content
+
+
+def test_generate_ass_subtitle_can_offset_text_inside_cover(tmp_path) -> None:
+    preset = get_visual_style_preset("clean_review_light")
+    output_path = tmp_path / "video_001_cover_offset.ass"
+
+    generate_ass_subtitle(
+        [{"start_hint": 0.0, "end_hint": 2.0, "text": "Sub Việt dịch lên nhẹ"}],
+        preset,
+        1080,
+        1920,
+        str(output_path),
+        cover_background_enabled=True,
+        cover_background_height_ratio=0.12,
+        cover_background_bottom_ratio=0.0,
+        cover_background_text_y_offset_ratio=-0.02,
+    )
+
+    content = output_path.read_text(encoding="utf-8")
+
+    assert r"\pos(540,1767)" in content

@@ -75,11 +75,12 @@ class DouyinReupSettings(BaseModel):
     subtitle_cover_probe_if_no_ocr: bool = True
     subtitle_cover_probe_sample_fps: float = Field(default=1.0, gt=0, le=2.0)
     subtitle_cover_height_ratio: float = Field(default=0.12, ge=0.05, le=0.45)
-    subtitle_cover_bottom_ratio: float = Field(default=0.0, ge=0, le=0.2)
+    subtitle_cover_bottom_ratio: float = Field(default=0.0, ge=0, le=0.35)
     subtitle_cover_padding_ratio: float = Field(default=0.035, ge=0, le=0.12)
     subtitle_cover_lead_seconds: float = Field(default=0.85, ge=0, le=3.0)
     subtitle_cover_tail_seconds: float = Field(default=0.25, ge=0, le=3.0)
     subtitle_cover_radius_ratio: float = Field(default=0.035, ge=0, le=0.12)
+    subtitle_cover_text_y_offset_ratio: float = Field(default=0.0, ge=-0.2, le=0.2)
     keep_original_audio: bool = True
     add_bgm: bool = True
     music_folder: str | None = None

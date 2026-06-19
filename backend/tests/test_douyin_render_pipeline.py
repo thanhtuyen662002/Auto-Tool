@@ -43,6 +43,36 @@ def test_smooth_voiceover_skips_near_duplicate_blocks():
     assert "Thiết kế nhỏ gọn" in joined
 
 
+def test_smooth_voiceover_skips_recent_duplicate_blocks_with_small_gap():
+    blocks = [
+        SubtitleBlock(index=1, start=0.0, end=0.7, text="Sản phẩm này rất đáng xem"),
+        SubtitleBlock(index=2, start=0.75, end=1.4, text="Thiết kế nhỏ gọn"),
+        SubtitleBlock(index=3, start=1.55, end=2.2, text="Sản phẩm này rất đáng xem"),
+        SubtitleBlock(index=4, start=2.35, end=3.0, text="Dùng trong nhà rất tiện."),
+    ]
+
+    lines = _build_smooth_voiceover_lines(blocks)
+
+    joined = " ".join(line.text for line in lines)
+    assert joined.count("Sản phẩm này rất đáng xem") == 1
+    assert "Dùng trong nhà rất tiện." in joined
+
+
+def test_smooth_voiceover_skips_full_sentence_repeated_after_fragments():
+    blocks = [
+        SubtitleBlock(index=1, start=0.0, end=0.7, text="Sản phẩm này"),
+        SubtitleBlock(index=2, start=0.72, end=1.4, text="rất đáng xem"),
+        SubtitleBlock(index=3, start=1.55, end=2.3, text="Sản phẩm này rất đáng xem"),
+        SubtitleBlock(index=4, start=2.45, end=3.2, text="Dùng trong nhà rất tiện."),
+    ]
+
+    lines = _build_smooth_voiceover_lines(blocks)
+
+    joined = " ".join(line.text for line in lines)
+    assert joined.count("Sản phẩm này rất đáng xem") == 1
+    assert "Dùng trong nhà rất tiện." in joined
+
+
 def test_voiceover_timing_plan_slows_dense_vietnamese_voiceover():
     settings = DouyinReupSettings(
         enabled=True,

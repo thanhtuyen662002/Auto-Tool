@@ -185,6 +185,7 @@ export interface DouyinReupSettings {
   subtitle_cover_lead_seconds: number;
   subtitle_cover_tail_seconds: number;
   subtitle_cover_radius_ratio: number;
+  subtitle_cover_text_y_offset_ratio: number;
   keep_original_audio: boolean;
   add_bgm: boolean;
   music_folder?: string | null;

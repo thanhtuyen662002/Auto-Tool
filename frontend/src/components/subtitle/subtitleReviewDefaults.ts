@@ -23,6 +23,7 @@ export const DEFAULT_REVIEW_RENDER_SETTINGS: DouyinReupSettings = {
   subtitle_cover_height_ratio: 0.12, subtitle_cover_bottom_ratio: 0,
   subtitle_cover_padding_ratio: 0.035, subtitle_cover_lead_seconds: 0.85,
   subtitle_cover_tail_seconds: 0.25, subtitle_cover_radius_ratio: 0.035,
+  subtitle_cover_text_y_offset_ratio: 0,
   keep_original_audio: true, add_bgm: true, music_folder: '', favorite_music_paths: [], bgm_volume: 0.16,
   original_audio_volume: 0.85, reduce_original_voice: false, original_voice_reduction_strength: 0.65,
   original_voice_reduction_fallback_volume: 0.35, duck_bgm_when_voice: false, resolution: '1080x1920', fps: 30,

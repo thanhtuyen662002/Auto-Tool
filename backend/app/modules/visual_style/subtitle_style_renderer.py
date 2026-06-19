@@ -44,6 +44,7 @@ def generate_ass_subtitle(
     cover_background_lead_seconds: float = 0.0,
     cover_background_tail_seconds: float = 0.0,
     cover_background_radius_ratio: float = 0.0,
+    cover_background_text_y_offset_ratio: float = 0.0,
     cover_background_reference_lines: list[Any] | None = None,
 ) -> str:
     target = Path(output_path)
@@ -57,13 +58,14 @@ def generate_ass_subtitle(
             0.08,
             0.45,
         )
-        cover_bottom_ratio = _clamp_float(cover_background_bottom_ratio, 0.0, 0.2)
+        cover_bottom_ratio = _clamp_float(cover_background_bottom_ratio, 0.0, 0.35)
         cover_bottom = max(1, video_height - int(video_height * cover_bottom_ratio))
         cover_height = max(1, int(video_height * cover_height_ratio))
         cover_top = max(0, cover_bottom - cover_height)
         default_cover_rect = _CoverRect(0.0, float("inf"), 0, cover_top, video_width, cover_bottom)
         cover_segments = _normalize_cover_segments(cover_background_segments, video_width, video_height)
         subtitle_y = default_cover_rect.center_y
+        cover_text_y_offset = int(video_height * _clamp_float(cover_background_text_y_offset_ratio, -0.2, 0.2))
     else:
         panel_height = int(video_height * overlay.height_ratio)
         panel_margin_bottom = max(18, min(video_height // 24, overlay.padding_y // 2))
@@ -71,6 +73,7 @@ def generate_ass_subtitle(
         subtitle_y = int(panel_top + panel_height / 2)
         default_cover_rect = _CoverRect(0.0, float("inf"), 0, 0, video_width, 0)
         cover_segments = []
+        cover_text_y_offset = 0
     margin_l = max(40, overlay.padding_x)
     margin_r = max(40, overlay.padding_x)
     margin_v = max(24, video_height - subtitle_y)
@@ -154,7 +157,14 @@ def generate_ass_subtitle(
             for part in wrap_subtitle_text(line.text, subtitle.max_chars_per_line, subtitle.max_lines)
         )
         subtitle_x = display_rect.center_x if cover_background_enabled else video_width // 2
-        display_y = display_rect.center_y if cover_background_enabled else subtitle_y
+        if cover_background_enabled:
+            display_y = _clamp_int(
+                display_rect.center_y + cover_text_y_offset,
+                display_rect.top + 4,
+                display_rect.bottom - 4,
+            )
+        else:
+            display_y = subtitle_y
         positioned = rf"{{\pos({subtitle_x},{display_y})}}{wrapped}"
         content.append(
             f"Dialogue: {1 if cover_background_enabled else 0},"
@@ -180,6 +190,12 @@ def hex_to_ass_color(hex_color: str, alpha: float = 1.0) -> str:
 
 def _clamp_float(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, float(value)))
+
+
+def _clamp_int(value: int, minimum: int, maximum: int) -> int:
+    if maximum < minimum:
+        return int(value)
+    return max(minimum, min(maximum, int(value)))
 
 
 def _normalize_cover_segments(
@@ -296,12 +312,13 @@ def wrap_subtitle_text(text: str, max_chars_per_line: int, max_lines: int) -> li
     cleaned = " ".join(str(text).replace("\r", " ").replace("\n", " ").split())
     if not cleaned:
         return [""]
-    return textwrap.wrap(
+    lines = textwrap.wrap(
         cleaned,
         width=max_chars_per_line,
         break_long_words=False,
         break_on_hyphens=False,
     )
+    return _rebalance_short_text_lines(lines, max_chars_per_line)
 
 
 def _expand_lines_for_display(
@@ -365,7 +382,51 @@ def _split_text_for_display(text: str, max_chars_per_line: int, max_lines: int) 
         current_lines.append(current_line)
     if current_lines:
         chunks.append("\n".join(current_lines))
-    return chunks
+    return _rebalance_short_display_chunks(chunks, line_limit)
+
+
+def _rebalance_short_display_chunks(chunks: list[str], line_limit: int) -> list[str]:
+    if len(chunks) < 2:
+        return chunks
+    previous_words = chunks[-2].replace("\n", " ").split()
+    last_words = chunks[-1].replace("\n", " ").split()
+    if len(last_words) != 1 or len(last_words[0]) > 8 or len(previous_words) < 2:
+        return chunks
+    moved_word = previous_words.pop()
+    new_last = f"{moved_word} {last_words[0]}"
+    if len(new_last) > line_limit + 8:
+        return chunks
+    previous_lines = textwrap.wrap(
+        " ".join(previous_words),
+        width=line_limit,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+    chunks[-2] = "\n".join(_rebalance_short_text_lines(previous_lines, line_limit))
+    chunks[-1] = new_last
+    return [chunk for chunk in chunks if chunk.strip()]
+
+
+def _rebalance_short_text_lines(lines: list[str], line_limit: int) -> list[str]:
+    if len(lines) < 2:
+        return lines
+    balanced = list(lines)
+    while len(balanced) >= 2:
+        last_words = balanced[-1].split()
+        previous_words = balanced[-2].split()
+        if len(last_words) != 1 or len(last_words[0]) > 8 or len(previous_words) < 2:
+            break
+        moved_word = previous_words.pop()
+        new_last = f"{moved_word} {last_words[0]}"
+        if len(new_last) > line_limit + 8:
+            break
+        balanced[-2] = " ".join(previous_words)
+        balanced[-1] = new_last
+        if not balanced[-2].strip():
+            balanced.pop(-2)
+            continue
+        break
+    return balanced
 
 
 def _normalize_subtitle_lines(items: list[Any]) -> list[SubtitleLine]:

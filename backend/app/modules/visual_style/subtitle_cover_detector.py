@@ -11,6 +11,8 @@ DYNAMIC_CONFIDENCE_THRESHOLD = 0.12
 MIN_DYNAMIC_CJK_CONFIDENCE = 0.06
 MIN_DYNAMIC_NON_CJK_CONFIDENCE = 0.2
 MIN_COVER_WIDTH_RATIO = 0.88
+MIN_SUBTITLE_TEXT_WIDTH_RATIO = 0.18
+MAX_DYNAMIC_VERTICAL_SPAN_RATIO = 0.12
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,7 @@ class SubtitleCoverPlacement:
 
 @dataclass(frozen=True)
 class _BlockBounds:
+    text: str
     left: float
     top: float
     right: float
@@ -48,6 +51,7 @@ class _BlockBounds:
 @dataclass(frozen=True)
 class _FrameTextBounds:
     timestamp_ms: int
+    text: str
     left: float
     top: float
     right: float
@@ -94,7 +98,7 @@ def detect_subtitle_cover_from_ocr_debug(
 
     if _should_use_bottom_fallback(frame_bounds, frame_height=frame_height):
         height_ratio = max(min_height_ratio, min(float(fallback_height_ratio), BOTTOM_FALLBACK_HEIGHT_RATIO))
-        bottom_ratio = max(0.0, min(0.2, float(fallback_bottom_ratio)))
+        bottom_ratio = max(0.0, min(0.35, float(fallback_bottom_ratio)))
         confidence = _average_confidence(payload, [(item.top, item.bottom, item.confidence) for item in frame_bounds])
         return SubtitleCoverPlacement(
             height_ratio=round(height_ratio, 4),
@@ -118,7 +122,7 @@ def detect_subtitle_cover_from_ocr_debug(
     )
 
     height_ratio = max(0.01, min(0.45, (bottom - top) / frame_height))
-    bottom_ratio = max(0.0, min(0.2, 1.0 - (bottom / frame_height)))
+    bottom_ratio = max(0.0, min(0.35, 1.0 - (bottom / frame_height)))
     confidence = _average_confidence(payload, [(item.top, item.bottom, item.confidence) for item in frame_bounds])
     segments = _build_timed_segments(
         frame_bounds,
@@ -164,7 +168,7 @@ def _collect_frame_text_bounds(
                 blocks.append(parsed)
         if not blocks:
             continue
-        selected = _candidate_subtitle_blocks(blocks, frame_height=frame_height)
+        selected = _candidate_subtitle_blocks(blocks, frame_width=frame_width, frame_height=frame_height)
         cluster = _best_subtitle_cluster(selected, frame_width=frame_width, frame_height=frame_height)
         if not cluster:
             continue
@@ -173,6 +177,7 @@ def _collect_frame_text_bounds(
         frame_bounds.append(
             _FrameTextBounds(
                 timestamp_ms=max(0, timestamp_ms),
+                text=" ".join(block.text for block in cluster if block.text).strip(),
                 left=max(0.0, min(block.left for block in cluster)),
                 top=max(0.0, min(block.top for block in cluster)),
                 right=min(float(frame_width), max(block.right for block in cluster)),
@@ -219,6 +224,7 @@ def _block_bounds_from_raw(
     if block_height / frame_height > 0.18:
         return None
     return _BlockBounds(
+        text=text,
         left=max(0.0, left),
         top=max(0.0, top),
         right=min(float(frame_width), right),
@@ -228,21 +234,50 @@ def _block_bounds_from_raw(
     )
 
 
-def _candidate_subtitle_blocks(blocks: list[_BlockBounds], *, frame_height: int) -> list[_BlockBounds]:
+def _candidate_subtitle_blocks(
+    blocks: list[_BlockBounds],
+    *,
+    frame_width: int,
+    frame_height: int,
+) -> list[_BlockBounds]:
     candidates: list[_BlockBounds] = []
+    safe_width = max(1.0, float(frame_width))
+    safe_height = max(1.0, float(frame_height))
     for block in blocks:
-        bottom_ratio = block.bottom / max(1.0, float(frame_height))
-        if block.has_cjk and (block.confidence >= MIN_DYNAMIC_CJK_CONFIDENCE or bottom_ratio >= BOTTOM_LANE_BOTTOM_RATIO):
+        width_ratio = (block.right - block.left) / safe_width
+        height_ratio = (block.bottom - block.top) / safe_height
+        bottom_ratio = block.bottom / safe_height
+        center_x_ratio = ((block.left + block.right) / 2.0) / safe_width
+        centrality = _center_score(center_x_ratio)
+        text_length = _visible_text_length(block.text)
+        cjk_length = _cjk_char_count(block.text)
+
+        if bottom_ratio < 0.45:
+            continue
+        if text_length <= 2 and width_ratio < 0.22:
+            continue
+        if width_ratio < MIN_SUBTITLE_TEXT_WIDTH_RATIO and centrality < 0.62:
+            continue
+        if height_ratio > 0.1 and width_ratio < 0.16:
+            continue
+
+        subtitle_like = width_ratio >= 0.24 or centrality >= 0.7 or text_length >= 5
+        if block.has_cjk and subtitle_like and (
+            block.confidence >= MIN_DYNAMIC_CJK_CONFIDENCE
+            or cjk_length >= 3
+            or (bottom_ratio >= BOTTOM_LANE_BOTTOM_RATIO and width_ratio >= 0.3)
+        ):
             candidates.append(block)
             continue
-        if block.confidence >= MIN_DYNAMIC_NON_CJK_CONFIDENCE and bottom_ratio >= 0.5:
+        if block.confidence >= MIN_DYNAMIC_NON_CJK_CONFIDENCE and subtitle_like:
             candidates.append(block)
     if candidates:
         return candidates
     return [
         block
         for block in blocks
-        if block.has_cjk and block.bottom / max(1.0, float(frame_height)) >= BOTTOM_LANE_BOTTOM_RATIO
+        if block.has_cjk
+        and block.bottom / safe_height >= BOTTOM_LANE_BOTTOM_RATIO
     ]
 
 
@@ -273,22 +308,26 @@ def _cluster_score(cluster: list[_BlockBounds], *, frame_width: int, frame_heigh
     right = max(block.right for block in cluster)
     width_ratio = (right - left) / max(1.0, float(frame_width))
     text_height = sum(block.bottom - block.top for block in cluster) / max(1.0, float(frame_height))
-    bottom_lane_bonus = 0.0
-    if bottom_ratio >= 0.84:
-        bottom_lane_bonus = 4.0
-    elif bottom_ratio >= BOTTOM_LANE_BOTTOM_RATIO:
-        bottom_lane_bonus = 2.4
-    elif bottom_ratio < 0.68:
-        bottom_lane_bonus = -1.4
+    center_x_ratio = ((left + right) / 2.0) / max(1.0, float(frame_width))
+    center_y_ratio = ((top_ratio + bottom_ratio) / 2.0)
+    text_length = sum(_visible_text_length(block.text) for block in cluster)
+    center_bonus = _center_score(center_x_ratio) * 1.8
+    lane_bonus = 1.0 if 0.52 <= center_y_ratio <= 0.86 else 0.0
+    if bottom_ratio >= BOTTOM_LANE_BOTTOM_RATIO:
+        lane_bonus += 0.45
+    if bottom_ratio >= 0.92 and width_ratio < 0.45:
+        lane_bonus -= 2.0
+    if top_ratio < 0.45:
+        lane_bonus -= 1.6
     return (
         (0.9 if has_cjk else 0.0)
         + len(cluster) * 0.25
         + confidence * 1.4
-        + bottom_ratio * 1.2
-        + width_ratio * 2.2
+        + width_ratio * 3.0
         + min(1.0, text_height * 7.0)
-        + bottom_lane_bonus
-        + (0.4 if top_ratio >= 0.7 else 0.0)
+        + min(1.4, text_length / 12.0)
+        + center_bonus
+        + lane_bonus
     )
 
 
@@ -319,12 +358,29 @@ def _select_subtitle_lane(
 def _lane_score(lane: list[_FrameTextBounds], *, frame_width: int, frame_height: int) -> float:
     confidence = _average([item.confidence for item in lane if item.confidence > 0])
     bottom_ratio = _average([item.bottom / max(1.0, float(frame_height)) for item in lane])
-    width_ratio = _average([(item.right - item.left) / max(1.0, float(frame_width)) for item in lane])
-    score = len(lane) * 0.45 + confidence * 1.5 + bottom_ratio * 2.0 + min(1.0, width_ratio) * 1.2
+    safe_width = max(1.0, float(frame_width))
+    width_ratio = _average([(item.right - item.left) / safe_width for item in lane])
+    max_width_ratio = max((item.right - item.left) / safe_width for item in lane)
+    center_x_ratio = _average([((item.left + item.right) / 2.0) / safe_width for item in lane])
+    centers_y = [(item.top + item.bottom) / 2.0 for item in lane]
+    vertical_span_ratio = (max(centers_y) - min(centers_y)) / max(1.0, float(frame_height)) if centers_y else 0.0
+    text_length = _average([_visible_text_length(item.text) for item in lane])
+    stability_bonus = max(0.0, 1.0 - min(1.0, vertical_span_ratio / MAX_DYNAMIC_VERTICAL_SPAN_RATIO)) * 1.4
+    score = (
+        len(lane) * 0.55
+        + confidence * 1.35
+        + min(1.0, width_ratio) * 2.7
+        + min(1.0, max_width_ratio) * 0.9
+        + _center_score(center_x_ratio) * 1.5
+        + min(1.2, text_length / 10.0)
+        + stability_bonus
+    )
     if bottom_ratio >= BOTTOM_LANE_BOTTOM_RATIO:
-        score += 4.0
-    elif bottom_ratio < 0.68:
-        score -= 1.6
+        score += 0.55
+    elif bottom_ratio < 0.5:
+        score -= 1.0
+    if bottom_ratio >= 0.92 and width_ratio < 0.45:
+        score -= 2.4
     return score
 
 
@@ -348,6 +404,8 @@ def _build_timed_segments(
     max_height_ratio: float,
 ) -> tuple[SubtitleCoverSegment, ...]:
     if not frame_bounds:
+        return ()
+    if not _stable_enough_for_timed_segments(frame_bounds, frame_height=frame_height):
         return ()
     sorted_bounds = sorted(frame_bounds, key=lambda item: item.timestamp_ms)
     intervals = _segment_intervals([item.timestamp_ms for item in sorted_bounds])
@@ -379,6 +437,14 @@ def _build_timed_segments(
             )
         )
     return tuple(segments)
+
+
+def _stable_enough_for_timed_segments(frame_bounds: list[_FrameTextBounds], *, frame_height: int) -> bool:
+    if len(frame_bounds) <= 1:
+        return True
+    centers_y = [(item.top + item.bottom) / 2.0 for item in frame_bounds]
+    vertical_span_ratio = (max(centers_y) - min(centers_y)) / max(1.0, float(frame_height))
+    return vertical_span_ratio <= MAX_DYNAMIC_VERTICAL_SPAN_RATIO
 
 
 def _segment_intervals(timestamps_ms: list[int]) -> list[tuple[float, float]]:
@@ -559,3 +625,15 @@ def _median(values: list[float]) -> float:
 
 def _contains_cjk(text: str) -> bool:
     return any("\u3400" <= char <= "\u9fff" for char in text)
+
+
+def _cjk_char_count(text: str) -> int:
+    return sum(1 for char in text if "\u3400" <= char <= "\u9fff")
+
+
+def _visible_text_length(text: str) -> int:
+    return sum(1 for char in str(text) if char.isalnum() or "\u3400" <= char <= "\u9fff")
+
+
+def _center_score(center_x_ratio: float) -> float:
+    return max(0.0, 1.0 - abs(float(center_x_ratio) - 0.5) * 2.0)

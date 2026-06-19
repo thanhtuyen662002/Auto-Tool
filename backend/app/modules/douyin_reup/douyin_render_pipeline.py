@@ -518,6 +518,7 @@ class DouyinRenderPipeline:
             "cover_background_lead_seconds": settings.subtitle_cover_lead_seconds,
             "cover_background_tail_seconds": settings.subtitle_cover_tail_seconds,
             "cover_background_radius_ratio": settings.subtitle_cover_radius_ratio,
+            "cover_background_text_y_offset_ratio": settings.subtitle_cover_text_y_offset_ratio,
         }
 
     def _run_render_with_audio_fallback(
@@ -867,6 +868,7 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
     current_end = 0.0
     last_accepted_text = ""
     last_accepted_end = 0.0
+    recent_accepted: list[tuple[str, float]] = []
 
     def flush() -> None:
         nonlocal current_texts, current_start, current_end
@@ -875,12 +877,28 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
             groups.append(VoiceoverLine(time_hint=f"{current_start:.2f}-{current_end:.2f}s", text=text))
         current_texts = []
 
+    def remember(text: str, end: float) -> None:
+        recent_accepted.append((text, end))
+        del recent_accepted[:-5]
+
     for block in blocks:
         text = _clean_spoken_text(block.text)
         if not text:
             continue
         gap_from_last = max(0.0, float(block.start) - last_accepted_end)
-        if _should_skip_repeated_spoken_block(last_accepted_text, text, gap_from_last):
+        if _should_skip_repeated_spoken_block(last_accepted_text, text, gap_from_last) or _matches_recent_repeated_block(
+            recent_accepted,
+            text,
+            float(block.start),
+        ):
+            last_accepted_end = max(last_accepted_end, float(block.end))
+            continue
+        if current_texts and _should_skip_repeated_spoken_block(
+            _clean_spoken_text(" ".join(current_texts)),
+            text,
+            max(0.0, float(block.start) - current_end),
+        ):
+            current_end = max(current_end, float(block.end))
             last_accepted_end = max(last_accepted_end, float(block.end))
             continue
         if not current_texts:
@@ -889,6 +907,7 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
             current_end = float(block.end)
             last_accepted_text = text
             last_accepted_end = float(block.end)
+            remember(text, float(block.end))
             continue
 
         previous_text = _clean_spoken_text(" ".join(current_texts))
@@ -900,6 +919,7 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
             current_end = max(current_end, float(block.end))
             last_accepted_text = text
             last_accepted_end = float(block.end)
+            remember(text, float(block.end))
             continue
 
         flush()
@@ -908,6 +928,7 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
         current_end = float(block.end)
         last_accepted_text = text
         last_accepted_end = float(block.end)
+        remember(text, float(block.end))
 
     flush()
     return groups
@@ -928,7 +949,7 @@ def _subtitle_lines_from_voiceover(lines: list[VoiceoverLine]) -> list[SubtitleL
 
 
 def _should_skip_repeated_spoken_block(previous_text: str, next_text: str, gap: float) -> bool:
-    if not previous_text or not next_text or gap > 1.2:
+    if not previous_text or not next_text or gap > 2.8:
         return False
     previous = _normalize_spoken_for_compare(previous_text)
     current = _normalize_spoken_for_compare(next_text)
@@ -936,9 +957,17 @@ def _should_skip_repeated_spoken_block(previous_text: str, next_text: str, gap: 
         return False
     if previous == current:
         return True
-    if min(len(previous), len(current)) >= 12 and (previous in current or current in previous):
+    if min(len(previous), len(current)) >= 10 and (previous in current or current in previous):
         return True
-    return SequenceMatcher(None, previous, current).ratio() >= 0.92
+    return SequenceMatcher(None, previous, current).ratio() >= 0.9
+
+
+def _matches_recent_repeated_block(recent: list[tuple[str, float]], next_text: str, start: float) -> bool:
+    for previous_text, previous_end in reversed(recent):
+        gap = max(0.0, float(start) - float(previous_end))
+        if _should_skip_repeated_spoken_block(previous_text, next_text, gap):
+            return True
+    return False
 
 
 def _normalize_spoken_for_compare(text: str) -> str:

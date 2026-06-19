@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type PointerEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   applyDouyinReupPreset,
@@ -141,18 +141,31 @@ type VietnameseSubtitleStylePreset = {
 };
 
 const VIETNAMESE_SUBTITLE_FONT_OPTIONS = [
+  'Be Vietnam Pro Black',
   'Panger',
   'Word Shark (Black Italy)',
   'Badiho Support',
   'ICL KDA',
   'Gotham Ultra',
+  'SVN-Gotham Black',
   'SVN-Gilroy Heavy',
+  'SVN-Gilroy XBold',
   'SVN-Gotham Ultra',
   'Be Vietnam Pro ExtraBold',
+  'Baloo 2 ExtraBold',
+  'Nunito ExtraBold',
+  'Roboto Condensed Bold',
+  'Google Sans Bold',
+  'UTM Avo Bold',
+  'SVN-Poppins ExtraBold',
+  'SVN-Montserrat Black',
   'Montserrat ExtraBold',
   'Inter Tight Black',
+  'Inter Black',
   'SF Pro Display Heavy',
+  'Arial Rounded MT Bold',
   'Arial Unicode MS',
+  'Tahoma',
   'Arial',
 ];
 
@@ -193,8 +206,8 @@ const VIETNAMESE_SUBTITLE_STYLE_PRESETS: VietnameseSubtitleStylePreset[] = [
       subtitle_style_custom_enabled: true,
       subtitle_font_family: 'Panger',
       subtitle_font_size: 62,
-      subtitle_font_color: '#FFF7EA',
-      subtitle_stroke_color: '#531629',
+      subtitle_font_color: '#FFE66D',
+      subtitle_stroke_color: '#2B0612',
       subtitle_stroke_width: 4,
       subtitle_shadow_enabled: true,
       subtitle_shadow_color: '#2B0612',
@@ -203,8 +216,8 @@ const VIETNAMESE_SUBTITLE_STYLE_PRESETS: VietnameseSubtitleStylePreset[] = [
       subtitle_max_chars_per_line: 18,
       subtitle_max_lines: 2,
       subtitle_cover_enabled: true,
-      subtitle_cover_color: '#C94763',
-      subtitle_cover_opacity: 0.84,
+      subtitle_cover_color: '#2B0712',
+      subtitle_cover_opacity: 0.9,
       subtitle_cover_height_ratio: 0.12,
       subtitle_cover_padding_ratio: 0.035,
     },
@@ -219,7 +232,7 @@ const VIETNAMESE_SUBTITLE_STYLE_PRESETS: VietnameseSubtitleStylePreset[] = [
       subtitle_style_custom_enabled: true,
       subtitle_font_family: 'Gotham Ultra',
       subtitle_font_size: 58,
-      subtitle_font_color: '#FFF0B8',
+      subtitle_font_color: '#FFD166',
       subtitle_stroke_color: '#2F1705',
       subtitle_stroke_width: 3,
       subtitle_shadow_enabled: true,
@@ -229,8 +242,8 @@ const VIETNAMESE_SUBTITLE_STYLE_PRESETS: VietnameseSubtitleStylePreset[] = [
       subtitle_max_chars_per_line: 19,
       subtitle_max_lines: 2,
       subtitle_cover_enabled: true,
-      subtitle_cover_color: '#4A2509',
-      subtitle_cover_opacity: 0.86,
+      subtitle_cover_color: '#241005',
+      subtitle_cover_opacity: 0.9,
       subtitle_cover_height_ratio: 0.12,
       subtitle_cover_padding_ratio: 0.035,
     },
@@ -297,9 +310,9 @@ const VIETNAMESE_SUBTITLE_STYLE_PRESETS: VietnameseSubtitleStylePreset[] = [
       subtitle_style_custom_enabled: true,
       subtitle_font_family: 'Badiho Support',
       subtitle_font_size: 54,
-      subtitle_font_color: '#294236',
-      subtitle_stroke_color: '#FFF8E8',
-      subtitle_stroke_width: 2,
+      subtitle_font_color: '#F8FFE5',
+      subtitle_stroke_color: '#07110B',
+      subtitle_stroke_width: 3,
       subtitle_shadow_enabled: true,
       subtitle_shadow_color: '#7BBF8E',
       subtitle_shadow_opacity: 0.24,
@@ -307,8 +320,8 @@ const VIETNAMESE_SUBTITLE_STYLE_PRESETS: VietnameseSubtitleStylePreset[] = [
       subtitle_max_chars_per_line: 22,
       subtitle_max_lines: 2,
       subtitle_cover_enabled: true,
-      subtitle_cover_color: '#F3E7C9',
-      subtitle_cover_opacity: 0.92,
+      subtitle_cover_color: '#1E2A1F',
+      subtitle_cover_opacity: 0.9,
       subtitle_cover_height_ratio: 0.12,
       subtitle_cover_padding_ratio: 0.03,
     },
@@ -349,9 +362,9 @@ const VIETNAMESE_SUBTITLE_STYLE_PRESETS: VietnameseSubtitleStylePreset[] = [
       subtitle_style_custom_enabled: true,
       subtitle_font_family: 'SF Pro Display Heavy',
       subtitle_font_size: 54,
-      subtitle_font_color: '#3B1F2B',
-      subtitle_stroke_color: '#FFE9D6',
-      subtitle_stroke_width: 2,
+      subtitle_font_color: '#FFE9D6',
+      subtitle_stroke_color: '#3A1020',
+      subtitle_stroke_width: 3,
       subtitle_shadow_enabled: true,
       subtitle_shadow_color: '#FFFFFF',
       subtitle_shadow_opacity: 0.22,
@@ -359,8 +372,8 @@ const VIETNAMESE_SUBTITLE_STYLE_PRESETS: VietnameseSubtitleStylePreset[] = [
       subtitle_max_chars_per_line: 21,
       subtitle_max_lines: 2,
       subtitle_cover_enabled: true,
-      subtitle_cover_color: '#FFD6B7',
-      subtitle_cover_opacity: 0.9,
+      subtitle_cover_color: '#3A1020',
+      subtitle_cover_opacity: 0.88,
       subtitle_cover_height_ratio: 0.12,
       subtitle_cover_padding_ratio: 0.03,
     },
@@ -435,6 +448,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   subtitle_cover_lead_seconds: 0.85,
   subtitle_cover_tail_seconds: 0.25,
   subtitle_cover_radius_ratio: 0.035,
+  subtitle_cover_text_y_offset_ratio: 0,
   keep_original_audio: true,
   add_bgm: true,
   music_folder: '',
@@ -1081,6 +1095,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       subtitle_cover_lead_seconds: settings.subtitle_cover_lead_seconds,
       subtitle_cover_tail_seconds: settings.subtitle_cover_tail_seconds,
       subtitle_cover_radius_ratio: settings.subtitle_cover_radius_ratio,
+      subtitle_cover_text_y_offset_ratio: settings.subtitle_cover_text_y_offset_ratio,
       add_overlay: settings.add_overlay,
       overlay_mode: settings.overlay_mode,
       generate_voiceover_for_silent_video: settings.generate_voiceover_for_silent_video,
@@ -1425,6 +1440,26 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   }
 
   function renderAdvancedSettings() {
+    const coverHeightPercent = clampNumber(settings.subtitle_cover_height_ratio * 100, 5, 45);
+    const coverBottomPercent = clampNumber(settings.subtitle_cover_bottom_ratio * 100, 0, 35);
+    const coverTextTopPercent = clampNumber(
+      50 + (settings.subtitle_cover_text_y_offset_ratio / Math.max(0.05, settings.subtitle_cover_height_ratio)) * 100,
+      12,
+      88,
+    );
+    const selectedSubtitleFontIsPreset = VIETNAMESE_SUBTITLE_FONT_OPTIONS.includes(settings.subtitle_font_family);
+    const subtitlePreviewVideoPath = videos.find((video) => video.status === 'valid')?.path || videos[0]?.path || '';
+    function updateCoverPositionFromPreview(event: PointerEvent<HTMLDivElement>) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      if (!rect.height) return;
+      const yRatio = clampNumber((event.clientY - rect.top) / rect.height, 0, 1);
+      const nextBottomRatio = clampNumber(1 - yRatio - settings.subtitle_cover_height_ratio / 2, 0, 0.35);
+      updateAdvancedSettings({
+        subtitle_cover_auto_position: false,
+        subtitle_cover_bottom_ratio: Number(nextBottomRatio.toFixed(3)),
+      });
+    }
+
     return (
       <>
         <GlassCard className="grid gap-3 p-4" strong>
@@ -1493,6 +1528,22 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 onChange={(value) => updateAdvancedSettings({ subtitle_cover_height_ratio: value })}
               />
               <SliderInput
+                label={`Vị trí nền che: cách đáy ${Math.round(settings.subtitle_cover_bottom_ratio * 100)}%`}
+                min={0}
+                max={0.35}
+                step={0.005}
+                value={settings.subtitle_cover_bottom_ratio}
+                onChange={(value) => updateAdvancedSettings({ subtitle_cover_auto_position: false, subtitle_cover_bottom_ratio: value })}
+              />
+              <SliderInput
+                label={`Dịch chữ Việt trong nền: ${Math.round(settings.subtitle_cover_text_y_offset_ratio * 100)}%`}
+                min={-0.12}
+                max={0.12}
+                step={0.005}
+                value={settings.subtitle_cover_text_y_offset_ratio}
+                onChange={(value) => updateAdvancedSettings({ subtitle_cover_text_y_offset_ratio: value })}
+              />
+              <SliderInput
                 label={`Độ đậm nền che sub: ${Math.round(settings.subtitle_cover_opacity * 100)}%`}
                 min={0.2}
                 max={1}
@@ -1553,6 +1604,72 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   onChange={(event) => updateAdvancedSettings({ subtitle_cover_color: event.target.value })}
                 />
               </label>
+              <div className="grid gap-3 rounded-md border border-white/10 bg-slate-950/45 p-3 sm:col-span-3 lg:grid-cols-[220px_1fr]">
+                <div>
+                  <div className="text-sm font-semibold text-white">Preview vị trí che sub</div>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">
+                    Kéo vùng nền trong khung để chỉnh vị trí thủ công cho cả batch. Sau khi scan, khung này dùng video thực tế đầu tiên để bạn canh nhanh hơn.
+                  </p>
+                  <div className="mt-3 grid gap-1 text-xs text-slate-400">
+                    <span>Nền: {Math.round(settings.subtitle_cover_height_ratio * 100)}% chiều cao video</span>
+                    <span>Cách đáy: {Math.round(settings.subtitle_cover_bottom_ratio * 100)}%</span>
+                    <span>Chữ Việt: {Math.round(settings.subtitle_cover_text_y_offset_ratio * 100)}%</span>
+                  </div>
+                </div>
+                <div
+                  className="relative mx-auto aspect-[9/16] h-[320px] cursor-ns-resize overflow-hidden rounded-lg border border-white/15 bg-gradient-to-b from-slate-700 via-slate-900 to-slate-950"
+                  onPointerDown={(event) => {
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    updateCoverPositionFromPreview(event);
+                  }}
+                  onPointerMove={(event) => {
+                    if (event.buttons === 1) updateCoverPositionFromPreview(event);
+                  }}
+                  role="presentation"
+                >
+                  {subtitlePreviewVideoPath ? (
+                    <video
+                      className="absolute inset-0 h-full w-full object-cover opacity-70"
+                      src={videoFileUrl(subtitlePreviewVideoPath)}
+                      muted
+                      playsInline
+                    />
+                  ) : null}
+                  <div className="absolute left-1/2 top-[18%] -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-[10px] text-slate-200">
+                    watermark / tên kênh
+                  </div>
+                  <div className="absolute left-1/2 top-[70%] -translate-x-1/2 rounded bg-white/80 px-3 py-1 text-center text-[11px] font-semibold text-slate-950">
+                    字幕 Trung gốc
+                  </div>
+                  <div
+                    className="absolute left-0 right-0 grid place-items-center px-3 text-center"
+                    style={{
+                      bottom: `${coverBottomPercent}%`,
+                      height: `${coverHeightPercent}%`,
+                      backgroundColor: settings.subtitle_cover_enabled ? hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity) : 'rgba(15, 23, 42, 0.85)',
+                      borderRadius: `${Math.round(Math.max(0, settings.subtitle_cover_radius_ratio || 0) * 220)}px`,
+                    }}
+                  >
+                    <span
+                      className="absolute left-2 right-2 leading-tight"
+                      style={{
+                        top: `${coverTextTopPercent}%`,
+                        transform: 'translateY(-50%)',
+                        color: settings.subtitle_font_color,
+                        fontFamily: settings.subtitle_font_family || 'Arial',
+                        fontSize: `${Math.max(13, Math.min(24, Math.round(settings.subtitle_font_size * 0.36)))}px`,
+                        fontWeight: 800,
+                        textShadow: settings.subtitle_shadow_enabled
+                          ? `0 2px ${settings.subtitle_shadow_size}px ${hexToRgba(settings.subtitle_shadow_color, settings.subtitle_shadow_opacity)}`
+                          : 'none',
+                        WebkitTextStroke: `${Math.max(0, Math.min(2, settings.subtitle_stroke_width))}px ${settings.subtitle_stroke_color}`,
+                      }}
+                    >
+                      Sub Việt mẫu
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : null}
           <div className="grid gap-3 border-t border-white/10 pt-4">
@@ -1634,17 +1751,25 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block">
                   <span className="mb-1.5 block text-sm font-medium text-slate-200">Font sub Việt</span>
-                  <input
-                    list="vietnamese-subtitle-font-options"
+                  <select
                     className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                    value={selectedSubtitleFontIsPreset ? settings.subtitle_font_family : '__custom'}
+                    onChange={(event) => {
+                      if (event.target.value === '__custom') return;
+                      updateAdvancedSettings({ subtitle_font_family: event.target.value });
+                    }}
+                  >
+                    {VIETNAMESE_SUBTITLE_FONT_OPTIONS.map((font) => (
+                      <option key={font} value={font}>{font}</option>
+                    ))}
+                    <option value="__custom">Font tự nhập</option>
+                  </select>
+                  <input
+                    className="mt-2 h-10 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
                     value={settings.subtitle_font_family}
                     onChange={(event) => updateAdvancedSettings({ subtitle_font_family: event.target.value })}
+                    placeholder="Nhập tên font đã cài trên Windows"
                   />
-                  <datalist id="vietnamese-subtitle-font-options">
-                    {VIETNAMESE_SUBTITLE_FONT_OPTIONS.map((font) => (
-                      <option key={font} value={font} />
-                    ))}
-                  </datalist>
                   <span className="mt-1.5 block text-xs leading-5 text-slate-500">Font cần được cài trên Windows để render đúng trong video.</span>
                 </label>
                 <SliderInput
@@ -3183,6 +3308,10 @@ function hexToRgba(hexColor: string | undefined, opacity = 1): string {
   const green = parseInt(cleaned.slice(2, 4), 16);
   const blue = parseInt(cleaned.slice(4, 6), 16);
   return `rgba(${red}, ${green}, ${blue}, ${Math.max(0, Math.min(1, opacity))})`;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
