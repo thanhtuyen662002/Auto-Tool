@@ -144,6 +144,10 @@ def test_generate_ass_subtitle_uses_timed_cover_segments(tmp_path) -> None:
 
     assert "Dialogue: 0,0:00:00.00,0:00:01.00,SubtitleCover" in content
     assert "Dialogue: 0,0:00:01.00,0:00:02.00,SubtitleCover" in content
+    assert "Dialogue: 1,0:00:00.00,0:00:01.00,Default" in content
+    assert "Dialogue: 1,0:00:01.00,0:00:02.00,Default" in content
+    assert "Dialogue: 1,0:00:00.00,0:00:02.00,Default" not in content
     assert r"m 108 1382 l 972 1382 l 972 1498 l 108 1498" in content
     assert r"m 162 1267 l 918 1267 l 918 1382 l 162 1382" in content
     assert r"\pos(540,1440)" in content
+    assert r"\pos(540,1324)" in content

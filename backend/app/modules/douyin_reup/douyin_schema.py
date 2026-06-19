@@ -74,7 +74,7 @@ class DouyinReupSettings(BaseModel):
     subtitle_cover_auto_position: bool = True
     subtitle_cover_probe_if_no_ocr: bool = True
     subtitle_cover_probe_sample_fps: float = Field(default=1.0, gt=0, le=2.0)
-    subtitle_cover_height_ratio: float = Field(default=0.22, ge=0.05, le=0.45)
+    subtitle_cover_height_ratio: float = Field(default=0.12, ge=0.05, le=0.45)
     subtitle_cover_bottom_ratio: float = Field(default=0.0, ge=0, le=0.2)
     subtitle_cover_padding_ratio: float = Field(default=0.035, ge=0, le=0.12)
     keep_original_audio: bool = True

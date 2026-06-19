@@ -5,6 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+BOTTOM_LANE_BOTTOM_RATIO = 0.78
+BOTTOM_FALLBACK_HEIGHT_RATIO = 0.12
+DYNAMIC_CONFIDENCE_THRESHOLD = 0.12
+MIN_DYNAMIC_CJK_CONFIDENCE = 0.06
+MIN_DYNAMIC_NON_CJK_CONFIDENCE = 0.2
+MIN_COVER_WIDTH_RATIO = 0.88
+
 
 @dataclass(frozen=True)
 class SubtitleCoverSegment:
@@ -56,7 +63,7 @@ def detect_subtitle_cover_from_ocr_debug(
     fallback_bottom_ratio: float,
     padding_ratio: float,
     min_height_ratio: float = 0.055,
-    max_height_ratio: float = 0.28,
+    max_height_ratio: float = 0.16,
 ) -> SubtitleCoverPlacement | None:
     if not debug_json_path:
         return None
@@ -81,6 +88,22 @@ def detect_subtitle_cover_from_ocr_debug(
     frame_bounds = _collect_frame_text_bounds(payload, frame_width=frame_width, frame_height=frame_height)
     if not frame_bounds:
         return None
+    frame_bounds = _select_subtitle_lane(frame_bounds, frame_width=frame_width, frame_height=frame_height)
+    if not frame_bounds:
+        return None
+
+    if _should_use_bottom_fallback(frame_bounds, frame_height=frame_height):
+        height_ratio = max(min_height_ratio, min(float(fallback_height_ratio), BOTTOM_FALLBACK_HEIGHT_RATIO))
+        bottom_ratio = max(0.0, min(0.2, float(fallback_bottom_ratio)))
+        confidence = _average_confidence(payload, [(item.top, item.bottom, item.confidence) for item in frame_bounds])
+        return SubtitleCoverPlacement(
+            height_ratio=round(height_ratio, 4),
+            bottom_ratio=round(bottom_ratio, 4),
+            confidence=round(confidence, 4),
+            block_count=sum(item.block_count for item in frame_bounds),
+            source="ocr_debug_bottom_fallback",
+            segments=(),
+        )
 
     _, top, _, bottom = _padded_rect(
         left=_percentile([item.left for item in frame_bounds], 0.10),
@@ -141,9 +164,8 @@ def _collect_frame_text_bounds(
                 blocks.append(parsed)
         if not blocks:
             continue
-        cjk_blocks = [block for block in blocks if block.has_cjk]
-        selected = cjk_blocks or [block for block in blocks if block.confidence >= 0.15]
-        cluster = _best_subtitle_cluster(selected, frame_height=frame_height)
+        selected = _candidate_subtitle_blocks(blocks, frame_height=frame_height)
+        cluster = _best_subtitle_cluster(selected, frame_width=frame_width, frame_height=frame_height)
         if not cluster:
             continue
         timestamp_ms = _safe_int(frame.get("timestamp_ms"), 0)
@@ -206,7 +228,25 @@ def _block_bounds_from_raw(
     )
 
 
-def _best_subtitle_cluster(blocks: list[_BlockBounds], *, frame_height: int) -> list[_BlockBounds]:
+def _candidate_subtitle_blocks(blocks: list[_BlockBounds], *, frame_height: int) -> list[_BlockBounds]:
+    candidates: list[_BlockBounds] = []
+    for block in blocks:
+        bottom_ratio = block.bottom / max(1.0, float(frame_height))
+        if block.has_cjk and (block.confidence >= MIN_DYNAMIC_CJK_CONFIDENCE or bottom_ratio >= BOTTOM_LANE_BOTTOM_RATIO):
+            candidates.append(block)
+            continue
+        if block.confidence >= MIN_DYNAMIC_NON_CJK_CONFIDENCE and bottom_ratio >= 0.5:
+            candidates.append(block)
+    if candidates:
+        return candidates
+    return [
+        block
+        for block in blocks
+        if block.has_cjk and block.bottom / max(1.0, float(frame_height)) >= BOTTOM_LANE_BOTTOM_RATIO
+    ]
+
+
+def _best_subtitle_cluster(blocks: list[_BlockBounds], *, frame_width: int, frame_height: int) -> list[_BlockBounds]:
     if not blocks:
         return []
     max_gap = max(24.0, frame_height * 0.035)
@@ -221,15 +261,81 @@ def _best_subtitle_cluster(blocks: list[_BlockBounds], *, frame_height: int) -> 
             current.append(block)
         else:
             clusters.append([block])
-    return max(clusters, key=lambda cluster: _cluster_score(cluster, frame_height=frame_height))
+    return max(clusters, key=lambda cluster: _cluster_score(cluster, frame_width=frame_width, frame_height=frame_height))
 
 
-def _cluster_score(cluster: list[_BlockBounds], *, frame_height: int) -> float:
+def _cluster_score(cluster: list[_BlockBounds], *, frame_width: int, frame_height: int) -> float:
     confidence = _average([block.confidence for block in cluster if block.confidence > 0])
     has_cjk = any(block.has_cjk for block in cluster)
-    lower_bonus = max(block.bottom for block in cluster) / max(1.0, float(frame_height))
+    bottom_ratio = max(block.bottom for block in cluster) / max(1.0, float(frame_height))
+    top_ratio = min(block.top for block in cluster) / max(1.0, float(frame_height))
+    left = min(block.left for block in cluster)
+    right = max(block.right for block in cluster)
+    width_ratio = (right - left) / max(1.0, float(frame_width))
     text_height = sum(block.bottom - block.top for block in cluster) / max(1.0, float(frame_height))
-    return (2.5 if has_cjk else 0.0) + len(cluster) * 0.35 + confidence + lower_bonus * 0.25 + min(1.0, text_height * 8.0)
+    bottom_lane_bonus = 0.0
+    if bottom_ratio >= 0.84:
+        bottom_lane_bonus = 4.0
+    elif bottom_ratio >= BOTTOM_LANE_BOTTOM_RATIO:
+        bottom_lane_bonus = 2.4
+    elif bottom_ratio < 0.68:
+        bottom_lane_bonus = -1.4
+    return (
+        (0.9 if has_cjk else 0.0)
+        + len(cluster) * 0.25
+        + confidence * 1.4
+        + bottom_ratio * 1.2
+        + width_ratio * 2.2
+        + min(1.0, text_height * 7.0)
+        + bottom_lane_bonus
+        + (0.4 if top_ratio >= 0.7 else 0.0)
+    )
+
+
+def _select_subtitle_lane(
+    frame_bounds: list[_FrameTextBounds],
+    *,
+    frame_width: int,
+    frame_height: int,
+) -> list[_FrameTextBounds]:
+    if len(frame_bounds) <= 1:
+        return frame_bounds
+    max_gap = max(42.0, frame_height * 0.075)
+    lanes: list[list[_FrameTextBounds]] = []
+    for item in sorted(frame_bounds, key=lambda bound: (bound.top + bound.bottom) / 2.0):
+        center = (item.top + item.bottom) / 2.0
+        if not lanes:
+            lanes.append([item])
+            continue
+        current = lanes[-1]
+        current_centers = [(bound.top + bound.bottom) / 2.0 for bound in current]
+        if center <= max(current_centers) + max_gap:
+            current.append(item)
+        else:
+            lanes.append([item])
+    return max(lanes, key=lambda lane: _lane_score(lane, frame_width=frame_width, frame_height=frame_height))
+
+
+def _lane_score(lane: list[_FrameTextBounds], *, frame_width: int, frame_height: int) -> float:
+    confidence = _average([item.confidence for item in lane if item.confidence > 0])
+    bottom_ratio = _average([item.bottom / max(1.0, float(frame_height)) for item in lane])
+    width_ratio = _average([(item.right - item.left) / max(1.0, float(frame_width)) for item in lane])
+    score = len(lane) * 0.45 + confidence * 1.5 + bottom_ratio * 2.0 + min(1.0, width_ratio) * 1.2
+    if bottom_ratio >= BOTTOM_LANE_BOTTOM_RATIO:
+        score += 4.0
+    elif bottom_ratio < 0.68:
+        score -= 1.6
+    return score
+
+
+def _should_use_bottom_fallback(frame_bounds: list[_FrameTextBounds], *, frame_height: int) -> bool:
+    confidence = _average([item.confidence for item in frame_bounds if item.confidence > 0])
+    if confidence >= DYNAMIC_CONFIDENCE_THRESHOLD:
+        return False
+    bottom_ratio = max(item.bottom for item in frame_bounds) / max(1.0, float(frame_height))
+    if bottom_ratio >= BOTTOM_LANE_BOTTOM_RATIO:
+        return True
+    return confidence < 0.04
 
 
 def _build_timed_segments(
@@ -331,8 +437,8 @@ def _padded_rect(
     left, right = _expand_interval(
         left,
         right,
-        minimum=frame_width * 0.42,
-        maximum=frame_width * 0.96,
+        minimum=frame_width * MIN_COVER_WIDTH_RATIO,
+        maximum=frame_width * 0.98,
         lower_bound=0.0,
         upper_bound=float(frame_width),
     )

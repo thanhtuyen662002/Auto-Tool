@@ -123,6 +123,7 @@ def generate_ass_subtitle(
         start = _format_ass_timestamp(start_seconds)
         end = _format_ass_timestamp(end_seconds)
         display_rect = default_cover_rect
+        cover_rects: list[_CoverRect] = []
         if cover_background_enabled:
             cover_rects = _cover_rects_for_line(start_seconds, end_seconds, cover_segments, default_cover_rect)
             display_rect = max(cover_rects, key=lambda item: item.end - item.start) if cover_rects else default_cover_rect
@@ -143,15 +144,19 @@ def generate_ass_subtitle(
             _escape_ass_text(part)
             for part in wrap_subtitle_text(line.text, subtitle.max_chars_per_line, subtitle.max_lines)
         )
-        subtitle_x = display_rect.center_x if cover_background_enabled else video_width // 2
-        display_y = display_rect.center_y if cover_background_enabled else subtitle_y
-        positioned = rf"{{\pos({subtitle_x},{display_y})}}{wrapped}"
-        content.append(
-            f"Dialogue: {1 if cover_background_enabled else 0},"
-            f"{start},"
-            f"{end},"
-            f"Default,,0,0,0,,{positioned}"
-        )
+        text_rects = cover_rects if cover_background_enabled and cover_rects else [display_rect]
+        for rect in text_rects:
+            text_start = _format_ass_timestamp(rect.start) if cover_background_enabled and cover_rects else start
+            text_end = _format_ass_timestamp(rect.end) if cover_background_enabled and cover_rects else end
+            subtitle_x = rect.center_x if cover_background_enabled else video_width // 2
+            display_y = rect.center_y if cover_background_enabled else subtitle_y
+            positioned = rf"{{\pos({subtitle_x},{display_y})}}{wrapped}"
+            content.append(
+                f"Dialogue: {1 if cover_background_enabled else 0},"
+                f"{text_start},"
+                f"{text_end},"
+                f"Default,,0,0,0,,{positioned}"
+            )
 
     target.write_text("\n".join(content) + "\n", encoding="utf-8")
     return str(target)

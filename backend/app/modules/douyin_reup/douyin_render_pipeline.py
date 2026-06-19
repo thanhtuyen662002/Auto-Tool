@@ -469,11 +469,17 @@ class DouyinRenderPipeline:
                 height_ratio = placement.height_ratio
                 bottom_ratio = placement.bottom_ratio
                 cover_segments = [asdict(segment) for segment in placement.segments]
-                warnings.append(
-                    "subtitle_cover_auto_position: Đã tự đặt nền phụ đề Việt theo vị trí chữ Trung "
-                    f"từ OCR ({placement.block_count} vùng chữ, {len(cover_segments)} mốc thời gian, "
-                    f"confidence {placement.confidence:.2f})."
-                )
+                if placement.source == "ocr_debug_bottom_fallback":
+                    warnings.append(
+                        "subtitle_cover_auto_position_bottom_fallback: OCR vị trí phụ đề Trung bị nhiễu hoặc confidence thấp; "
+                        f"đã dùng dải che đáy mỏng ({placement.block_count} vùng gợi ý, confidence {placement.confidence:.2f})."
+                    )
+                else:
+                    warnings.append(
+                        "subtitle_cover_auto_position: Đã tự đặt nền phụ đề Việt theo vị trí chữ Trung "
+                        f"từ OCR ({placement.block_count} vùng chữ, {len(cover_segments)} mốc thời gian, "
+                        f"confidence {placement.confidence:.2f})."
+                    )
             else:
                 warnings.append(
                     "subtitle_cover_auto_position_fallback: Không đủ tọa độ OCR để tự đặt nền che sub Trung; "

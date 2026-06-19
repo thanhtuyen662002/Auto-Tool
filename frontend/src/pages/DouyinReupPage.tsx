@@ -193,7 +193,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   subtitle_cover_auto_position: true,
   subtitle_cover_probe_if_no_ocr: true,
   subtitle_cover_probe_sample_fps: 1,
-  subtitle_cover_height_ratio: 0.22,
+  subtitle_cover_height_ratio: 0.12,
   subtitle_cover_bottom_ratio: 0,
   subtitle_cover_padding_ratio: 0.035,
   keep_original_audio: true,

@@ -20,7 +20,7 @@ export const DEFAULT_REVIEW_RENDER_SETTINGS: DouyinReupSettings = {
   subtitle_shadow_size: 2, subtitle_max_chars_per_line: 22, subtitle_max_lines: 2,
   subtitle_cover_enabled: true, subtitle_cover_color: '#000000', subtitle_cover_opacity: 0.86,
   subtitle_cover_auto_position: true, subtitle_cover_probe_if_no_ocr: true, subtitle_cover_probe_sample_fps: 1,
-  subtitle_cover_height_ratio: 0.22, subtitle_cover_bottom_ratio: 0,
+  subtitle_cover_height_ratio: 0.12, subtitle_cover_bottom_ratio: 0,
   subtitle_cover_padding_ratio: 0.035,
   keep_original_audio: true, add_bgm: true, music_folder: '', favorite_music_paths: [], bgm_volume: 0.16,
   original_audio_volume: 0.85, reduce_original_voice: false, original_voice_reduction_strength: 0.65,

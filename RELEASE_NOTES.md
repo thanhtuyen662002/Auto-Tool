@@ -1,5 +1,21 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.27
+
+### Highlights
+
+- Fixed smart subtitle cover choosing noisy mid-frame OCR blocks instead of the real lower Chinese subtitle lane.
+- Added a thin bottom fallback when OCR coordinates are low-confidence or fragmented, avoiding oversized floating cover blocks.
+- Made Vietnamese subtitle text split across the same timed cover intervals so text and background move together.
+- Widened smart cover rectangles so Vietnamese text no longer overflows the background.
+- Lowered the default fallback cover height from 22% to 12% for less intrusive bottom coverage.
+
+### QA
+
+- Backend test suite passed: 474 tests.
+- Frontend production build passed.
+- Verified the noisy real-world OCR debug from video_020 now resolves to a thin bottom fallback instead of mid-frame segments.
+
 ## v1.0.26
 
 ### Highlights

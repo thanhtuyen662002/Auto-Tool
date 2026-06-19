@@ -115,3 +115,65 @@ def test_detect_subtitle_cover_from_ocr_debug_keeps_per_timestamp_positions(tmp_
     assert placement.segments[0].top_ratio > placement.segments[1].top_ratio
     assert placement.segments[0].bottom_edge_ratio > placement.segments[1].bottom_edge_ratio
     assert 0.05 <= placement.segments[0].bottom_edge_ratio - placement.segments[0].top_ratio <= 0.09
+
+
+def test_detect_subtitle_cover_uses_bottom_fallback_for_noisy_midframe_ocr(tmp_path: Path) -> None:
+    debug_path = tmp_path / "ocr_debug_noisy_midframe.json"
+    debug_path.write_text(
+        json.dumps(
+            {
+                "frame_width": 720,
+                "frame_height": 1280,
+                "region": {"x": 0, "y": 704, "width": 720, "height": 448},
+                "average_confidence": 0.02,
+                "frames": [
+                    {
+                        "timestamp_ms": 9000,
+                        "region": {"x": 0, "y": 704, "width": 720, "height": 448},
+                        "raw_blocks": [
+                            {
+                                "box": [[200, 60], [260, 60], [260, 96], [200, 96]],
+                                "text": "瓮",
+                                "confidence": 0.004,
+                            },
+                            {
+                                "box": [[470, 380], [540, 380], [540, 415], [470, 415]],
+                                "text": "哑",
+                                "confidence": 0.006,
+                            },
+                        ],
+                    },
+                    {
+                        "timestamp_ms": 10000,
+                        "region": {"x": 0, "y": 704, "width": 720, "height": 448},
+                        "raw_blocks": [
+                            {
+                                "box": [[210, 95], [280, 95], [280, 130], [210, 130]],
+                                "text": "盥",
+                                "confidence": 0.003,
+                            },
+                            {
+                                "box": [[505, 405], [560, 405], [560, 430], [505, 430]],
+                                "text": "川",
+                                "confidence": 0.004,
+                            },
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    placement = detect_subtitle_cover_from_ocr_debug(
+        str(debug_path),
+        fallback_height_ratio=0.22,
+        fallback_bottom_ratio=0.0,
+        padding_ratio=0.035,
+    )
+
+    assert placement is not None
+    assert placement.source == "ocr_debug_bottom_fallback"
+    assert placement.height_ratio == 0.12
+    assert placement.bottom_ratio == 0
+    assert placement.segments == ()
