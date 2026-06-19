@@ -30,7 +30,7 @@ export default function StartAdvancedSettingsDrawer({
       {open ? (
         <div className="fixed inset-0 z-50 flex justify-end overflow-hidden bg-black/55" role="dialog" aria-modal="true" aria-label="Cài đặt nâng cao">
           <button className="hidden flex-1 cursor-default md:block" type="button" aria-label="Đóng cài đặt nâng cao" onClick={onClose} />
-          <aside className="flex h-dvh w-full max-w-3xl flex-col overflow-hidden border-l border-white/10 bg-slate-950/95 shadow-2xl backdrop-blur">
+          <aside className="flex h-screen max-h-screen w-full max-w-3xl flex-col overflow-hidden border-l border-white/10 bg-slate-950/95 shadow-2xl backdrop-blur">
             <div className="border-b border-white/10 p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -50,8 +50,8 @@ export default function StartAdvancedSettingsDrawer({
                 ))}
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
-              <div className="grid gap-5">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-14 pt-5">
+              <div className="grid gap-5 pb-4">
                 <GlassButton variant="secondary" onClick={onReset}>
                   <RotateCcw size={16} />
                   Khôi phục theo preset

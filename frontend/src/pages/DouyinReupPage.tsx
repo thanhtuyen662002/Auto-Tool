@@ -136,158 +136,233 @@ type VietnameseSubtitleStylePreset = {
   name: string;
   description: string;
   accentColor: string;
+  previewText: string;
   settings: Partial<DouyinReupSettings>;
 };
 
+const VIETNAMESE_SUBTITLE_FONT_OPTIONS = [
+  'Panger',
+  'Word Shark (Black Italy)',
+  'Badiho Support',
+  'ICL KDA',
+  'Gotham Ultra',
+  'SVN-Gilroy Heavy',
+  'SVN-Gotham Ultra',
+  'Be Vietnam Pro ExtraBold',
+  'Montserrat ExtraBold',
+  'Inter Tight Black',
+  'SF Pro Display Heavy',
+  'Arial Unicode MS',
+  'Arial',
+];
+
 const VIETNAMESE_SUBTITLE_STYLE_PRESETS: VietnameseSubtitleStylePreset[] = [
   {
-    id: 'review_clear_white',
-    name: 'Review rõ chữ',
-    description: 'Trắng viền đen, nền mỏng, hợp đa số video review sản phẩm.',
-    accentColor: '#FFFFFF',
+    id: 'review_mint_pop',
+    name: 'Review mint nổi',
+    description: 'Nền xanh ngọc trầm, chữ sáng, hợp review sản phẩm đời sống.',
+    accentColor: '#56F0C9',
+    previewText: 'Rất đáng thử',
     settings: {
       subtitle_style_custom_enabled: true,
-      subtitle_font_family: 'Arial',
-      subtitle_font_size: 54,
-      subtitle_font_color: '#FFFFFF',
-      subtitle_stroke_color: '#000000',
-      subtitle_stroke_width: 2,
+      subtitle_font_family: 'Be Vietnam Pro ExtraBold',
+      subtitle_font_size: 56,
+      subtitle_font_color: '#E9FFF7',
+      subtitle_stroke_color: '#00342F',
+      subtitle_stroke_width: 3,
       subtitle_shadow_enabled: true,
-      subtitle_shadow_color: '#000000',
-      subtitle_shadow_opacity: 0.35,
-      subtitle_shadow_size: 2,
+      subtitle_shadow_color: '#001C19',
+      subtitle_shadow_opacity: 0.42,
+      subtitle_shadow_size: 3,
       subtitle_max_chars_per_line: 22,
       subtitle_max_lines: 2,
       subtitle_cover_enabled: true,
-      subtitle_cover_color: '#000000',
-      subtitle_cover_opacity: 0.78,
-      subtitle_cover_height_ratio: 0.11,
+      subtitle_cover_color: '#062E2B',
+      subtitle_cover_opacity: 0.86,
+      subtitle_cover_height_ratio: 0.12,
       subtitle_cover_padding_ratio: 0.03,
     },
   },
   {
-    id: 'reup_tiktok_bold',
-    name: 'Reup TikTok đậm',
-    description: 'Chữ vàng to, viền dày, dễ bắt mắt trên video chuyển cảnh nhanh.',
-    accentColor: '#FFF03A',
+    id: 'viral_coral_panger',
+    name: 'Viral coral',
+    description: 'Cam san hô ấm, chữ sáng nổi mạnh cho video nhịp nhanh.',
+    accentColor: '#FF8A5B',
+    previewText: 'Mua là mê',
     settings: {
       subtitle_style_custom_enabled: true,
-      subtitle_font_family: 'Arial',
-      subtitle_font_size: 60,
-      subtitle_font_color: '#FFF03A',
-      subtitle_stroke_color: '#000000',
+      subtitle_font_family: 'Panger',
+      subtitle_font_size: 62,
+      subtitle_font_color: '#FFF7EA',
+      subtitle_stroke_color: '#531629',
       subtitle_stroke_width: 4,
       subtitle_shadow_enabled: true,
-      subtitle_shadow_color: '#000000',
-      subtitle_shadow_opacity: 0.45,
+      subtitle_shadow_color: '#2B0612',
+      subtitle_shadow_opacity: 0.5,
       subtitle_shadow_size: 3,
       subtitle_max_chars_per_line: 18,
       subtitle_max_lines: 2,
       subtitle_cover_enabled: true,
-      subtitle_cover_color: '#000000',
-      subtitle_cover_opacity: 0.82,
-      subtitle_cover_height_ratio: 0.12,
-      subtitle_cover_padding_ratio: 0.035,
-    },
-  },
-  {
-    id: 'sale_red_yellow',
-    name: 'Sale đỏ vàng',
-    description: 'Nền đỏ, chữ trắng, nhấn CTA và ưu đãi trong video bán hàng.',
-    accentColor: '#FFD54A',
-    settings: {
-      subtitle_style_custom_enabled: true,
-      subtitle_font_family: 'Arial',
-      subtitle_font_size: 58,
-      subtitle_font_color: '#FFFFFF',
-      subtitle_stroke_color: '#4A000A',
-      subtitle_stroke_width: 3,
-      subtitle_shadow_enabled: true,
-      subtitle_shadow_color: '#000000',
-      subtitle_shadow_opacity: 0.32,
-      subtitle_shadow_size: 2,
-      subtitle_max_chars_per_line: 19,
-      subtitle_max_lines: 2,
-      subtitle_cover_enabled: true,
-      subtitle_cover_color: '#B00020',
+      subtitle_cover_color: '#C94763',
       subtitle_cover_opacity: 0.84,
       subtitle_cover_height_ratio: 0.12,
       subtitle_cover_padding_ratio: 0.035,
     },
   },
   {
-    id: 'beauty_pastel',
-    name: 'Beauty pastel',
-    description: 'Tone sáng mềm, chữ tối dễ đọc cho mỹ phẩm, thời trang, skincare.',
-    accentColor: '#FF8DBA',
+    id: 'sale_champagne_gotham',
+    name: 'Sale champagne',
+    description: 'Vàng champagne sang hơn, hợp video bán hàng và CTA cuối.',
+    accentColor: '#D6A84F',
+    previewText: 'Chốt đơn ngay',
     settings: {
       subtitle_style_custom_enabled: true,
-      subtitle_font_family: 'Arial',
-      subtitle_font_size: 52,
-      subtitle_font_color: '#3A2430',
-      subtitle_stroke_color: '#FFFFFF',
-      subtitle_stroke_width: 1,
+      subtitle_font_family: 'Gotham Ultra',
+      subtitle_font_size: 58,
+      subtitle_font_color: '#FFF0B8',
+      subtitle_stroke_color: '#2F1705',
+      subtitle_stroke_width: 3,
       subtitle_shadow_enabled: true,
-      subtitle_shadow_color: '#FFFFFF',
-      subtitle_shadow_opacity: 0.2,
+      subtitle_shadow_color: '#000000',
+      subtitle_shadow_opacity: 0.38,
       subtitle_shadow_size: 2,
+      subtitle_max_chars_per_line: 19,
+      subtitle_max_lines: 2,
+      subtitle_cover_enabled: true,
+      subtitle_cover_color: '#4A2509',
+      subtitle_cover_opacity: 0.86,
+      subtitle_cover_height_ratio: 0.12,
+      subtitle_cover_padding_ratio: 0.035,
+    },
+  },
+  {
+    id: 'beauty_lilac_wordshark',
+    name: 'Beauty lilac',
+    description: 'Tím lilac mềm, hợp mỹ phẩm, thời trang và video lifestyle.',
+    accentColor: '#FF9FD8',
+    previewText: 'Xinh nhẹ nhàng',
+    settings: {
+      subtitle_style_custom_enabled: true,
+      subtitle_font_family: 'Word Shark (Black Italy)',
+      subtitle_font_size: 54,
+      subtitle_font_color: '#FFF7FF',
+      subtitle_stroke_color: '#6E3A7D',
+      subtitle_stroke_width: 2,
+      subtitle_shadow_enabled: true,
+      subtitle_shadow_color: '#30133E',
+      subtitle_shadow_opacity: 0.36,
+      subtitle_shadow_size: 3,
       subtitle_max_chars_per_line: 21,
       subtitle_max_lines: 2,
       subtitle_cover_enabled: true,
-      subtitle_cover_color: '#FFF0F6',
-      subtitle_cover_opacity: 0.9,
+      subtitle_cover_color: '#5B2A86',
+      subtitle_cover_opacity: 0.78,
       subtitle_cover_height_ratio: 0.12,
       subtitle_cover_padding_ratio: 0.03,
     },
   },
   {
-    id: 'tech_neon',
-    name: 'Tech neon',
-    description: 'Nền xanh đen, chữ cyan/trắng cho phụ kiện điện tử và gadget.',
-    accentColor: '#35D4FF',
+    id: 'tech_aqua_iclkda',
+    name: 'Tech aqua',
+    description: 'Xanh điện tử, chữ sáng lạnh cho gadget và đồ công nghệ.',
+    accentColor: '#41E6FF',
+    previewText: 'Nét căng luôn',
     settings: {
       subtitle_style_custom_enabled: true,
-      subtitle_font_family: 'Arial',
+      subtitle_font_family: 'ICL KDA',
       subtitle_font_size: 54,
-      subtitle_font_color: '#EAFBFF',
-      subtitle_stroke_color: '#002432',
-      subtitle_stroke_width: 2,
+      subtitle_font_color: '#D7FBFF',
+      subtitle_stroke_color: '#021D28',
+      subtitle_stroke_width: 3,
       subtitle_shadow_enabled: true,
-      subtitle_shadow_color: '#35D4FF',
+      subtitle_shadow_color: '#41E6FF',
       subtitle_shadow_opacity: 0.45,
       subtitle_shadow_size: 3,
       subtitle_max_chars_per_line: 22,
       subtitle_max_lines: 2,
       subtitle_cover_enabled: true,
-      subtitle_cover_color: '#050816',
-      subtitle_cover_opacity: 0.84,
-      subtitle_cover_height_ratio: 0.11,
+      subtitle_cover_color: '#05283C',
+      subtitle_cover_opacity: 0.86,
+      subtitle_cover_height_ratio: 0.12,
       subtitle_cover_padding_ratio: 0.035,
     },
   },
   {
-    id: 'minimal_transparent',
-    name: 'Minimal trong',
-    description: 'Nền đen trong hơn, giữ nhiều hình sản phẩm nhưng vẫn che sub gốc.',
-    accentColor: '#CBD5E1',
+    id: 'kitchen_cream_badiho',
+    name: 'Kitchen cream',
+    description: 'Kem xanh dịu cho đồ gia dụng, bếp, mẹ và bé, ít chói mắt.',
+    accentColor: '#7BBF8E',
+    previewText: 'Dùng tiện lắm',
     settings: {
       subtitle_style_custom_enabled: true,
-      subtitle_font_family: 'Arial',
-      subtitle_font_size: 50,
-      subtitle_font_color: '#FFFFFF',
-      subtitle_stroke_color: '#000000',
+      subtitle_font_family: 'Badiho Support',
+      subtitle_font_size: 54,
+      subtitle_font_color: '#294236',
+      subtitle_stroke_color: '#FFF8E8',
       subtitle_stroke_width: 2,
       subtitle_shadow_enabled: true,
-      subtitle_shadow_color: '#000000',
-      subtitle_shadow_opacity: 0.28,
+      subtitle_shadow_color: '#7BBF8E',
+      subtitle_shadow_opacity: 0.24,
       subtitle_shadow_size: 2,
-      subtitle_max_chars_per_line: 24,
+      subtitle_max_chars_per_line: 22,
       subtitle_max_lines: 2,
       subtitle_cover_enabled: true,
-      subtitle_cover_color: '#000000',
-      subtitle_cover_opacity: 0.58,
-      subtitle_cover_height_ratio: 0.1,
-      subtitle_cover_padding_ratio: 0.025,
+      subtitle_cover_color: '#F3E7C9',
+      subtitle_cover_opacity: 0.92,
+      subtitle_cover_height_ratio: 0.12,
+      subtitle_cover_padding_ratio: 0.03,
+    },
+  },
+  {
+    id: 'night_violet_reup',
+    name: 'Night violet',
+    description: 'Tím đêm hiện đại, che sub gốc tốt nhưng không quá nặng.',
+    accentColor: '#A78BFA',
+    previewText: 'Đáng xem nha',
+    settings: {
+      subtitle_style_custom_enabled: true,
+      subtitle_font_family: 'Montserrat ExtraBold',
+      subtitle_font_size: 56,
+      subtitle_font_color: '#F4EEFF',
+      subtitle_stroke_color: '#160A2E',
+      subtitle_stroke_width: 3,
+      subtitle_shadow_enabled: true,
+      subtitle_shadow_color: '#000000',
+      subtitle_shadow_opacity: 0.4,
+      subtitle_shadow_size: 3,
+      subtitle_max_chars_per_line: 22,
+      subtitle_max_lines: 2,
+      subtitle_cover_enabled: true,
+      subtitle_cover_color: '#21123D',
+      subtitle_cover_opacity: 0.84,
+      subtitle_cover_height_ratio: 0.12,
+      subtitle_cover_padding_ratio: 0.03,
+    },
+  },
+  {
+    id: 'soft_peach_story',
+    name: 'Story peach',
+    description: 'Hồng đào mềm, hợp video kể chuyện, beauty và daily review.',
+    accentColor: '#FF7A90',
+    previewText: 'Nhìn thích ghê',
+    settings: {
+      subtitle_style_custom_enabled: true,
+      subtitle_font_family: 'SF Pro Display Heavy',
+      subtitle_font_size: 54,
+      subtitle_font_color: '#3B1F2B',
+      subtitle_stroke_color: '#FFE9D6',
+      subtitle_stroke_width: 2,
+      subtitle_shadow_enabled: true,
+      subtitle_shadow_color: '#FFFFFF',
+      subtitle_shadow_opacity: 0.22,
+      subtitle_shadow_size: 2,
+      subtitle_max_chars_per_line: 21,
+      subtitle_max_lines: 2,
+      subtitle_cover_enabled: true,
+      subtitle_cover_color: '#FFD6B7',
+      subtitle_cover_opacity: 0.9,
+      subtitle_cover_height_ratio: 0.12,
+      subtitle_cover_padding_ratio: 0.03,
     },
   },
 ];
@@ -1366,6 +1441,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   const active = isVietnameseSubtitleStylePresetActive(preset, settings);
                   const presetBackground = String(preset.settings.subtitle_cover_color || '#000000');
                   const presetOpacity = Number(preset.settings.subtitle_cover_opacity ?? 0.8);
+                  const presetFontFamily = String(preset.settings.subtitle_font_family || 'Arial');
                   return (
                     <button
                       className={`grid gap-2 rounded-md border p-3 text-left transition ${
@@ -1379,24 +1455,25 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                     >
                       <div className="flex items-center gap-3">
                         <span
-                          className="grid h-11 w-16 place-items-center rounded border border-white/15 text-sm font-black"
+                          className="grid h-14 w-24 shrink-0 place-items-center rounded-md border border-white/15 px-2 text-center text-[12px] font-black leading-4"
                           style={{
                             backgroundColor: hexToRgba(presetBackground, presetOpacity),
                             color: String(preset.settings.subtitle_font_color || '#FFFFFF'),
+                            fontFamily: presetFontFamily,
                             textShadow: preset.settings.subtitle_shadow_enabled
                               ? `0 2px ${preset.settings.subtitle_shadow_size || 2}px ${hexToRgba(String(preset.settings.subtitle_shadow_color || '#000000'), Number(preset.settings.subtitle_shadow_opacity ?? 0.35))}`
                               : 'none',
                             WebkitTextStroke: `${Math.max(0, Math.min(3, Number(preset.settings.subtitle_stroke_width || 0)))}px ${String(preset.settings.subtitle_stroke_color || '#000000')}`,
                           }}
                         >
-                          Sub
+                          {preset.previewText}
                         </span>
                         <span className="min-w-0">
                           <span className="block text-sm font-semibold">{preset.name}</span>
                           <span className="mt-0.5 block text-xs leading-5 text-slate-400">{preset.description}</span>
                         </span>
                       </div>
-                      <span className="h-1 rounded-full" style={{ backgroundColor: preset.accentColor }} />
+                      <span className="h-1 rounded-full" style={{ backgroundColor: preset.accentColor, boxShadow: `0 0 14px ${preset.accentColor}` }} />
                     </button>
                   );
                 })}
@@ -1422,7 +1499,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   WebkitTextStroke: `${Math.max(0, Math.min(3, settings.subtitle_stroke_width))}px ${settings.subtitle_stroke_color}`,
                 }}
               >
-                Sub Việt mẫu
+                Săn deal hôm nay
               </div>
             </div>
             {settings.subtitle_style_custom_enabled ? (
@@ -1430,10 +1507,17 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 <label className="block">
                   <span className="mb-1.5 block text-sm font-medium text-slate-200">Font sub Việt</span>
                   <input
+                    list="vietnamese-subtitle-font-options"
                     className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
                     value={settings.subtitle_font_family}
                     onChange={(event) => updateAdvancedSettings({ subtitle_font_family: event.target.value })}
                   />
+                  <datalist id="vietnamese-subtitle-font-options">
+                    {VIETNAMESE_SUBTITLE_FONT_OPTIONS.map((font) => (
+                      <option key={font} value={font} />
+                    ))}
+                  </datalist>
+                  <span className="mt-1.5 block text-xs leading-5 text-slate-500">Font cần được cài trên Windows để render đúng trong video.</span>
                 </label>
                 <SliderInput
                   label={`Cỡ chữ sub Việt: ${settings.subtitle_font_size}px`}
