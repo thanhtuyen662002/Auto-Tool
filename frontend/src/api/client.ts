@@ -130,6 +130,10 @@ export function videoFileUrl(path: string): string {
   return backendUrl(`/api/files/video?path=${encodeURIComponent(path)}`);
 }
 
+export function sourceVideoFileUrl(path: string): string {
+  return backendUrl(`/api/files/source-video?path=${encodeURIComponent(path)}`);
+}
+
 export function assetFileUrl(pathOrUrl: string): string {
   if (pathOrUrl.startsWith('/')) return backendUrl(pathOrUrl);
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;

@@ -31,7 +31,7 @@ from app.modules.cache.cache_service import CacheService
 from app.modules.music_selector.music_selector import MusicSelector
 from app.modules.content_safety.safety_guard_service import SafetyGuardService
 from app.modules.content_safety.safety_schema import SafetyCheckResult, SafetyIssue, build_safety_result
-from app.modules.douyin_reup.douyin_folder_scanner import DouyinFolderScanner
+from app.modules.douyin_reup.douyin_folder_scanner import DouyinFolderScanner, SUPPORTED_VIDEO_EXTENSIONS
 from app.modules.douyin_reup.bgm_mixer import SUPPORTED_BGM_EXTENSIONS
 from app.modules.douyin_reup.douyin_render_pipeline import DouyinRenderPipeline
 from app.modules.douyin_reup.douyin_reup_service import DouyinReupService, build_retry_cache
@@ -974,6 +974,10 @@ def create_app() -> FastAPI:
         scanner = DouyinFolderScanner()
         try:
             media = scanner.scan_folder(request.source_folder)
+            try:
+                local_paths_service.add_recent_path("source", request.source_folder)
+            except Exception as exc:
+                logger.warning("Could not save recent Douyin source folder %s: %s", request.source_folder, exc)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
@@ -2874,6 +2878,24 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=403, detail="Video path is not registered as a render output.")
         return FileResponse(video_path, media_type="video/mp4", filename=video_path.name)
 
+    @app.get("/api/files/source-video", response_model=None)
+    def get_source_video_file(path: str = Query(...)) -> FileResponse:
+        video_path = Path(path).expanduser().resolve()
+        if not video_path.exists() or not video_path.is_file():
+            raise HTTPException(status_code=404, detail=f"Source video file not found: {video_path}")
+        suffix = video_path.suffix.lower()
+        if suffix not in SUPPORTED_VIDEO_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Only local source video preview files are supported.")
+        if not _is_known_source_preview_path(video_path, local_paths_service):
+            raise HTTPException(status_code=403, detail="Source video path is not in a recent source folder.")
+        media_type = {
+            ".mp4": "video/mp4",
+            ".webm": "video/webm",
+            ".mov": "video/quicktime",
+            ".mkv": "video/x-matroska",
+        }.get(suffix, "application/octet-stream")
+        return FileResponse(video_path, media_type=media_type, filename=video_path.name)
+
     @app.get("/api/files/image", response_model=None)
     def get_image_file(path: str = Query(...)) -> FileResponse:
         image_path = Path(path).expanduser().resolve()
@@ -4059,6 +4081,24 @@ def _google_tts_required_for_mode(config: ProjectConfig | None, mode: str) -> bo
     if settings and settings.generate_voiceover_for_silent_video:
         providers.add(_normalized_provider(settings.silent_voiceover_provider))
     return "google_cloud_tts" in providers
+
+
+def _is_known_source_preview_path(video_path: Path, local_paths_service: LocalPathsService) -> bool:
+    try:
+        recent = local_paths_service.get_recent_paths()
+    except Exception as exc:
+        logger.warning("Could not read recent source folders for source preview: %s", exc)
+        recent = LocalRecentPaths()
+
+    roots = [*recent.source_folders, str(app_data_dir() / "Source"), str(app_data_dir() / "source")]
+    for root_value in roots:
+        try:
+            root = local_paths_service.resolve_path(root_value)
+            video_path.relative_to(root)
+            return True
+        except (OSError, ValueError):
+            continue
+    return False
 
 
 def _bgm_required_for_settings(settings: DouyinReupSettings, mode: str) -> bool:

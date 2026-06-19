@@ -18,10 +18,10 @@ export default function WorkflowHero({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-3xl">
           <div className="flex flex-wrap items-center gap-2">
-            <GlassBadge variant={silent ? 'success' : 'ready'}>{silent ? 'Silent Mode' : 'Douyin Reup'}</GlassBadge>
+            <GlassBadge variant={silent ? 'success' : 'ready'}>{silent ? 'Video không thoại' : 'Reup Douyin'}</GlassBadge>
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400">
               <Clock3 size={13} />
-              Batch workflow
+              Quy trình hàng loạt
             </span>
           </div>
           <h1 className="mt-3 text-2xl font-semibold text-white">
@@ -35,7 +35,7 @@ export default function WorkflowHero({
           <div className="mt-4 flex flex-wrap gap-2">
             <GlassButton variant="primary" onClick={onFocusStart}>
               <Sparkles size={16} />
-              Bắt đầu batch mới
+              Bắt đầu lô mới
             </GlassButton>
             <Link
               className="inline-flex min-h-10 items-center gap-2 rounded-md border border-white/15 bg-white/8 px-4 py-2 text-sm font-semibold text-white hover:border-cyan-300/45"
@@ -49,11 +49,11 @@ export default function WorkflowHero({
         <div className="grid gap-3">
           <StartModeToggle mode={mode} />
           <div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex">
-            <span>Folder</span>
+            <span>Thư mục</span>
             <ArrowRight size={13} />
-            <span>Preset</span>
+            <span>Mẫu</span>
             <ArrowRight size={13} />
-            <span>Start</span>
+            <span>Chạy</span>
           </div>
         </div>
       </div>

@@ -25,9 +25,9 @@ export default function WorkflowPreviewPanel({
             <Route size={18} className="text-cyan-200" />
             Xem trước quy trình
           </h2>
-          <p className="mt-1 text-sm text-slate-400">{preset ? preset.name : 'Chưa chọn preset'}</p>
+          <p className="mt-1 text-sm text-slate-400">{preset ? preset.name : 'Chưa chọn mẫu cấu hình'}</p>
         </div>
-        {preset ? <GlassBadge variant={preset.autoRender ? 'warning' : 'success'}>{preset.reviewRequired ? 'Có duyệt' : 'Render ngay'}</GlassBadge> : null}
+        {preset ? <GlassBadge variant={preset.autoRender ? 'warning' : 'success'}>{preset.reviewRequired ? 'Có duyệt' : 'Xuất ngay'}</GlassBadge> : null}
       </div>
       <div className="grid gap-2">
         {steps.map((step, index) => (
@@ -39,10 +39,10 @@ export default function WorkflowPreviewPanel({
       </div>
       <div className="grid gap-2 border-t border-white/10 pt-4 text-sm">
         <InfoLine label="Duyệt trước" value={preset?.reviewRequired ? 'Bắt buộc' : 'Bỏ qua'} />
-        <InfoLine label="Render tự động" value={preset?.autoRender ? 'Có' : 'Không'} />
+        <InfoLine label="Xuất video tự động" value={preset?.autoRender ? 'Có' : 'Không'} />
         <InfoLine
           label="Nguồn caption"
-          value={mode === 'silent_immersive' ? 'OCR nếu có chữ, nếu không dùng template theo ngành.' : 'Tự chọn subtitle có sẵn, giọng nói hoặc chữ trên màn hình.'}
+          value={mode === 'silent_immersive' ? 'Đọc chữ trên video nếu có, nếu không dùng mẫu theo ngành.' : 'Tự chọn phụ đề có sẵn, nghe lời thoại hoặc đọc chữ trên video.'}
         />
       </div>
       {scanSummary ? (
@@ -78,8 +78,8 @@ function InfoLine({ label, value }: { label: string; value: string }) {
 
 function workflowSteps(mode: StartWorkflowMode, preset?: StartPresetViewModel): string[] {
   if (mode === 'silent_immersive') {
-    return ['Nhận diện video không thoại', 'Chia cảnh', 'Tạo caption tiếng Việt', preset?.reviewRequired ? 'Duyệt caption' : 'Render MP4', 'Kiểm tra video cuối', 'Gói xuất bản'];
+    return ['Nhận diện video không thoại', 'Chia cảnh', 'Tạo caption tiếng Việt', preset?.reviewRequired ? 'Duyệt caption' : 'Xuất MP4', 'Kiểm tra video cuối', 'Gói xuất bản'];
   }
-  if (preset?.autoRender) return ['Scan video', 'Nhận diện giọng nói/chữ', 'Dịch phụ đề', 'Render MP4', 'Kiểm tra video cuối', 'Gói xuất bản'];
-  return ['Scan video', 'Nhận diện giọng nói/chữ', 'Dịch phụ đề', 'Mở màn duyệt phụ đề', 'Render MP4', 'Gói xuất bản'];
+  if (preset?.autoRender) return ['Quét video', 'Nghe lời thoại hoặc đọc chữ', 'Dịch phụ đề', 'Xuất MP4', 'Kiểm tra video cuối', 'Gói xuất bản'];
+  return ['Quét video', 'Nghe lời thoại hoặc đọc chữ', 'Dịch phụ đề', 'Mở màn duyệt phụ đề', 'Xuất MP4', 'Gói xuất bản'];
 }

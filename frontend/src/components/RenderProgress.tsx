@@ -86,14 +86,14 @@ function formatStep(step: string): string {
     asr_loading_model: 'Đang nạp model nhận diện thoại',
     asr_transcribing: 'Đang nhận diện lời thoại',
     asr_writing_subtitles: 'Đang ghi phụ đề nhận diện',
-    ocr_probe: 'Đang kiểm tra video cho OCR',
-    ocr_loading_model: 'Đang nạp model OCR',
+    ocr_probe: 'Đang kiểm tra chữ trên video',
+    ocr_loading_model: 'Đang chuẩn bị bộ đọc chữ',
     ocr_sampling_frames: 'Đang lấy frame phụ đề',
     ocr_recognizing: 'Đang nhận diện chữ trên video',
-    ocr_merging_lines: 'Đang ghép dòng OCR',
+    ocr_merging_lines: 'Đang ghép các dòng chữ nhận diện',
     translation: 'Đang dịch phụ đề',
     timing_guard: 'Đang căn thời gian phụ đề',
-    ffmpeg_render: 'Đang render video bằng FFmpeg',
+    ffmpeg_render: 'Đang xuất video cuối',
     final_output_qa: 'Đang kiểm tra video đầu ra',
   };
   const detailedStep = Object.keys(detailedLabels).find((key) => normalized === key || normalized.endsWith(`_${key}`));

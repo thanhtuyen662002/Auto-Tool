@@ -20,9 +20,9 @@ export default function FirstRunChecklist({ status, onRefresh, prominent }: Prop
       <GlassCard strong className={`p-5 ${prominent ? 'border-cyan-300/35 glow-primary' : ''}`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-white">Checklist trước khi chạy batch đầu tiên</h2>
+            <h2 className="text-lg font-semibold text-white">Checklist trước khi chạy lô video đầu tiên</h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-300">
-              Kiểm tra nhanh những thứ quan trọng. OCR và TTS là optional, nên bạn không cần cấu hình ngay nếu chưa dùng tới.
+              Kiểm tra nhanh những thứ quan trọng. Đọc chữ trên video và giọng đọc là tùy chọn, nên bạn không cần cấu hình ngay nếu chưa dùng tới.
             </p>
           </div>
         </div>
@@ -36,31 +36,31 @@ export default function FirstRunChecklist({ status, onRefresh, prominent }: Prop
             onRetry={onRefresh}
           />
           <SetupRequirementCard
-            title="FFmpeg"
-            description="Tool cần FFmpeg để đọc và render video."
+            title="Bộ dựng video"
+            description="Tool cần FFmpeg để đọc, ghép và xuất video."
             status={status.ffmpeg}
             topic="ffmpeg"
             onHelp={setHelpTopic}
             onRetry={onRefresh}
           />
           <SetupRequirementCard
-            title="Output folder"
-            description={settings.defaultOutputFolder ? `Đang dùng: ${settings.defaultOutputFolder}` : 'Chưa chọn nơi lưu video output mặc định.'}
+            title="Thư mục đầu ra"
+            description={settings.defaultOutputFolder ? `Đang dùng: ${settings.defaultOutputFolder}` : 'Chưa chọn nơi lưu video đầu ra mặc định.'}
             status={settings.defaultOutputFolder ? 'ready' : 'missing'}
             topic="output"
             onHelp={setHelpTopic}
           />
           <SetupRequirementCard
-            title="Music folder"
-            description={settings.defaultMusicFolder ? `Đang dùng: ${settings.defaultMusicFolder}` : 'Không bắt buộc. Có thể giữ âm thanh gốc hoặc chọn sau trong batch.'}
+            title="Thư mục nhạc nền"
+            description={settings.defaultMusicFolder ? `Đang dùng: ${settings.defaultMusicFolder}` : 'Không bắt buộc. Có thể giữ âm thanh gốc hoặc chọn sau trong lô video.'}
             status={settings.defaultMusicFolder ? 'ready' : 'optional'}
             topic="output"
             optional
             onHelp={setHelpTopic}
           />
           <SetupRequirementCard
-            title="OCR"
-            description="Chỉ cần khi video có chữ Trung hardcoded trên màn hình."
+            title="Đọc chữ trên video"
+            description="Chỉ cần khi video có chữ Trung dính sẵn trên màn hình."
             status={status.ocr}
             topic="ocr"
             optional
@@ -68,8 +68,8 @@ export default function FirstRunChecklist({ status, onRefresh, prominent }: Prop
             onRetry={onRefresh}
           />
           <SetupRequirementCard
-            title="TTS"
-            description="Chỉ cần khi tạo voiceover tiếng Việt cho Silent Mode."
+            title="Giọng đọc tiếng Việt"
+            description="Chỉ cần khi tạo lời thoại tiếng Việt cho video không thoại."
             status={status.tts}
             topic="tts"
             optional

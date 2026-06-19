@@ -22,6 +22,7 @@ import {
   retryDouyinReupJobWithPreset,
   retryFailedDouyinReupJob,
   runFinalOutputQAForJob,
+  sourceVideoFileUrl,
   startDouyinReupProcess,
   videoFileUrl,
 } from '../api/client';
@@ -88,6 +89,7 @@ import type {
   StartWorkflowMode,
 } from '../types/startWorkflow';
 import { summarizeStartScan } from '../types/startWorkflow';
+import { friendlyTermLabel } from '../utils/userFacingTerms';
 
 type ExportOptions = {
   copy_videos: boolean;
@@ -656,10 +658,15 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   const [recentSourceFolders, setRecentSourceFolders] = useState(() => readRecentFolders(RECENT_SOURCE_KEY));
   const [recentOutputFolders, setRecentOutputFolders] = useState(() => readRecentFolders(RECENT_OUTPUT_KEY));
   const [recentMusicFolders, setRecentMusicFolders] = useState(() => readRecentFolders(RECENT_MUSIC_KEY));
+  const [subtitlePreviewVideoError, setSubtitlePreviewVideoError] = useState(false);
 
   const done = jobStatus?.status === 'completed' || jobStatus?.status === 'completed_with_errors' || jobStatus?.status === 'failed';
   const canStart = sourceFolder.trim() && outputFolder.trim() && !busy && (!jobStatus || done);
   const selectedSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+  const subtitlePreviewVideo = useMemo(
+    () => videos.find((video) => selectedSet.has(video.path)) || videos.find((video) => video.status === 'valid') || videos[0] || null,
+    [selectedSet, videos],
+  );
   const reviewDocuments = useMemo(() => results.filter((output) => output.subtitle_review_document_id), [results]);
   const failedResults = useMemo(() => results.filter((output) => output.status === 'failed'), [results]);
   const qaFailedResults = useMemo(() => results.filter((output) => output.final_output_qa?.status === 'failed'), [results]);
@@ -675,6 +682,10 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     ],
     [results],
   );
+
+  useEffect(() => {
+    setSubtitlePreviewVideoError(false);
+  }, [subtitlePreviewVideo?.path]);
   const reviewBeforeRender = workflowMode === 'silent_immersive' ? settings.silent_review_before_render : settings.review_subtitles_before_render;
   const usesManualSubtitleReview = reviewBeforeRender && !settings.auto_render_after_translation;
   const currentAutoRender = !usesManualSubtitleReview;
@@ -1448,7 +1459,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       88,
     );
     const selectedSubtitleFontIsPreset = VIETNAMESE_SUBTITLE_FONT_OPTIONS.includes(settings.subtitle_font_family);
-    const subtitlePreviewVideoPath = videos.find((video) => video.status === 'valid')?.path || videos[0]?.path || '';
+    const subtitlePreviewVideoPath = subtitlePreviewVideo?.path || '';
     function updateCoverPositionFromPreview(event: PointerEvent<HTMLDivElement>) {
       const rect = event.currentTarget.getBoundingClientRect();
       if (!rect.height) return;
@@ -1481,7 +1492,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           </div>
         </GlassCard>
         <GlassCard className="grid gap-4 p-4" strong>
-          <h3 className="font-semibold text-white">Subtitle</h3>
+          <h3 className="font-semibold text-white">Phụ đề và chữ trên video</h3>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-slate-200">Ngôn ngữ nguồn</span>
@@ -1492,18 +1503,18 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               <input className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.target_language} onChange={(event) => updateAdvancedSettings({ target_language: event.target.value })} />
             </label>
             <Toggle
-              label={workflowMode === 'silent_immersive' ? 'Duyệt caption trước khi render' : 'Duyệt phụ đề trước khi render'}
+              label={workflowMode === 'silent_immersive' ? 'Duyệt caption trước khi xuất video' : 'Duyệt phụ đề trước khi xuất video'}
               checked={usesManualSubtitleReview}
               onChange={(value) => updateRenderFlow(value ? 'review' : 'auto', true)}
             />
-            <Toggle label="Render MP4 ngay sau khi dịch" checked={currentAutoRender} onChange={(value) => updateRenderFlow(value ? 'auto' : 'review', true)} />
-            <Toggle label="Burn subtitle vào video" checked={settings.burn_subtitle} onChange={(value) => updateAdvancedSettings({ burn_subtitle: value })} />
+            <Toggle label="Xuất MP4 ngay sau khi dịch" checked={currentAutoRender} onChange={(value) => updateRenderFlow(value ? 'auto' : 'review', true)} />
+            <Toggle label="Gắn phụ đề vào video" checked={settings.burn_subtitle} onChange={(value) => updateAdvancedSettings({ burn_subtitle: value })} />
             <Toggle
               label="Che phụ đề Trung bằng nền phụ đề Việt"
               checked={settings.subtitle_cover_enabled}
               onChange={(value) => updateAdvancedSettings({ subtitle_cover_enabled: value })}
             />
-            <Toggle label="Dùng overlay" checked={settings.add_overlay} onChange={(value) => updateAdvancedSettings({ add_overlay: value, overlay_mode: value ? settings.overlay_mode || 'preset' : 'none' })} />
+            <Toggle label="Dùng khung phủ" checked={settings.add_overlay} onChange={(value) => updateAdvancedSettings({ add_overlay: value, overlay_mode: value ? settings.overlay_mode || 'preset' : 'none' })} />
           </div>
           {settings.subtitle_cover_enabled ? (
             <div className="grid gap-3 sm:grid-cols-3">
@@ -1514,13 +1525,13 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               />
               {settings.subtitle_cover_auto_position ? (
                 <Toggle
-                  label="Quét nhanh nếu chưa có OCR"
+                  label="Tự quét chữ nếu chưa có dữ liệu"
                   checked={settings.subtitle_cover_probe_if_no_ocr}
                   onChange={(value) => updateAdvancedSettings({ subtitle_cover_probe_if_no_ocr: value })}
                 />
               ) : null}
               <SliderInput
-                label={`${settings.subtitle_cover_auto_position ? 'Chiều cao fallback' : 'Chiều cao nền che sub'}: ${Math.round(settings.subtitle_cover_height_ratio * 100)}%`}
+                label={`${settings.subtitle_cover_auto_position ? 'Chiều cao dự phòng' : 'Chiều cao nền che phụ đề'}: ${Math.round(settings.subtitle_cover_height_ratio * 100)}%`}
                 min={0.05}
                 max={0.36}
                 step={0.01}
@@ -1553,7 +1564,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               />
               {settings.subtitle_cover_auto_position ? (
                 <SliderInput
-                  label={`Đệm vùng che OCR: ${Math.round(settings.subtitle_cover_padding_ratio * 100)}%`}
+                  label={`Nới rộng vùng che quanh chữ Trung: ${Math.round(settings.subtitle_cover_padding_ratio * 100)}%`}
                   min={0.01}
                   max={0.08}
                   step={0.005}
@@ -1587,7 +1598,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               />
               {settings.subtitle_cover_auto_position && settings.subtitle_cover_probe_if_no_ocr ? (
                 <SliderInput
-                  label={`FPS quét vị trí sub: ${settings.subtitle_cover_probe_sample_fps.toFixed(1)}`}
+                  label={`Số lần quét vị trí mỗi giây: ${settings.subtitle_cover_probe_sample_fps.toFixed(1)}`}
                   min={0.5}
                   max={1.5}
                   step={0.1}
@@ -1606,14 +1617,15 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               </label>
               <div className="grid gap-3 rounded-md border border-white/10 bg-slate-950/45 p-3 sm:col-span-3 lg:grid-cols-[220px_1fr]">
                 <div>
-                  <div className="text-sm font-semibold text-white">Preview vị trí che sub</div>
+                  <div className="text-sm font-semibold text-white">Xem thử vị trí che phụ đề gốc</div>
                   <p className="mt-1 text-xs leading-5 text-slate-400">
-                    Kéo vùng nền trong khung để chỉnh vị trí thủ công cho cả batch. Sau khi scan, khung này dùng video thực tế đầu tiên để bạn canh nhanh hơn.
+                    Kéo vùng nền trong khung để chỉnh vị trí thủ công cho cả lô video. Sau khi scan, khung này ưu tiên video bạn đang chọn, nếu chưa chọn thì dùng video đầu tiên.
                   </p>
                   <div className="mt-3 grid gap-1 text-xs text-slate-400">
                     <span>Nền: {Math.round(settings.subtitle_cover_height_ratio * 100)}% chiều cao video</span>
                     <span>Cách đáy: {Math.round(settings.subtitle_cover_bottom_ratio * 100)}%</span>
                     <span>Chữ Việt: {Math.round(settings.subtitle_cover_text_y_offset_ratio * 100)}%</span>
+                    {subtitlePreviewVideo ? <span className="truncate text-cyan-100">Video mẫu: {subtitlePreviewVideo.filename || subtitlePreviewVideo.path}</span> : <span>Scan video để xem mẫu thật.</span>}
                   </div>
                 </div>
                 <div
@@ -1629,11 +1641,21 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 >
                   {subtitlePreviewVideoPath ? (
                     <video
+                      key={subtitlePreviewVideoPath}
                       className="absolute inset-0 h-full w-full object-cover opacity-70"
-                      src={videoFileUrl(subtitlePreviewVideoPath)}
+                      src={sourceVideoFileUrl(subtitlePreviewVideoPath)}
+                      autoPlay
+                      loop
                       muted
                       playsInline
+                      preload="metadata"
+                      onError={() => setSubtitlePreviewVideoError(true)}
                     />
+                  ) : null}
+                  {subtitlePreviewVideoError ? (
+                    <div className="absolute inset-x-3 top-3 rounded-md border border-amber-300/30 bg-amber-300/15 px-3 py-2 text-xs leading-5 text-amber-100">
+                      Không xem được video nguồn mẫu. Hãy kiểm tra quyền đọc file hoặc thử chọn video MP4 khác.
+                    </div>
                   ) : null}
                   <div className="absolute left-1/2 top-[18%] -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-[10px] text-slate-200">
                     watermark / tên kênh
@@ -1865,15 +1887,15 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         <GlassCard className="grid gap-4 p-4" strong>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="font-semibold text-white">Overlay custom</h3>
+              <h3 className="font-semibold text-white">Khung phủ / ảnh trang trí</h3>
               <p className="mt-1 text-sm text-slate-400">
-                Dùng ảnh PNG/WebP nền trong suốt kích thước 1080x1920 để thay overlay mặc định.
+                Dùng ảnh PNG/WebP nền trong suốt kích thước 1080x1920 để thay khung phủ mặc định.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               {[
-                { value: 'preset', label: 'Overlay mặc định' },
-                { value: 'custom', label: 'Overlay custom' },
+                { value: 'preset', label: 'Khung mặc định' },
+                { value: 'custom', label: 'Khung tự chọn' },
                 { value: 'none', label: 'Không dùng' },
               ].map((option) => (
                 <button
@@ -1894,7 +1916,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           {settings.overlay_mode === 'custom' ? (
             <div className="grid gap-3">
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-200">Đường dẫn overlay custom</span>
+                  <span className="mb-1.5 block text-sm font-medium text-slate-200">Đường dẫn khung phủ tự chọn</span>
                 <input
                   className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
                   type="text"
@@ -1912,9 +1934,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 </button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <SliderInput label="Chiều cao overlay custom (%)" min={5} max={100} step={1} value={settings.custom_overlay_height_percent ?? 100} onChange={(value) => updateAdvancedSettings({ custom_overlay_height_percent: value })} />
+                <SliderInput label="Chiều cao khung phủ tự chọn (%)" min={5} max={100} step={1} value={settings.custom_overlay_height_percent ?? 100} onChange={(value) => updateAdvancedSettings({ custom_overlay_height_percent: value })} />
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-medium text-slate-200">Cách fit overlay</span>
+                  <span className="mb-1.5 block text-sm font-medium text-slate-200">Cách đặt khung phủ</span>
                   <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.custom_overlay_fit_mode || 'cover'} onChange={(event) => updateAdvancedSettings({ custom_overlay_fit_mode: event.target.value })}>
                     <option value="cover">Phủ kín video</option>
                     <option value="contain">Giữ toàn bộ ảnh</option>
@@ -1927,49 +1949,49 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         </GlassCard>
 
         <GlassCard className="grid gap-4 p-4" strong>
-          <h3 className="font-semibold text-white">Nhận diện giọng nói</h3>
+          <h3 className="font-semibold text-white">{friendlyTermLabel('asr')}</h3>
           <div className="grid gap-3 sm:grid-cols-2">
-            <SliderInput label="Dịch thời gian sub" min={-1} max={1} step={0.05} value={settings.asr_subtitle_offset_seconds} onChange={(value) => updateAdvancedSettings({ asr_subtitle_offset_seconds: value })} />
-            <Toggle label="Bật VAD cho giọng nói" checked={settings.asr_vad_filter} onChange={(value) => updateAdvancedSettings({ asr_vad_filter: value })} />
-            <Toggle label="Tự chuyển video có thoại sang flow có thoại" checked={settings.auto_route_speech_to_voice_reup} onChange={(value) => updateAdvancedSettings({ auto_route_speech_to_voice_reup: value })} />
+            <SliderInput label="Dịch thời gian phụ đề" min={-1} max={1} step={0.05} value={settings.asr_subtitle_offset_seconds} onChange={(value) => updateAdvancedSettings({ asr_subtitle_offset_seconds: value })} />
+            <Toggle label="Bỏ qua đoạn im lặng khi nghe lời thoại" checked={settings.asr_vad_filter} onChange={(value) => updateAdvancedSettings({ asr_vad_filter: value })} />
+            <Toggle label="Tự chuyển video có thoại sang quy trình có thoại" checked={settings.auto_route_speech_to_voice_reup} onChange={(value) => updateAdvancedSettings({ auto_route_speech_to_voice_reup: value })} />
             <Toggle label="Tự chuyển video không thoại sang Silent Mode" checked={settings.auto_route_no_speech_to_silent_reup} onChange={(value) => updateAdvancedSettings({ auto_route_no_speech_to_silent_reup: value })} />
-            <SliderInput label="Ngưỡng tự chuyển flow" min={0.1} max={0.6} step={0.01} value={settings.auto_route_speech_threshold} onChange={(value) => updateAdvancedSettings({ auto_route_speech_threshold: value })} />
+            <SliderInput label="Độ nhạy tự chuyển quy trình" min={0.1} max={0.6} step={0.01} value={settings.auto_route_speech_threshold} onChange={(value) => updateAdvancedSettings({ auto_route_speech_threshold: value })} />
             <Toggle label="Dùng file .srt đi kèm" checked={settings.use_sidecar_srt} onChange={(value) => updateAdvancedSettings({ use_sidecar_srt: value })} />
-            <Toggle label="Dùng subtitle nhúng" checked={settings.use_embedded_subtitle} onChange={(value) => updateAdvancedSettings({ use_embedded_subtitle: value })} />
-            <Toggle label="Nhận diện giọng nói nếu thiếu subtitle" checked={settings.use_asr_if_no_subtitle} onChange={(value) => updateAdvancedSettings({ use_asr_if_no_subtitle: value })} />
+            <Toggle label="Dùng phụ đề có sẵn trong video" checked={settings.use_embedded_subtitle} onChange={(value) => updateAdvancedSettings({ use_embedded_subtitle: value })} />
+            <Toggle label="Nghe lời thoại nếu thiếu phụ đề" checked={settings.use_asr_if_no_subtitle} onChange={(value) => updateAdvancedSettings({ use_asr_if_no_subtitle: value })} />
           </div>
         </GlassCard>
 
         <GlassCard className="grid gap-4 p-4" strong>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="font-semibold text-white">Nhận diện chữ trên màn hình</h3>
+              <h3 className="font-semibold text-white">{friendlyTermLabel('ocr')}</h3>
               <div className={dependencyStatus?.ocr_available ? 'mt-1 text-xs text-emerald-300' : 'mt-1 text-xs text-amber-300'}>{formatOcrDependencyStatus(dependencyStatus)}</div>
             </div>
-            <Toggle label="Dùng OCR khi cần" checked={settings.use_ocr_if_no_subtitle || settings.use_ocr_if_asr_failed} onChange={(value) => updateAdvancedSettings({ use_ocr_if_no_subtitle: value, use_ocr_if_asr_failed: value })} />
+            <Toggle label="Đọc chữ trên video khi cần" checked={settings.use_ocr_if_no_subtitle || settings.use_ocr_if_asr_failed} onChange={(value) => updateAdvancedSettings({ use_ocr_if_no_subtitle: value, use_ocr_if_asr_failed: value })} />
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-200">OCR provider</span>
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">{friendlyTermLabel('provider')} đọc chữ</span>
               <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.ocr_provider} onChange={(event) => updateAdvancedSettings({ ocr_provider: event.target.value })}>
                 <option value="paddleocr">PaddleOCR</option>
                 <option value="easyocr">EasyOCR</option>
-                <option value="mock_ocr">Mock OCR</option>
+                <option value="mock_ocr">Chế độ thử nghiệm</option>
               </select>
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-200">OCR region</span>
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">{friendlyTermLabel('region')} đọc chữ</span>
               <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.ocr_region_mode} onChange={(event) => updateAdvancedSettings({ ocr_region_mode: event.target.value })}>
-                <option value="bottom_auto">Bottom auto</option>
-                <option value="middle_lower">Middle lower</option>
-                <option value="full_frame">Full frame</option>
-                <option value="manual">Manual</option>
+                <option value="bottom_auto">Tự tìm vùng dưới</option>
+                <option value="middle_lower">Vùng giữa thấp</option>
+                <option value="full_frame">Toàn bộ video</option>
+                <option value="manual">Tự nhập vùng</option>
               </select>
             </label>
-            <SliderInput label="Sample FPS" min={0.5} max={5} step={0.5} value={settings.ocr_sample_fps} onChange={(value) => updateAdvancedSettings({ ocr_sample_fps: value })} />
+            <SliderInput label={friendlyTermLabel('fps')} min={0.5} max={5} step={0.5} value={settings.ocr_sample_fps} onChange={(value) => updateAdvancedSettings({ ocr_sample_fps: value })} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <SliderInput label="Min OCR confidence" min={0} max={1} step={0.05} value={settings.ocr_min_confidence} onChange={(value) => updateAdvancedSettings({ ocr_min_confidence: value })} />
+            <SliderInput label={`Độ chắc chắn tối thiểu khi đọc chữ`} min={0} max={1} step={0.05} value={settings.ocr_min_confidence} onChange={(value) => updateAdvancedSettings({ ocr_min_confidence: value })} />
             <Toggle label="Ưu tiên chữ trên màn hình" checked={settings.prefer_ocr_over_asr_when_text_visible} onChange={(value) => updateAdvancedSettings({ prefer_ocr_over_asr_when_text_visible: value })} />
           </div>
           {settings.ocr_region_mode === 'manual' ? (
@@ -1991,7 +2013,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         </GlassCard>
 
         <GlassCard className="grid gap-4 p-4" strong>
-          <h3 className="font-semibold text-white">Audio và Output</h3>
+          <h3 className="font-semibold text-white">Âm thanh và đầu ra</h3>
           <div className="grid gap-3 sm:grid-cols-2">
             <SliderInput label="Âm lượng nhạc nền" min={0} max={1} step={0.01} value={settings.bgm_volume} onChange={(value) => updateAdvancedSettings({ bgm_volume: value })} />
             <SliderInput label="Âm lượng audio gốc" min={0} max={1} step={0.01} value={settings.original_audio_volume} onChange={(value) => updateAdvancedSettings({ original_audio_volume: value })} />
@@ -2032,7 +2054,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               onChange={(value) => updateAdvancedSettings({ voiceover_comfort_speedup: value })}
             />
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-200">Visual style</span>
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">Mẫu hiển thị phụ đề</span>
               <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.visual_style_preset_id} onChange={(event) => updateAdvancedSettings({ visual_style_preset_id: event.target.value })}>
                 {visualStyles.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
               </select>
@@ -2188,7 +2210,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             <StartBatchButton
               disabled={startDisabled}
               loading={busy && !jobStatus}
-              label={currentAutoRender ? 'Bắt đầu render ngay' : 'Bắt đầu và chờ duyệt'}
+              label={currentAutoRender ? 'Bắt đầu xuất video ngay' : 'Bắt đầu và chờ duyệt'}
               job={jobStartedView}
               onStart={requestStart}
             />
@@ -2204,9 +2226,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         }
       />
 
-      <GlassModal open={riskyConfirmOpen} title="Xác nhận preset xử lý nhanh" onClose={() => setRiskyConfirmOpen(false)}>
+      <GlassModal open={riskyConfirmOpen} title="Xác nhận mẫu xử lý nhanh" onClose={() => setRiskyConfirmOpen(false)}>
         <div className="grid gap-4 text-sm leading-6 text-slate-300">
-          <p>Preset này sẽ xử lý nhanh và có thể bỏ qua bước review phụ đề. Bạn vẫn có thể kiểm tra video ở Results sau khi render.</p>
+          <p>Mẫu này sẽ xử lý nhanh và có thể bỏ qua bước duyệt phụ đề. Bạn vẫn có thể kiểm tra video ở trang kết quả sau khi xuất.</p>
           <div className="flex flex-wrap gap-2">
             <GlassButton variant="primary" onClick={() => void startCurrentWorkflow()}>Tiếp tục</GlassButton>
             <GlassButton variant="secondary" onClick={() => { setRiskyConfirmOpen(false); void handlePresetSelect(initialWorkflow === 'silent' ? 'silent_chill_immersive' : 'safe_review'); }}>
@@ -2251,7 +2273,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   </td>
                   <td className="py-3 pr-3 text-muted">{video.duration.toFixed(1)}s</td>
                   <td className="py-3 pr-3 text-muted">
-                    {video.sidecar_srt_path ? 'SRT đi kèm' : video.embedded_subtitle_found ? 'Nhúng' : 'Cần ASR'}
+                    {video.sidecar_srt_path ? 'SRT đi kèm' : video.embedded_subtitle_found ? 'Nhúng' : 'Cần nghe thoại'}
                   </td>
                   <td className="py-3 pr-3 text-muted">{video.warnings.join('; ') || '-'}</td>
                 </tr>
@@ -2313,7 +2335,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           {resultsTab === 'results' && summary ? (
             <div className="mt-4 grid gap-2 text-sm sm:grid-cols-5">
               <Stat label="Cần duyệt" value={summary.needs_review ?? reviewDocuments.length} />
-              <Stat label="Đã render" value={summary.rendered ?? results.filter((output) => output.status === 'success').length} />
+              <Stat label="Đã xuất" value={summary.rendered ?? results.filter((output) => output.status === 'success').length} />
               <Stat label="Lỗi" value={summary.failed ?? failedResults.length} />
               <Stat label="Im lặng" value={summary.silent_immersive?.videos_processed_silent ?? results.filter((output) => output.reup_mode === 'silent_immersive').length} />
               <Stat label="Chậm nhất" value={summary.performance?.slowest_step ?? '-'} />
@@ -2336,11 +2358,11 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   <video className="mt-3 aspect-[9/16] max-h-[520px] w-full rounded-md bg-black object-contain" src={videoFileUrl(output.path)} controls />
                 ) : null}
                 <div className="mt-3 grid gap-1 break-all text-xs text-muted">
-                  <div>Output: {output.path || '-'}</div>
-                  <div>Source type: {formatSourceType(output.subtitle_source)}</div>
-                  <div>Source SRT: {output.source_srt_file || '-'}</div>
-                  <div>Subtitle: {output.translated_srt_file || '-'}</div>
-                  <div>Corrected SRT: {output.corrected_srt_file || '-'}</div>
+                  <div>Video đầu ra: {output.path || '-'}</div>
+                  <div>Nguồn phụ đề: {formatSourceType(output.subtitle_source)}</div>
+                  <div>SRT nguồn: {output.source_srt_file || '-'}</div>
+                  <div>Phụ đề dịch: {output.translated_srt_file || '-'}</div>
+                  <div>SRT đã sửa: {output.corrected_srt_file || '-'}</div>
                   <div>ASS: {output.corrected_ass_file || output.subtitle_ass_file || '-'}</div>
                   <div>Nhạc nền: {output.bgm_file || '-'}</div>
                   <div>Log: {output.log_file || '-'}</div>
@@ -2348,15 +2370,15 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 </div>
                 {output.reup_mode === 'silent_immersive' ? (
                   <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-                    <div className="font-semibold">Mode: Silent Immersive</div>
-                    <div>Strategy: {formatSilentStrategy(output.silent_strategy)}</div>
-                    <div>Speech score: {Math.round((output.speech_score ?? 0) * 100)}%</div>
-                    <div>Caption source: {formatCaptionSource(output.caption_source)}</div>
-                    <div>Voiceover: {output.voiceover_file ? 'Có' : 'Không'}</div>
+                    <div className="font-semibold">Chế độ: Video không thoại</div>
+                    <div>Cách xử lý: {formatSilentStrategy(output.silent_strategy)}</div>
+                    <div>Điểm phát hiện lời thoại: {Math.round((output.speech_score ?? 0) * 100)}%</div>
+                    <div>Nguồn caption: {formatCaptionSource(output.caption_source)}</div>
+                    <div>Giọng đọc: {output.voiceover_file ? 'Có' : 'Không'}</div>
                     <div>BGM: {output.bgm_file ? 'Đã thêm' : 'Không'}</div>
-                    <div className="break-all">Plan: {output.silent_plan_file || '-'}</div>
-                    <div className="break-all">Voiceover script: {output.voiceover_script_file || '-'}</div>
-                    <div className="break-all">Voiceover subtitle: {output.voiceover_subtitle_file || '-'}</div>
+                    <div className="break-all">Kế hoạch dựng: {output.silent_plan_file || '-'}</div>
+                    <div className="break-all">Kịch bản giọng đọc: {output.voiceover_script_file || '-'}</div>
+                    <div className="break-all">Phụ đề giọng đọc: {output.voiceover_subtitle_file || '-'}</div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {output.subtitle_review_document_id ? (
                         <button
@@ -2365,7 +2387,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                           disabled={busy || !jobId}
                           onClick={() => void handleRenderApproved()}
                         >
-                          Render các file đã duyệt
+                          Xuất các file đã duyệt
                         </button>
                       ) : null}
                       <button
@@ -2374,7 +2396,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                         disabled={busy || !jobId}
                         onClick={() => void handleRetryOutputWithPreset(output, 'silent_product_voiceover')}
                       >
-                        Thử lại với voiceover
+                        Thử lại với giọng đọc
                       </button>
                       <button
                         className="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 disabled:text-muted"
@@ -2382,19 +2404,19 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                         disabled={busy || !jobId}
                         onClick={() => void handleRetryOutputWithPreset(output, 'voice_priority')}
                       >
-                        Thử lại làm video ASR
+                        Thử lại bằng cách nghe thoại
                       </button>
                     </div>
                   </div>
                 ) : null}
                 {output.subtitle_source === 'ocr_hardsub' || output.ocr_debug_json_path ? (
                   <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                    <div className="font-semibold">OCR Debug</div>
-                    <div>OCR provider: {output.ocr_provider || settings.ocr_provider}</div>
-                    <div>Region: {output.ocr_region_mode || settings.ocr_region_mode}</div>
-                    <div>Frames sampled: {output.ocr_frame_count ?? 0}</div>
-                    <div>Detected lines: {output.ocr_detected_line_count ?? 0}</div>
-                    <div>Average confidence: {Math.round((output.ocr_average_confidence ?? 0) * 100)}%</div>
+                    <div className="font-semibold">Thông tin đọc chữ</div>
+                    <div>Bộ đọc chữ: {output.ocr_provider || settings.ocr_provider}</div>
+                    <div>Vùng quét: {output.ocr_region_mode || settings.ocr_region_mode}</div>
+                    <div>Số khung hình đã quét: {output.ocr_frame_count ?? 0}</div>
+                    <div>Số dòng chữ tìm thấy: {output.ocr_detected_line_count ?? 0}</div>
+                    <div>Độ chắc chắn trung bình: {Math.round((output.ocr_average_confidence ?? 0) * 100)}%</div>
                     <div className="break-all">Debug JSON: {output.ocr_debug_json_path || '-'}</div>
                   </div>
                 ) : null}
@@ -2493,7 +2515,7 @@ function QuickTuningCard({
 }) {
   const routeLabel = mode === 'silent_immersive' ? 'Tự chuyển video có thoại' : 'Tự chuyển video không thoại';
   const items = [
-    { label: 'Render', value: autoRender ? 'Tự động' : 'Duyệt trước' },
+    { label: 'Xuất video', value: autoRender ? 'Tự động' : 'Duyệt trước' },
     { label: 'Nhạc nền', value: addMusic ? 'Bật' : 'Tắt' },
     { label: 'Giọng đọc', value: voiceoverEnabled ? 'Bật' : 'Tắt' },
     { label: routeLabel, value: autoRouteEnabled ? 'Bật' : 'Tắt' },
@@ -2504,7 +2526,7 @@ function QuickTuningCard({
       <div>
         <h2 className="font-semibold text-white">Tinh chỉnh nhanh</h2>
         <p className="mt-1 text-sm leading-6 text-slate-400">
-          Các lựa chọn ảnh hưởng trực tiếp đến batch lớn được gom ở đây để bạn không phải kéo sâu xuống dưới.
+          Các lựa chọn ảnh hưởng trực tiếp đến lô video lớn được gom ở đây để bạn không phải kéo sâu xuống dưới.
         </p>
       </div>
       <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-1">
@@ -2683,15 +2705,15 @@ function toStartPresetViewModel(
 
 function presetDisplayName(preset: DouyinReupPreset): string {
   const names: Record<string, string> = {
-    safe_review: 'Safe Review',
-    fast_auto: 'Fast Auto',
-    ocr_priority: 'OCR Priority',
-    voice_priority: 'Voice Priority',
-    clean_subtitle_only: 'Clean Subtitle Only',
-    music_recut: 'Music Recut',
-    silent_chill_immersive: 'Chill Immersive',
-    silent_product_voiceover: 'Product Voiceover',
-    silent_sales_recut: 'Sales Recut',
+    safe_review: 'An toàn, có duyệt',
+    fast_auto: 'Tự động nhanh',
+    ocr_priority: 'Ưu tiên đọc chữ trên video',
+    voice_priority: 'Ưu tiên nghe lời thoại',
+    clean_subtitle_only: 'Chỉ làm phụ đề sạch',
+    music_recut: 'Cắt lại kèm nhạc',
+    silent_chill_immersive: 'Không thoại nhẹ nhàng',
+    silent_product_voiceover: 'Giọng đọc sản phẩm',
+    silent_sales_recut: 'Bán hàng ngắn gọn',
   };
   return names[preset.id] ?? preset.name;
 }
@@ -2715,12 +2737,12 @@ function presetBadge(preset: DouyinReupPreset): string {
   const badges: Record<string, string> = {
     safe_review: 'Khuyên dùng',
     fast_auto: 'Nhanh',
-    ocr_priority: 'Chữ (OCR)',
-    voice_priority: 'Giọng nói',
+    ocr_priority: 'Đọc chữ',
+    voice_priority: 'Nghe thoại',
     clean_subtitle_only: 'Chỉ phụ đề',
     music_recut: 'Nhạc',
     silent_chill_immersive: 'Khuyên dùng',
-    silent_product_voiceover: 'Giọng nói',
+    silent_product_voiceover: 'Giọng đọc',
     silent_sales_recut: 'Bán hàng',
   };
   return badges[preset.id] ?? preset.ui_badge;
@@ -2753,11 +2775,11 @@ function recommendationReason(
   preset?: StartPresetViewModel,
 ): string {
   if (!preset) return '';
-  if (mode === 'silent_immersive') return 'Silent Mode nên bắt đầu bằng preset nhẹ, giữ vibe gốc và cho bạn review caption.';
-  if (preset.id === 'ocr_priority') return 'Tên folder có tín hiệu chữ/subtitle, nên ưu tiên nhận diện chữ trên màn hình.';
-  if (preset.id === 'fast_auto') return 'Tên folder có tín hiệu cần xử lý nhanh, preset này bỏ qua bớt bước review.';
-  if (sourceFolder.trim()) return 'An toàn hơn vì bạn có thể kiểm tra phụ đề trước khi render.';
-  return 'Preset mặc định an toàn cho batch mới.';
+  if (mode === 'silent_immersive') return 'Video không thoại nên bắt đầu bằng mẫu nhẹ, giữ cảm giác gốc và cho bạn duyệt caption.';
+  if (preset.id === 'ocr_priority') return 'Tên thư mục có tín hiệu chữ/phụ đề, nên ưu tiên đọc chữ trên video.';
+  if (preset.id === 'fast_auto') return 'Tên thư mục có tín hiệu cần xử lý nhanh, mẫu này bỏ qua bớt bước duyệt.';
+  if (sourceFolder.trim()) return 'An toàn hơn vì bạn có thể kiểm tra phụ đề trước khi xuất video.';
+  return 'Mẫu mặc định an toàn cho lô mới.';
 }
 
 function buildChecklist({
@@ -2808,13 +2830,13 @@ function buildChecklist({
     },
     {
       id: 'preset',
-      label: 'Preset',
+      label: 'Mẫu cấu hình',
       status: selectedPreset ? (autoRender ? 'warning' : 'ok') : 'missing',
-      message: selectedPreset ? selectedPreset.name : 'Chưa chọn preset.',
+      message: selectedPreset ? selectedPreset.name : 'Chưa chọn mẫu cấu hình.',
     },
     {
       id: 'output',
-      label: 'Output folder',
+      label: 'Thư mục đầu ra',
       status: outputFolder.trim() ? 'ok' : 'missing',
       message: outputFolder.trim() ? 'Tool sẽ kiểm tra quyền ghi khi bắt đầu xử lý.' : 'Chưa chọn output folder.',
     },
@@ -2835,7 +2857,7 @@ function buildChecklist({
       message: needsGemini
         ? hasGemini
           ? 'Gemini đã sẵn sàng để dịch hoặc tạo nội dung.'
-          : 'Chưa xác nhận được Gemini API key. Nếu backend yêu cầu Gemini, render sẽ bị chặn trước khi chạy.'
+          : 'Chưa xác nhận được Gemini API key. Nếu backend yêu cầu Gemini, tool sẽ chặn trước khi chạy.'
         : 'Flow hiện tại không yêu cầu Gemini.',
     },
     {
@@ -2845,10 +2867,10 @@ function buildChecklist({
       message: voiceoverEnabled
         ? needsGoogleTts
           ? hasGoogleTts
-            ? 'Google Cloud TTS đã có credential.'
+            ? 'Google Cloud TTS đã có thông tin đăng nhập.'
             : 'Bạn đã chọn Google Cloud TTS nhưng chưa cấu hình API key, access token hoặc file service account.'
-          : 'Đã chọn provider giọng đọc không cần Google credential.'
-        : 'Không tạo voiceover tiếng Việt.',
+          : 'Đã chọn dịch vụ giọng đọc không cần Google credential.'
+        : 'Không tạo giọng đọc tiếng Việt.',
     },
     {
       id: 'backend',
@@ -2876,9 +2898,9 @@ function buildValidationMessages(
     .forEach((item) => messages.push({ id: `missing-${item.id}`, tone: 'error', message: item.message || `${item.label} đang thiếu.` }));
   if (!dependencyStatus) messages.push({ id: 'backend', tone: 'warning', message: 'Backend đang offline hoặc chưa phản hồi. Hãy khởi động backend rồi thử lại.' });
   if (scanSummary?.invalid) messages.push({ id: 'scan-invalid', tone: 'warning', message: `Folder có ${scanSummary.invalid} file không đọc được. Tool sẽ bỏ qua hoặc bạn có thể kiểm tra lại.` });
-  if (autoRender) messages.push({ id: 'auto-render', tone: 'warning', message: `${preset?.name ?? 'Chế độ hiện tại'} sẽ render MP4 ngay, không chờ duyệt phụ đề/caption.` });
+  if (autoRender) messages.push({ id: 'auto-render', tone: 'warning', message: `${preset?.name ?? 'Chế độ hiện tại'} sẽ xuất MP4 ngay, không chờ duyệt phụ đề/caption.` });
   if (preset?.id === 'ocr_priority' && dependencyStatus && !dependencyStatus.ocr_available) {
-    messages.push({ id: 'ocr', tone: 'warning', message: 'OCR Priority cần OCR provider. Nếu OCR chưa sẵn sàng, tool có thể fallback hoặc báo lỗi.' });
+    messages.push({ id: 'ocr', tone: 'warning', message: 'Mẫu ưu tiên đọc chữ cần bộ đọc chữ trên video. Nếu bộ đọc chữ chưa sẵn sàng, tool có thể dùng phương án dự phòng hoặc báo lỗi rõ.' });
   }
   return messages.slice(0, 4);
 }
@@ -2893,26 +2915,26 @@ function RenderFlowCard({
   onModeChange: (mode: 'review' | 'auto') => void;
 }) {
   const isSilent = mode === 'silent_immersive';
-  const reviewTitle = isSilent ? 'Duyệt caption trước khi render' : 'Duyệt phụ đề trước khi render';
+  const reviewTitle = isSilent ? 'Duyệt caption trước khi xuất video' : 'Duyệt phụ đề trước khi xuất video';
   const reviewDescription = isSilent
-    ? 'Tool tạo caption trước, bạn kiểm tra trong tab Sửa phụ đề rồi mới render MP4.'
-    : 'Tool dịch phụ đề trước, bạn kiểm tra trong tab Sửa phụ đề rồi mới render MP4.';
+    ? 'Tool tạo caption trước, bạn kiểm tra trong tab Sửa phụ đề rồi mới xuất MP4.'
+    : 'Tool dịch phụ đề trước, bạn kiểm tra trong tab Sửa phụ đề rồi mới xuất MP4.';
   const autoDescription = isSilent
-    ? 'Tool tạo caption và render MP4 luôn. Phù hợp khi cần xử lý nhanh.'
-    : 'Tool nhận diện, dịch và render MP4 luôn. Phù hợp khi đã tin preset.';
+    ? 'Tool tạo caption và xuất MP4 luôn. Phù hợp khi cần xử lý nhanh.'
+    : 'Tool nghe lời thoại/đọc chữ, dịch và xuất MP4 luôn. Phù hợp khi đã tin mẫu cấu hình.';
 
   return (
     <GlassCard className="grid gap-4 p-5" strong>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Quy trình render</div>
-          <h2 className="mt-2 text-xl font-semibold text-white">{reviewMode ? 'Sẽ chờ bạn duyệt trước' : 'Sẽ render MP4 ngay'}</h2>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Quy trình xuất video</div>
+          <h2 className="mt-2 text-xl font-semibold text-white">{reviewMode ? 'Sẽ chờ bạn duyệt trước' : 'Sẽ xuất MP4 ngay'}</h2>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Chọn rõ cách tool xử lý sau khi dịch để tránh nhầm là render bị treo.
+            Chọn rõ cách tool xử lý sau khi dịch để tránh nhầm là tác vụ bị treo.
           </p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${reviewMode ? 'border-amber-300/35 bg-amber-300/10 text-amber-100' : 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100'}`}>
-          {reviewMode ? 'Cần duyệt' : 'Render ngay'}
+          {reviewMode ? 'Cần duyệt' : 'Xuất ngay'}
         </span>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
@@ -2924,7 +2946,7 @@ function RenderFlowCard({
         />
         <RenderFlowOption
           active={!reviewMode}
-          title="Render MP4 ngay sau khi dịch"
+          title="Xuất MP4 ngay sau khi dịch"
           description={autoDescription}
           onClick={() => onModeChange('auto')}
         />
@@ -2988,7 +3010,7 @@ function AutoRouteSpeechCard({
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Tự phân luồng</div>
           <h2 className="mt-2 text-xl font-semibold text-white">Tự chuyển video có thoại</h2>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Khi chạy batch không thoại, tool sẽ kiểm tra nhanh từng video. Video có dấu hiệu lời thoại sẽ tự chuyển sang flow có thoại để dịch/render, không cần bạn chọn tay.
+            Khi chạy lô video không thoại, tool sẽ kiểm tra nhanh từng video. Video có dấu hiệu lời thoại sẽ tự chuyển sang quy trình có thoại để dịch và xuất video, không cần bạn chọn tay.
           </p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${enabled ? 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100' : 'border-white/15 bg-white/5 text-slate-300'}`}>
@@ -2997,7 +3019,7 @@ function AutoRouteSpeechCard({
       </div>
       <label className="flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200">
         <input type="checkbox" checked={enabled} onChange={(event) => onEnabledChange(event.target.checked)} />
-        <span>Tự động chuyển video có thoại sang flow có thoại</span>
+        <span>Tự động chuyển video có thoại sang quy trình có thoại</span>
       </label>
       <SliderInput
         label={`Ngưỡng nhận diện thoại: ${Math.round(threshold * 100)}%`}
@@ -3011,7 +3033,7 @@ function AutoRouteSpeechCard({
       />
       {enabled && voiceoverEnabled ? (
         <div className="rounded-md border border-emerald-300/20 bg-emerald-300/10 p-3 text-xs leading-5 text-emerald-100">
-          Nếu video được chuyển sang flow có thoại và đang bật voiceover tiếng Việt, audio gốc sẽ được tắt cho video đó để tránh hai giọng chồng nhau.
+          Nếu video được chuyển sang quy trình có thoại và đang bật giọng đọc tiếng Việt, audio gốc sẽ được tắt cho video đó để tránh hai giọng chồng nhau.
         </div>
       ) : null}
     </GlassCard>
@@ -3080,7 +3102,7 @@ function BatchReliabilityCard({
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Batch lớn</div>
           <h2 className="mt-2 text-xl font-semibold text-white">Hiệu năng và chống kẹt</h2>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Dùng cho batch nhiều video chạy qua đêm. Tool sẽ chia lô, giới hạn FFmpeg/ASR và tự tạm dừng nếu lỗi lặp lại.
+            Dùng cho lô nhiều video chạy qua đêm. Tool sẽ chia nhỏ, giới hạn bước xuất video/nghe thoại và tự tạm dừng nếu lỗi lặp lại.
           </p>
         </div>
         <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs font-semibold text-cyan-100">
@@ -3115,7 +3137,7 @@ function BatchReliabilityCard({
           onChange={(value) => onChange({ batch_chunk_size: Math.round(value) })}
         />
         <SliderInput
-          label={`Giới hạn audio ASR: ${asrMaxAudioSeconds}s`}
+          label={`Giới hạn thời lượng nghe thoại: ${asrMaxAudioSeconds}s`}
           min={60}
           max={600}
           step={30}
@@ -3123,7 +3145,7 @@ function BatchReliabilityCard({
           onChange={(value) => onChange({ asr_max_audio_seconds: Math.round(value) })}
         />
         <SliderInput
-          label={`Timeout FFmpeg: ${Math.round(ffmpegTimeoutSeconds / 60)} phút`}
+          label={`Thời gian chờ xuất video: ${Math.round(ffmpegTimeoutSeconds / 60)} phút`}
           min={300}
           max={3600}
           step={60}
@@ -3178,7 +3200,7 @@ function AutoRouteNoSpeechCard({
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Tự phân luồng</div>
           <h2 className="mt-2 text-xl font-semibold text-white">Tự chuyển video không thoại</h2>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Khi chạy batch có thoại nhưng một video không có phụ đề, ASR hoặc lời thoại đủ rõ, tool sẽ tự chuyển video đó sang Silent Mode để tạo caption theo cảnh thay vì đánh lỗi.
+            Khi chạy lô video có thoại nhưng một video không có phụ đề hoặc lời thoại đủ rõ, tool sẽ tự chuyển video đó sang quy trình không thoại để tạo caption theo cảnh thay vì đánh lỗi.
           </p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${enabled ? 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100' : 'border-white/15 bg-white/5 text-slate-300'}`}>
@@ -3191,7 +3213,7 @@ function AutoRouteNoSpeechCard({
       </label>
       {enabled ? (
         <div className="rounded-md border border-sky-300/20 bg-sky-300/10 p-3 text-xs leading-5 text-sky-100">
-          Video được chuyển sẽ dùng cài đặt nhạc, overlay và voiceover hiện tại. Log của từng video sẽ ghi rõ `auto_routed_silent_immersive` để dễ lọc kết quả sau batch.
+          Video được chuyển sẽ dùng cài đặt nhạc, khung phủ và giọng đọc hiện tại. Log của từng video vẫn ghi mã kỹ thuật `auto_routed_silent_immersive` để dễ lọc kết quả sau lô.
         </div>
       ) : null}
     </GlassCard>
@@ -3356,14 +3378,14 @@ function formatQaStatus(status?: string): string {
 
 function formatSourceType(source?: string | null): string {
   const labels: Record<string, string> = {
-    sidecar_srt: 'Sidecar SRT',
-    embedded_subtitle: 'Embedded subtitle',
-    asr: 'ASR',
-    ocr_hardsub: 'OCR hard-sub',
-    ocr_translation: 'OCR translated caption',
-    visual_generated: 'Visual generated caption',
-    template: 'Template caption',
-    none: 'None',
+    sidecar_srt: 'File .srt đi kèm',
+    embedded_subtitle: 'Phụ đề có sẵn trong video',
+    asr: 'Nghe lời thoại',
+    ocr_hardsub: 'Đọc chữ dính trên video',
+    ocr_translation: 'Chữ trên video đã dịch',
+    visual_generated: 'Caption tạo từ cảnh quay',
+    template: 'Caption theo mẫu',
+    none: 'Không có',
   };
   return source ? labels[source] ?? source : '-';
 }
@@ -3379,10 +3401,10 @@ function formatSilentStrategy(strategy?: string | null): string {
 
 function formatCaptionSource(source?: string | null): string {
   const labels: Record<string, string> = {
-    ocr_translation: 'OCR translated',
-    visual_generated: 'Visual generated',
-    template: 'Template',
-    manual: 'Manual',
+    ocr_translation: 'Chữ trên video đã dịch',
+    visual_generated: 'Caption tạo từ cảnh quay',
+    template: 'Theo mẫu',
+    manual: 'Tự chỉnh',
   };
   return source ? labels[source] ?? source : '-';
 }
@@ -3424,7 +3446,7 @@ function formatTagSourceSummary(sources: Record<string, number>): string {
 }
 
 function formatOcrDependencyStatus(status: SystemDependencyStatusResponse | null): string {
-  if (!status) return 'OCR runtime: checking on startup';
-  if (status.ocr_available) return `OCR runtime: ${status.ocr_provider || 'provider'} ready`;
-  return status.ocr_message || 'OCR runtime: auto-installing in background';
+  if (!status) return 'Đang kiểm tra bộ đọc chữ trên video khi khởi động.';
+  if (status.ocr_available) return `Bộ đọc chữ đã sẵn sàng: ${status.ocr_provider || 'mặc định'}.`;
+  return status.ocr_message || 'Tool đang tự chuẩn bị bộ đọc chữ trong nền.';
 }

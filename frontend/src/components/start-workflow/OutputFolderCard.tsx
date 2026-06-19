@@ -30,12 +30,12 @@ export default function OutputFolderCard({
       <div className="flex items-start gap-3">
         <FolderOutput className="mt-1 shrink-0 text-emerald-300" size={22} />
         <div>
-          <h2 className="font-semibold text-white">Chọn nơi lưu output</h2>
+          <h2 className="font-semibold text-white">Chọn nơi lưu video đầu ra</h2>
           <p className="mt-1 text-sm leading-6 text-slate-400">Tool sẽ kiểm tra quyền ghi khi bắt đầu xử lý.</p>
         </div>
       </div>
       <label className="block">
-        <span className="mb-1.5 block text-sm font-medium text-slate-200">Output folder</span>
+        <span className="mb-1.5 block text-sm font-medium text-slate-200">Thư mục đầu ra</span>
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <input
             className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white outline-none focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/15"
@@ -44,11 +44,11 @@ export default function OutputFolderCard({
             value={outputFolder}
             onChange={(event) => onOutputFolderChange(event.target.value)}
           />
-          <GlassButton variant="secondary" onClick={onBrowse}>Browse</GlassButton>
+          <GlassButton variant="secondary" onClick={onBrowse}>Chọn thư mục</GlassButton>
         </div>
       </label>
       <label className="block">
-        <span className="mb-1.5 block text-sm font-medium text-slate-200">Project name</span>
+        <span className="mb-1.5 block text-sm font-medium text-slate-200">Tên tác vụ</span>
         <input
           className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white outline-none focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/15"
           placeholder={mode === 'silent_immersive' ? 'silent_immersive_2026_06_12' : 'douyin_reup_2026_06_12'}
@@ -57,10 +57,10 @@ export default function OutputFolderCard({
         />
       </label>
       {!outputFolder.trim() ? (
-        <div className="rounded-md border border-rose-300/20 bg-rose-400/10 p-3 text-sm text-rose-100">Output folder không được rỗng.</div>
+        <div className="rounded-md border border-rose-300/20 bg-rose-400/10 p-3 text-sm text-rose-100">Thư mục đầu ra không được rỗng.</div>
       ) : (
         <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs text-slate-400">
-          Nếu folder chưa tồn tại, backend sẽ xử lý hoặc báo lỗi thân thiện khi start.
+          Nếu thư mục chưa tồn tại, backend sẽ tạo hoặc báo lỗi thân thiện khi bắt đầu.
         </div>
       )}
       <StartRecentFolders folders={recentFolders} onRemove={onRemoveRecent} onUse={onUseRecent} />

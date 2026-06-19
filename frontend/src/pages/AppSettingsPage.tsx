@@ -96,7 +96,7 @@ export default function AppSettingsPage() {
       <div className="mb-5">
         <h1 className="text-2xl font-semibold text-ink">Cài đặt chung</h1>
         <p className="mt-1 text-sm text-muted">
-          Các thông tin này chỉ cần nhập một lần và sẽ được backend dùng khi tạo kịch bản hoặc render giọng đọc.
+          Các thông tin này chỉ cần nhập một lần và sẽ được backend dùng khi tạo kịch bản hoặc tạo giọng đọc.
         </p>
       </div>
 
@@ -109,12 +109,12 @@ export default function AppSettingsPage() {
         ) : null}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <GlassCard className="p-5" strong><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Cpu size={18} className="text-cyan-200" /><h2 className="font-semibold text-white">Hệ thống xử lý</h2></div><GlassBadge variant={dependencies?.ffmpeg_path ? 'success' : 'warning'}>{dependencies?.ffmpeg_path ? 'Ready' : 'Check setup'}</GlassBadge></div><div className="mt-4 grid gap-2"><Dependency label="FFmpeg" ready={Boolean(dependencies?.ffmpeg_path)} /><Dependency label="ffprobe" ready={Boolean(dependencies?.ffprobe_path)} /><Dependency label={`OCR ${dependencies?.ocr_provider || ''}`} ready={Boolean(dependencies?.ocr_available)} /><Dependency label="Piper TTS" ready={Boolean(dependencies?.piper_path && dependencies?.piper_model_path)} /></div></GlassCard>
-          <GlassCard className="p-5" strong><div className="flex items-center gap-2"><Info size={18} className="text-violet-200" /><h2 className="font-semibold text-white">Mặc định workflow</h2></div><div className="mt-4 grid gap-4"><PathInput label="Thư mục output mặc định" value={defaultOutputFolder} onChange={setDefaultOutputFolder} /><PathInput label="Thư mục BGM mặc định" value={defaultBgmFolder} onChange={setDefaultBgmFolder} /></div></GlassCard>
+          <GlassCard className="p-5" strong><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Cpu size={18} className="text-cyan-200" /><h2 className="font-semibold text-white">Hệ thống xử lý</h2></div><GlassBadge variant={dependencies?.ffmpeg_path ? 'success' : 'warning'}>{dependencies?.ffmpeg_path ? 'Sẵn sàng' : 'Cần kiểm tra'}</GlassBadge></div><div className="mt-4 grid gap-2"><Dependency label="Bộ dựng video (FFmpeg)" ready={Boolean(dependencies?.ffmpeg_path)} /><Dependency label="Bộ đọc thông tin video (ffprobe)" ready={Boolean(dependencies?.ffprobe_path)} /><Dependency label={`Đọc chữ trên video${dependencies?.ocr_provider ? ` (${dependencies.ocr_provider})` : ''}`} ready={Boolean(dependencies?.ocr_available)} /><Dependency label="Giọng đọc offline (Piper)" ready={Boolean(dependencies?.piper_path && dependencies?.piper_model_path)} /></div></GlassCard>
+          <GlassCard className="p-5" strong><div className="flex items-center gap-2"><Info size={18} className="text-violet-200" /><h2 className="font-semibold text-white">Mặc định quy trình</h2></div><div className="mt-4 grid gap-4"><PathInput label="Thư mục đầu ra mặc định" value={defaultOutputFolder} onChange={setDefaultOutputFolder} /><PathInput label="Thư mục nhạc nền mặc định" value={defaultBgmFolder} onChange={setDefaultBgmFolder} /></div></GlassCard>
         </div>
 
         <details className="glass-card-strong p-5">
-          <summary className="flex cursor-pointer items-center gap-2 font-semibold text-white"><KeyRound size={17} className="text-amber-200" /> Cấu hình kỹ thuật nâng cao</summary>
+          <summary className="flex cursor-pointer items-center gap-2 font-semibold text-white"><KeyRound size={17} className="text-amber-200" /> Cấu hình API và dịch vụ</summary>
           <div className="mt-5 grid gap-5">
           <section className="rounded-md border border-white/10 bg-black/10 p-5">
           <h2 className="mb-3 text-base font-semibold text-ink">Gemini</h2>

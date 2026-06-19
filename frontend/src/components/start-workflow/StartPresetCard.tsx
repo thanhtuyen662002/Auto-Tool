@@ -26,7 +26,7 @@ export default function StartPresetCard({
           </span>
           <div>
             <div className="font-semibold text-white">{preset.name}</div>
-            <div className="mt-0.5 text-xs text-slate-500">{preset.autoRender ? 'Render ngay' : preset.reviewRequired ? 'Cần duyệt' : 'Không cần duyệt'}</div>
+            <div className="mt-0.5 text-xs text-slate-500">{preset.autoRender ? 'Xuất ngay' : preset.reviewRequired ? 'Cần duyệt' : 'Không cần duyệt'}</div>
           </div>
         </div>
         {active ? <CheckCircle2 className="shrink-0 text-cyan-200" size={18} /> : null}

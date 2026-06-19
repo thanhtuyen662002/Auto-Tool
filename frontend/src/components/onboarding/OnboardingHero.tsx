@@ -14,7 +14,7 @@ export default function OnboardingHero({ onSkip }: { onSkip?: () => void }) {
             Bắt đầu tạo video đầu tiên của bạn
           </h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300">
-            Chọn workflow phù hợp, kiểm tra hệ thống, chọn output folder mặc định rồi chạy một batch nhỏ để làm quen.
+            Chọn quy trình phù hợp, kiểm tra hệ thống, chọn thư mục đầu ra mặc định rồi chạy một lô nhỏ để làm quen.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link to="/douyin-reup">
@@ -34,7 +34,7 @@ export default function OnboardingHero({ onSkip }: { onSkip?: () => void }) {
           </div>
         </div>
         <div className="grid gap-3 rounded-md border border-white/10 bg-black/18 p-4">
-          {['Chọn workflow', 'Kiểm tra Backend và FFmpeg', 'Chọn output folder', 'Chạy batch test nhỏ'].map((item, index) => (
+          {['Chọn quy trình', 'Kiểm tra backend và bộ dựng video', 'Chọn thư mục đầu ra', 'Chạy lô test nhỏ'].map((item, index) => (
             <div className="flex items-center gap-3 text-sm text-slate-200" key={item}>
               <span className="grid h-7 w-7 place-items-center rounded-full border border-cyan-300/30 bg-cyan-300/10 text-xs font-semibold text-cyan-100">
                 {index + 1}
