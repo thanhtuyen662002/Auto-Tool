@@ -6,7 +6,7 @@ import zipfile
 
 import requests
 
-from app.utils.updater import _download_file, _launch_updater_script, check_for_update, is_newer
+from app.utils.updater import _build_updater_bat, _download_file, _launch_updater_script, check_for_update, is_newer
 
 
 def test_release_version_is_newer_than_prerelease() -> None:
@@ -141,3 +141,29 @@ def test_launch_updater_script_uses_valid_windows_process_flags(tmp_path, monkey
     assert call["shell"] is False
     assert call["creationflags"] == subprocess.CREATE_NO_WINDOW
     assert call["creationflags"] & subprocess.DETACHED_PROCESS == 0
+
+
+def test_updater_bat_waits_for_current_pid_instead_of_all_autotool_instances() -> None:
+    content = _build_updater_bat(
+        exe_name="AutoTool.exe",
+        copy_from="C:\\Update\\AutoTool",
+        exe_dir="C:\\AutoTool",
+        update_dir="C:\\AutoTool\\_update",
+        current_pid=12345,
+    )
+
+    assert 'tasklist /FI "PID eq 12345"' in content
+    assert 'find "12345"' in content
+    assert 'IMAGENAME eq AutoTool.exe' not in content
+
+
+def test_updater_bat_keeps_name_wait_fallback_without_pid() -> None:
+    content = _build_updater_bat(
+        exe_name="AutoTool.exe",
+        copy_from="C:\\Update\\AutoTool",
+        exe_dir="C:\\AutoTool",
+        update_dir="C:\\AutoTool\\_update",
+        current_pid=None,
+    )
+
+    assert 'IMAGENAME eq AutoTool.exe' in content

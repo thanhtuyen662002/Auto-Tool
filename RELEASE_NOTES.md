@@ -1,5 +1,18 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.28
+
+### Highlights
+
+- Fixed automatic updater scripts waiting forever when another `AutoTool.exe` instance is open or the user manually reopens the app.
+- Updater scripts now wait for the exact current process PID instead of every process named `AutoTool.exe`.
+- Recovered the local install flow after the v1.0.27 update package was downloaded but left waiting in `_update`.
+
+### QA
+
+- Updater unit tests and frontend build passed.
+- Local install was manually recovered from the stuck v1.0.27 updater and verified through `/api/health` before publishing this fix.
+
 ## v1.0.27
 
 ### Highlights

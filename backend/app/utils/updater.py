@@ -250,6 +250,7 @@ def download_and_prepare_update(info: UpdateInfo) -> DownloadResult:
         copy_from=copy_from,
         exe_dir=str(exe_dir),
         update_dir=str(update_dir),
+        current_pid=os.getpid(),
     )
     bat_path.write_text(bat_content, encoding="utf-8")
 
@@ -420,8 +421,10 @@ def _build_updater_bat(
     copy_from: str,
     exe_dir: str,
     update_dir: str,
+    current_pid: int | None = None,
 ) -> str:
     """Tạo nội dung file _update.bat để chạy sau khi đóng app."""
+    wait_block = _updater_wait_block(exe_name=exe_name, current_pid=current_pid)
     return f"""\
 @echo off
 chcp 65001 > nul
@@ -430,12 +433,7 @@ echo   AutoTool Updater
 echo ===========================================
 echo.
 echo Dang cho AutoTool tat...
-:wait_loop
-tasklist /FI "IMAGENAME eq {exe_name}" 2>nul | find /I "{exe_name}" > nul
-if not errorlevel 1 (
-    timeout /t 2 /nobreak > nul
-    goto wait_loop
-)
+{wait_block}
 echo.
 echo Dang cap nhat AutoTool...
 xcopy /E /Y /I "{copy_from}\\*" "{exe_dir}\\" > nul
@@ -455,6 +453,22 @@ timeout /t 2 /nobreak > nul
 start "" "{exe_dir}\\{exe_name}"
 (goto) 2>nul & del "%~f0"
 """
+
+def _updater_wait_block(exe_name: str, current_pid: int | None) -> str:
+    if current_pid and current_pid > 0:
+        pid = int(current_pid)
+        return f""":wait_loop
+tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" > nul
+if not errorlevel 1 (
+    timeout /t 2 /nobreak > nul
+    goto wait_loop
+)"""
+    return f""":wait_loop
+tasklist /FI "IMAGENAME eq {exe_name}" 2>nul | find /I "{exe_name}" > nul
+if not errorlevel 1 (
+    timeout /t 2 /nobreak > nul
+    goto wait_loop
+)"""
 
 
 # ─── Background check ─────────────────────────────────────────────────────────
