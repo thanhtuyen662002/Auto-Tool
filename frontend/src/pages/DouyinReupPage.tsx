@@ -180,7 +180,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   subtitle_cover_opacity: 0.86,
   subtitle_cover_auto_position: true,
   subtitle_cover_probe_if_no_ocr: true,
-  subtitle_cover_probe_sample_fps: 0.6,
+  subtitle_cover_probe_sample_fps: 1,
   subtitle_cover_height_ratio: 0.22,
   subtitle_cover_bottom_ratio: 0,
   subtitle_cover_padding_ratio: 0.035,
@@ -1114,7 +1114,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               ) : null}
               <SliderInput
                 label={`${settings.subtitle_cover_auto_position ? 'Chiều cao fallback' : 'Chiều cao nền che sub'}: ${Math.round(settings.subtitle_cover_height_ratio * 100)}%`}
-                min={0.12}
+                min={0.05}
                 max={0.36}
                 step={0.01}
                 value={settings.subtitle_cover_height_ratio}
@@ -1141,7 +1141,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               {settings.subtitle_cover_auto_position && settings.subtitle_cover_probe_if_no_ocr ? (
                 <SliderInput
                   label={`FPS quét vị trí sub: ${settings.subtitle_cover_probe_sample_fps.toFixed(1)}`}
-                  min={0.2}
+                  min={0.5}
                   max={1.5}
                   step={0.1}
                   value={settings.subtitle_cover_probe_sample_fps}

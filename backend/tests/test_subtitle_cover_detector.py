@@ -53,5 +53,65 @@ def test_detect_subtitle_cover_from_ocr_debug_uses_text_block_position(tmp_path:
 
     assert placement is not None
     assert placement.block_count == 2
-    assert 0.09 <= placement.height_ratio <= 0.16
+    assert 0.05 <= placement.height_ratio <= 0.12
     assert 0.18 <= placement.bottom_ratio <= 0.24
+    assert len(placement.segments) == 2
+    assert placement.segments[0].start == 0
+    assert placement.segments[0].end == 0.25
+
+
+def test_detect_subtitle_cover_from_ocr_debug_keeps_per_timestamp_positions(tmp_path: Path) -> None:
+    debug_path = tmp_path / "ocr_debug.json"
+    debug_path.write_text(
+        json.dumps(
+            {
+                "frame_width": 1080,
+                "frame_height": 1920,
+                "region": {"x": 0, "y": 900, "width": 1080, "height": 800},
+                "frames": [
+                    {
+                        "timestamp_ms": 0,
+                        "region": {"x": 0, "y": 900, "width": 1080, "height": 800},
+                        "raw_blocks": [
+                            {
+                                "box": [[150, 500], [930, 500], [930, 570], [150, 570]],
+                                "text": "这个真的很好用",
+                                "confidence": 0.9,
+                            },
+                            {
+                                "box": [[60, 40], [260, 40], [260, 90], [60, 90]],
+                                "text": "推荐",
+                                "confidence": 0.95,
+                            },
+                        ],
+                    },
+                    {
+                        "timestamp_ms": 1000,
+                        "region": {"x": 0, "y": 900, "width": 1080, "height": 800},
+                        "raw_blocks": [
+                            {
+                                "box": [[180, 430], [900, 430], [900, 500], [180, 500]],
+                                "text": "价格也很便宜",
+                                "confidence": 0.88,
+                            }
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    placement = detect_subtitle_cover_from_ocr_debug(
+        str(debug_path),
+        fallback_height_ratio=0.22,
+        fallback_bottom_ratio=0.0,
+        padding_ratio=0.02,
+    )
+
+    assert placement is not None
+    assert placement.source == "ocr_debug_timed_blocks"
+    assert len(placement.segments) == 2
+    assert placement.segments[0].top_ratio > placement.segments[1].top_ratio
+    assert placement.segments[0].bottom_edge_ratio > placement.segments[1].bottom_edge_ratio
+    assert 0.05 <= placement.segments[0].bottom_edge_ratio - placement.segments[0].top_ratio <= 0.09

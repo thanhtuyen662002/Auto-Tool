@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from dataclasses import asdict
 from pathlib import Path
 
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_video, run_ffmpeg
@@ -436,6 +437,7 @@ class DouyinRenderPipeline:
     ) -> dict:
         height_ratio = settings.subtitle_cover_height_ratio
         bottom_ratio = settings.subtitle_cover_bottom_ratio
+        cover_segments: list[dict] = []
         if settings.subtitle_cover_enabled and settings.subtitle_cover_auto_position and source_ocr_debug_path:
             placement = detect_subtitle_cover_from_ocr_debug(
                 source_ocr_debug_path,
@@ -446,9 +448,11 @@ class DouyinRenderPipeline:
             if placement:
                 height_ratio = placement.height_ratio
                 bottom_ratio = placement.bottom_ratio
+                cover_segments = [asdict(segment) for segment in placement.segments]
                 warnings.append(
                     "subtitle_cover_auto_position: Đã tự đặt nền phụ đề Việt theo vị trí chữ Trung "
-                    f"từ OCR ({placement.block_count} vùng chữ, confidence {placement.confidence:.2f})."
+                    f"từ OCR ({placement.block_count} vùng chữ, {len(cover_segments)} mốc thời gian, "
+                    f"confidence {placement.confidence:.2f})."
                 )
             else:
                 warnings.append(
@@ -461,6 +465,7 @@ class DouyinRenderPipeline:
             "cover_background_opacity": settings.subtitle_cover_opacity,
             "cover_background_height_ratio": height_ratio,
             "cover_background_bottom_ratio": bottom_ratio,
+            "cover_background_segments": cover_segments,
         }
 
     def _run_render_with_audio_fallback(

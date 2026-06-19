@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.25
+
+### Highlights
+
+- Made smart subtitle cover use OCR block timestamps to draw dynamic cover regions instead of one oversized global band.
+- Tightened Chinese subtitle detection around real OCR text boxes and filtered lower-frame subtitle-like clusters.
+- Raised quick subtitle-position probe to 1 FPS by default so short videos get per-second position checks.
+- Allowed thinner fallback cover height for cases where auto-position is not available.
+
+### QA
+
+- Focused backend subtitle cover/render pipeline tests passed.
+- Frontend production build passed.
+
 ## v1.0.11
 
 ### Highlights

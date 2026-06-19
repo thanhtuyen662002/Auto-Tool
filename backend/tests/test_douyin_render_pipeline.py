@@ -126,4 +126,5 @@ def test_subtitle_cover_options_use_ocr_debug_position(tmp_path):
 
     assert options["cover_background_height_ratio"] < 0.18
     assert options["cover_background_bottom_ratio"] > 0.15
+    assert len(options["cover_background_segments"]) == 1
     assert any("subtitle_cover_auto_position" in warning for warning in warnings)

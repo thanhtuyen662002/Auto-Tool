@@ -15,7 +15,7 @@ export const DEFAULT_REVIEW_RENDER_SETTINGS: DouyinReupSettings = {
   add_overlay: false, overlay_mode: 'none', custom_overlay_path: 'examples/overlay',
   custom_overlay_height_percent: 100, custom_overlay_fit_mode: 'cover',
   subtitle_cover_enabled: true, subtitle_cover_color: '#000000', subtitle_cover_opacity: 0.86,
-  subtitle_cover_auto_position: true, subtitle_cover_probe_if_no_ocr: true, subtitle_cover_probe_sample_fps: 0.6,
+  subtitle_cover_auto_position: true, subtitle_cover_probe_if_no_ocr: true, subtitle_cover_probe_sample_fps: 1,
   subtitle_cover_height_ratio: 0.22, subtitle_cover_bottom_ratio: 0,
   subtitle_cover_padding_ratio: 0.035,
   keep_original_audio: true, add_bgm: true, music_folder: '', favorite_music_paths: [], bgm_volume: 0.16,

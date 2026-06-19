@@ -1,12 +1,31 @@
 from __future__ import annotations
 
 import textwrap
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from app.modules.script_writer.script_writer import SubtitleLine
 from app.modules.visual_style.style_schema import VisualStylePreset
 from app.utils.file_utils import ensure_dir
+
+
+@dataclass(frozen=True)
+class _CoverRect:
+    start: float
+    end: float
+    left: int
+    top: int
+    right: int
+    bottom: int
+
+    @property
+    def center_x(self) -> int:
+        return int(self.left + (self.right - self.left) / 2)
+
+    @property
+    def center_y(self) -> int:
+        return int(self.top + (self.bottom - self.top) / 2)
 
 
 def generate_ass_subtitle(
@@ -21,6 +40,7 @@ def generate_ass_subtitle(
     cover_background_opacity: float = 0.86,
     cover_background_height_ratio: float | None = None,
     cover_background_bottom_ratio: float = 0.0,
+    cover_background_segments: list[dict[str, Any]] | None = None,
 ) -> str:
     target = Path(output_path)
     ensure_dir(target.parent)
@@ -37,14 +57,16 @@ def generate_ass_subtitle(
         cover_bottom = max(1, video_height - int(video_height * cover_bottom_ratio))
         cover_height = max(1, int(video_height * cover_height_ratio))
         cover_top = max(0, cover_bottom - cover_height)
-        subtitle_y = int(cover_top + (cover_bottom - cover_top) / 2)
+        default_cover_rect = _CoverRect(0.0, float("inf"), 0, cover_top, video_width, cover_bottom)
+        cover_segments = _normalize_cover_segments(cover_background_segments, video_width, video_height)
+        subtitle_y = default_cover_rect.center_y
     else:
         panel_height = int(video_height * overlay.height_ratio)
         panel_margin_bottom = max(18, min(video_height // 24, overlay.padding_y // 2))
         panel_top = video_height - panel_height - panel_margin_bottom
         subtitle_y = int(panel_top + panel_height / 2)
-        cover_top = 0
-        cover_bottom = 0
+        default_cover_rect = _CoverRect(0.0, float("inf"), 0, 0, video_width, 0)
+        cover_segments = []
     margin_l = max(40, overlay.padding_x)
     margin_r = max(40, overlay.padding_x)
     margin_v = max(24, video_height - subtitle_y)
@@ -96,24 +118,34 @@ def generate_ass_subtitle(
     )
 
     for line in _expand_lines_for_display(lines, subtitle.max_chars_per_line, subtitle.max_lines):
-        start = _format_ass_timestamp(float(line.start_hint or 0.0))
-        end = _format_ass_timestamp(float(line.end_hint or 0.0))
+        start_seconds = float(line.start_hint or 0.0)
+        end_seconds = float(line.end_hint or 0.0)
+        start = _format_ass_timestamp(start_seconds)
+        end = _format_ass_timestamp(end_seconds)
+        display_rect = default_cover_rect
         if cover_background_enabled:
-            cover_shape = (
-                rf"{{\p1\pos(0,0)}}m 0 {cover_top} l {video_width} {cover_top} "
-                rf"l {video_width} {cover_bottom} l 0 {cover_bottom}{{\p0}}"
-            )
-            content.append(
-                "Dialogue: 0,"
-                f"{start},"
-                f"{end},"
-                f"SubtitleCover,,0,0,0,,{cover_shape}"
-            )
+            cover_rects = _cover_rects_for_line(start_seconds, end_seconds, cover_segments, default_cover_rect)
+            display_rect = max(cover_rects, key=lambda item: item.end - item.start) if cover_rects else default_cover_rect
+            for rect in cover_rects:
+                if rect.end <= rect.start:
+                    continue
+                cover_shape = (
+                    rf"{{\p1\pos(0,0)}}m {rect.left} {rect.top} l {rect.right} {rect.top} "
+                    rf"l {rect.right} {rect.bottom} l {rect.left} {rect.bottom}{{\p0}}"
+                )
+                content.append(
+                    "Dialogue: 0,"
+                    f"{_format_ass_timestamp(rect.start)},"
+                    f"{_format_ass_timestamp(rect.end)},"
+                    f"SubtitleCover,,0,0,0,,{cover_shape}"
+                )
         wrapped = r"\N".join(
             _escape_ass_text(part)
             for part in wrap_subtitle_text(line.text, subtitle.max_chars_per_line, subtitle.max_lines)
         )
-        positioned = rf"{{\pos({video_width // 2},{subtitle_y})}}{wrapped}"
+        subtitle_x = display_rect.center_x if cover_background_enabled else video_width // 2
+        display_y = display_rect.center_y if cover_background_enabled else subtitle_y
+        positioned = rf"{{\pos({subtitle_x},{display_y})}}{wrapped}"
         content.append(
             f"Dialogue: {1 if cover_background_enabled else 0},"
             f"{start},"
@@ -138,6 +170,87 @@ def hex_to_ass_color(hex_color: str, alpha: float = 1.0) -> str:
 
 def _clamp_float(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, float(value)))
+
+
+def _normalize_cover_segments(
+    segments: list[dict[str, Any]] | None,
+    video_width: int,
+    video_height: int,
+) -> list[_CoverRect]:
+    normalized: list[_CoverRect] = []
+    for segment in segments or []:
+        if not isinstance(segment, dict):
+            continue
+        start = _safe_float(segment.get("start"), 0.0)
+        end = _safe_float(segment.get("end"), start)
+        if end <= start:
+            continue
+        left_ratio = _clamp_float(_safe_float(segment.get("left_ratio"), 0.0), 0.0, 1.0)
+        right_ratio = _clamp_float(_safe_float(segment.get("right_ratio"), 1.0), 0.0, 1.0)
+        top_ratio = _clamp_float(_safe_float(segment.get("top_ratio"), 0.0), 0.0, 1.0)
+        bottom_ratio = _clamp_float(
+            _safe_float(segment.get("bottom_edge_ratio", segment.get("bottom_ratio")), top_ratio),
+            0.0,
+            1.0,
+        )
+        if right_ratio <= left_ratio or bottom_ratio <= top_ratio:
+            continue
+        left = max(0, min(video_width - 1, int(round(video_width * left_ratio))))
+        right = max(left + 1, min(video_width, int(round(video_width * right_ratio))))
+        top = max(0, min(video_height - 1, int(round(video_height * top_ratio))))
+        bottom = max(top + 1, min(video_height, int(round(video_height * bottom_ratio))))
+        normalized.append(_CoverRect(start, end, left, top, right, bottom))
+    return sorted(normalized, key=lambda item: (item.start, item.end))
+
+
+def _cover_rects_for_line(
+    start: float,
+    end: float,
+    segments: list[_CoverRect],
+    default_rect: _CoverRect,
+) -> list[_CoverRect]:
+    if end <= start:
+        return []
+    overlaps: list[_CoverRect] = []
+    for segment in segments:
+        if segment.end <= start or segment.start >= end:
+            continue
+        overlap_start = max(start, segment.start)
+        overlap_end = min(end, segment.end)
+        if overlap_end <= overlap_start:
+            continue
+        overlaps.append(
+            _CoverRect(
+                overlap_start,
+                overlap_end,
+                segment.left,
+                segment.top,
+                segment.right,
+                segment.bottom,
+            )
+        )
+    if overlaps:
+        return overlaps
+    nearest = _nearest_cover_rect(start + (end - start) / 2.0, segments) or default_rect
+    return [_CoverRect(start, end, nearest.left, nearest.top, nearest.right, nearest.bottom)]
+
+
+def _nearest_cover_rect(timestamp: float, segments: list[_CoverRect]) -> _CoverRect | None:
+    if not segments:
+        return None
+    return min(
+        segments,
+        key=lambda segment: 0.0
+        if segment.start <= timestamp <= segment.end
+        else min(abs(timestamp - segment.start), abs(timestamp - segment.end)),
+    )
+
+
+def _safe_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def wrap_subtitle_text(text: str, max_chars_per_line: int, max_lines: int) -> list[str]:
