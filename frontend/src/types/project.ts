@@ -182,6 +182,9 @@ export interface DouyinReupSettings {
   subtitle_cover_height_ratio: number;
   subtitle_cover_bottom_ratio: number;
   subtitle_cover_padding_ratio: number;
+  subtitle_cover_lead_seconds: number;
+  subtitle_cover_tail_seconds: number;
+  subtitle_cover_radius_ratio: number;
   keep_original_audio: boolean;
   add_bgm: boolean;
   music_folder?: string | null;
@@ -231,6 +234,9 @@ export interface DouyinReupSettings {
   generate_voiceover_for_silent_video: boolean;
   silent_voiceover_provider: string;
   silent_voiceover_voice: string;
+  voiceover_auto_slow_video: boolean;
+  voiceover_max_video_slowdown: number;
+  voiceover_comfort_speedup: number;
   keep_immersive_original_audio: boolean;
   immersive_original_audio_volume: number;
   add_bgm_for_silent_video: boolean;

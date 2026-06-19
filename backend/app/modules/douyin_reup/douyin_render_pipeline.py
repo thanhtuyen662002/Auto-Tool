@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 from dataclasses import asdict
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_video, run_ffmpeg
@@ -234,6 +235,35 @@ class DouyinRenderPipeline:
                     "voiceover_video_slowdown: Tiếng Việt cần nhiều thời gian đọc hơn subtitle gốc, "
                     f"đã tua chậm video/timeline {video_slowdown_factor:.2f}x để giảm ép tốc độ voice."
                 )
+        cover_reference_blocks = list(subtitle_blocks)
+        if voiceover_path is None and settings.generate_voiceover_for_silent_video:
+            voiceover_path = self._generate_voiceover_from_srt(
+                subtitle_srt_path=voiceover_subtitle_srt_path,
+                output_dir=str(target_dir),
+                output_name=output_name,
+                settings=settings,
+                target_duration=render_duration,
+                tts_settings=tts_settings,
+            )
+            warnings.extend(self.voice_generator.warnings)
+            if self.voice_generator.last_subtitle_timeline:
+                voice_synced_blocks = [
+                    SubtitleBlock(
+                        index=index,
+                        start=float(line.start_hint or 0.0),
+                        end=float(line.end_hint or 0.0),
+                        text=line.text,
+                    )
+                    for index, line in enumerate(self.voice_generator.last_subtitle_timeline, start=1)
+                    if (line.end_hint or 0) > (line.start_hint or 0) and line.text.strip()
+                ]
+                if voice_synced_blocks:
+                    subtitle_blocks = voice_synced_blocks
+                    render_subtitle_srt_path = str(target_dir / f"{Path(output_name).stem}_vi_voice_synced.srt")
+                    write_srt_blocks(subtitle_blocks, render_subtitle_srt_path)
+                    warnings.append(
+                        "voiceover_subtitle_sync: Phụ đề Việt đã được canh theo timeline giọng đọc để tránh tiếng và chữ lệch nhau."
+                    )
         subtitle_lines = [
             {"start_hint": block.start, "end_hint": block.end, "text": block.text}
             for block in subtitle_blocks
@@ -247,6 +277,10 @@ class DouyinRenderPipeline:
                 source_ocr_debug_path=source_ocr_debug_path,
                 warnings=warnings,
             )
+            cover_options["cover_background_reference_lines"] = [
+                {"start_hint": block.start, "end_hint": block.end, "text": block.text}
+                for block in cover_reference_blocks
+            ]
             generate_ass_subtitle(
                 subtitle_lines,
                 preset,
@@ -259,17 +293,6 @@ class DouyinRenderPipeline:
             subtitle_ass_path = None  # type: ignore[assignment]
             if settings.burn_subtitle:
                 raise RuntimeError("Đã bật burn subtitle nhưng không có subtitle hợp lệ để đưa vào video.")
-
-        if voiceover_path is None and settings.generate_voiceover_for_silent_video:
-            voiceover_path = self._generate_voiceover_from_srt(
-                subtitle_srt_path=voiceover_subtitle_srt_path,
-                output_dir=str(target_dir),
-                output_name=output_name,
-                settings=settings,
-                target_duration=render_duration,
-                tts_settings=tts_settings,
-            )
-            warnings.extend(self.voice_generator.warnings)
 
         bgm_path = None
         if settings.add_bgm:
@@ -431,7 +454,7 @@ class DouyinRenderPipeline:
             target_duration=target_duration,
             tts_settings=merged_tts_settings,
             allow_script_shortening=False,
-            lock_subtitle_timing=True,
+            lock_subtitle_timing=False,
         )
         if len(voiceover) < len(blocks):
             self.voice_generator.warnings.append(
@@ -492,6 +515,9 @@ class DouyinRenderPipeline:
             "cover_background_height_ratio": height_ratio,
             "cover_background_bottom_ratio": bottom_ratio,
             "cover_background_segments": cover_segments,
+            "cover_background_lead_seconds": settings.subtitle_cover_lead_seconds,
+            "cover_background_tail_seconds": settings.subtitle_cover_tail_seconds,
+            "cover_background_radius_ratio": settings.subtitle_cover_radius_ratio,
         }
 
     def _run_render_with_audio_fallback(
@@ -839,6 +865,8 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
     current_texts: list[str] = []
     current_start = 0.0
     current_end = 0.0
+    last_accepted_text = ""
+    last_accepted_end = 0.0
 
     def flush() -> None:
         nonlocal current_texts, current_start, current_end
@@ -851,10 +879,16 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
         text = _clean_spoken_text(block.text)
         if not text:
             continue
+        gap_from_last = max(0.0, float(block.start) - last_accepted_end)
+        if _should_skip_repeated_spoken_block(last_accepted_text, text, gap_from_last):
+            last_accepted_end = max(last_accepted_end, float(block.end))
+            continue
         if not current_texts:
             current_texts = [text]
             current_start = float(block.start)
             current_end = float(block.end)
+            last_accepted_text = text
+            last_accepted_end = float(block.end)
             continue
 
         previous_text = _clean_spoken_text(" ".join(current_texts))
@@ -864,12 +898,16 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
         if _should_merge_spoken_subtitle_block(previous_text, text, gap, span, combined_len):
             current_texts.append(text)
             current_end = max(current_end, float(block.end))
+            last_accepted_text = text
+            last_accepted_end = float(block.end)
             continue
 
         flush()
         current_texts = [text]
         current_start = float(block.start)
         current_end = float(block.end)
+        last_accepted_text = text
+        last_accepted_end = float(block.end)
 
     flush()
     return groups
@@ -887,6 +925,24 @@ def _subtitle_lines_from_voiceover(lines: list[VoiceoverLine]) -> list[SubtitleL
             end = None
         subtitles.append(SubtitleLine(start_hint=start, end_hint=end, text=line.text))
     return subtitles
+
+
+def _should_skip_repeated_spoken_block(previous_text: str, next_text: str, gap: float) -> bool:
+    if not previous_text or not next_text or gap > 1.2:
+        return False
+    previous = _normalize_spoken_for_compare(previous_text)
+    current = _normalize_spoken_for_compare(next_text)
+    if not previous or not current:
+        return False
+    if previous == current:
+        return True
+    if min(len(previous), len(current)) >= 12 and (previous in current or current in previous):
+        return True
+    return SequenceMatcher(None, previous, current).ratio() >= 0.92
+
+
+def _normalize_spoken_for_compare(text: str) -> str:
+    return "".join(ch.lower() for ch in _clean_spoken_text(text) if ch.isalnum())
 
 
 def _should_merge_spoken_subtitle_block(

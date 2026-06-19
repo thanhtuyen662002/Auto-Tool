@@ -29,6 +29,20 @@ def test_smooth_voiceover_groups_fragmented_subtitle_blocks():
     assert lines[1].text == "Xem kỹ trước khi chọn nhé."
 
 
+def test_smooth_voiceover_skips_near_duplicate_blocks():
+    blocks = [
+        SubtitleBlock(index=1, start=0.0, end=1.0, text="Sản phẩm này rất đáng xem"),
+        SubtitleBlock(index=2, start=1.05, end=2.0, text="Sản phẩm này rất đáng xem"),
+        SubtitleBlock(index=3, start=2.4, end=3.2, text="Thiết kế nhỏ gọn và dễ dùng."),
+    ]
+
+    lines = _build_smooth_voiceover_lines(blocks)
+
+    joined = " ".join(line.text for line in lines)
+    assert joined.count("Sản phẩm này rất đáng xem") == 1
+    assert "Thiết kế nhỏ gọn" in joined
+
+
 def test_voiceover_timing_plan_slows_dense_vietnamese_voiceover():
     settings = DouyinReupSettings(
         enabled=True,

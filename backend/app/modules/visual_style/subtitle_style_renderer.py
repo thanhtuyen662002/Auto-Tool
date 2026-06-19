@@ -41,6 +41,10 @@ def generate_ass_subtitle(
     cover_background_height_ratio: float | None = None,
     cover_background_bottom_ratio: float = 0.0,
     cover_background_segments: list[dict[str, Any]] | None = None,
+    cover_background_lead_seconds: float = 0.0,
+    cover_background_tail_seconds: float = 0.0,
+    cover_background_radius_ratio: float = 0.0,
+    cover_background_reference_lines: list[Any] | None = None,
 ) -> str:
     target = Path(output_path)
     ensure_dir(target.parent)
@@ -117,46 +121,47 @@ def generate_ass_subtitle(
         ]
     )
 
-    for line in _expand_lines_for_display(lines, subtitle.max_chars_per_line, subtitle.max_lines):
-        start_seconds = float(line.start_hint or 0.0)
-        end_seconds = float(line.end_hint or 0.0)
-        start = _format_ass_timestamp(start_seconds)
-        end = _format_ass_timestamp(end_seconds)
-        display_rect = default_cover_rect
-        cover_rects: list[_CoverRect] = []
-        if cover_background_enabled:
-            cover_rects = _cover_rects_for_line(start_seconds, end_seconds, cover_segments, default_cover_rect)
-            display_rect = max(cover_rects, key=lambda item: item.end - item.start) if cover_rects else default_cover_rect
-            for rect in cover_rects:
+    display_lines = _expand_lines_for_display(lines, subtitle.max_chars_per_line, subtitle.max_lines)
+    if cover_background_enabled:
+        reference_lines = _normalize_subtitle_lines(cover_background_reference_lines or []) or display_lines
+        for line in reference_lines:
+            start_seconds = float(line.start_hint or 0.0)
+            end_seconds = float(line.end_hint or 0.0)
+            cover_start = max(0.0, start_seconds - max(0.0, float(cover_background_lead_seconds)))
+            cover_end = max(cover_start + 0.05, end_seconds + max(0.0, float(cover_background_tail_seconds)))
+            for rect in _cover_rects_for_line(cover_start, cover_end, cover_segments, default_cover_rect):
                 if rect.end <= rect.start:
                     continue
-                cover_shape = (
-                    rf"{{\p1\pos(0,0)}}m {rect.left} {rect.top} l {rect.right} {rect.top} "
-                    rf"l {rect.right} {rect.bottom} l {rect.left} {rect.bottom}{{\p0}}"
-                )
+                cover_shape = rf"{{\p1\pos(0,0)}}{_cover_shape_path(rect, cover_background_radius_ratio)}{{\p0}}"
                 content.append(
                     "Dialogue: 0,"
                     f"{_format_ass_timestamp(rect.start)},"
                     f"{_format_ass_timestamp(rect.end)},"
                     f"SubtitleCover,,0,0,0,,{cover_shape}"
                 )
+
+    for line in display_lines:
+        start_seconds = float(line.start_hint or 0.0)
+        end_seconds = float(line.end_hint or 0.0)
+        start = _format_ass_timestamp(start_seconds)
+        end = _format_ass_timestamp(end_seconds)
+        display_rect = default_cover_rect
+        if cover_background_enabled:
+            text_rects = _cover_rects_for_line(start_seconds, end_seconds, cover_segments, default_cover_rect)
+            display_rect = max(text_rects, key=lambda item: item.end - item.start) if text_rects else default_cover_rect
         wrapped = r"\N".join(
             _escape_ass_text(part)
             for part in wrap_subtitle_text(line.text, subtitle.max_chars_per_line, subtitle.max_lines)
         )
-        text_rects = cover_rects if cover_background_enabled and cover_rects else [display_rect]
-        for rect in text_rects:
-            text_start = _format_ass_timestamp(rect.start) if cover_background_enabled and cover_rects else start
-            text_end = _format_ass_timestamp(rect.end) if cover_background_enabled and cover_rects else end
-            subtitle_x = rect.center_x if cover_background_enabled else video_width // 2
-            display_y = rect.center_y if cover_background_enabled else subtitle_y
-            positioned = rf"{{\pos({subtitle_x},{display_y})}}{wrapped}"
-            content.append(
-                f"Dialogue: {1 if cover_background_enabled else 0},"
-                f"{text_start},"
-                f"{text_end},"
-                f"Default,,0,0,0,,{positioned}"
-            )
+        subtitle_x = display_rect.center_x if cover_background_enabled else video_width // 2
+        display_y = display_rect.center_y if cover_background_enabled else subtitle_y
+        positioned = rf"{{\pos({subtitle_x},{display_y})}}{wrapped}"
+        content.append(
+            f"Dialogue: {1 if cover_background_enabled else 0},"
+            f"{start},"
+            f"{end},"
+            f"Default,,0,0,0,,{positioned}"
+        )
 
     target.write_text("\n".join(content) + "\n", encoding="utf-8")
     return str(target)
@@ -238,6 +243,35 @@ def _cover_rects_for_line(
         return overlaps
     nearest = _nearest_cover_rect(start + (end - start) / 2.0, segments) or default_rect
     return [_CoverRect(start, end, nearest.left, nearest.top, nearest.right, nearest.bottom)]
+
+
+def _cover_shape_path(rect: _CoverRect, radius_ratio: float) -> str:
+    width = max(1, rect.right - rect.left)
+    height = max(1, rect.bottom - rect.top)
+    radius = int(round(min(width, height) * _clamp_float(radius_ratio, 0.0, 0.2)))
+    if radius <= 1:
+        return (
+            f"m {rect.left} {rect.top} l {rect.right} {rect.top} "
+            f"l {rect.right} {rect.bottom} l {rect.left} {rect.bottom}"
+        )
+
+    left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+    radius = min(radius, width // 2, height // 2)
+    kappa = 0.5522847498
+    control = max(1, int(round(radius * kappa)))
+    return " ".join(
+        [
+            f"m {left + radius} {top}",
+            f"l {right - radius} {top}",
+            f"b {right - radius + control} {top} {right} {top + radius - control} {right} {top + radius}",
+            f"l {right} {bottom - radius}",
+            f"b {right} {bottom - radius + control} {right - radius + control} {bottom} {right - radius} {bottom}",
+            f"l {left + radius} {bottom}",
+            f"b {left + radius - control} {bottom} {left} {bottom - radius + control} {left} {bottom - radius}",
+            f"l {left} {top + radius}",
+            f"b {left} {top + radius - control} {left + radius - control} {top} {left + radius} {top}",
+        ]
+    )
 
 
 def _nearest_cover_rect(timestamp: float, segments: list[_CoverRect]) -> _CoverRect | None:

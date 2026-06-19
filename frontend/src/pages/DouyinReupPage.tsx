@@ -432,6 +432,9 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   subtitle_cover_height_ratio: 0.12,
   subtitle_cover_bottom_ratio: 0,
   subtitle_cover_padding_ratio: 0.035,
+  subtitle_cover_lead_seconds: 0.85,
+  subtitle_cover_tail_seconds: 0.25,
+  subtitle_cover_radius_ratio: 0.035,
   keep_original_audio: true,
   add_bgm: true,
   music_folder: '',
@@ -481,6 +484,9 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   generate_voiceover_for_silent_video: false,
   silent_voiceover_provider: 'edge_tts',
   silent_voiceover_voice: 'vi-VN-HoaiMyNeural',
+  voiceover_auto_slow_video: true,
+  voiceover_max_video_slowdown: 1.28,
+  voiceover_comfort_speedup: 1.18,
   keep_immersive_original_audio: true,
   immersive_original_audio_volume: 0.75,
   add_bgm_for_silent_video: true,
@@ -498,6 +504,7 @@ const RECENT_MUSIC_KEY = 'auto-tool.recentMusicFolders';
 const LAST_PRESET_KEY = 'auto-tool.lastSelectedPreset';
 const LAST_INDUSTRY_KEY = 'auto-tool.lastSelectedIndustry';
 const LAST_TONE_KEY = 'auto-tool.lastSelectedTone';
+const SAVED_REUP_SETTINGS_KEY = 'auto-tool.douyinReupSettings.v2';
 
 function defaultProjectName(workflow: 'douyin' | 'silent'): string {
   const date = new Date().toISOString().slice(0, 10).replaceAll('-', '_');
@@ -506,6 +513,40 @@ function defaultProjectName(workflow: 'douyin' | 'silent'): string {
 
 function normalizeDouyinSettings(settings: Partial<DouyinReupSettings>): DouyinReupSettings {
   return { ...DEFAULT_SETTINGS, ...settings };
+}
+
+function readSavedDouyinSettings(): Partial<DouyinReupSettings> {
+  try {
+    const raw = localStorage.getItem(SAVED_REUP_SETTINGS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Partial<DouyinReupSettings>;
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function saveDouyinSettings(settings: DouyinReupSettings) {
+  try {
+    const {
+      selected_video_paths: _selectedVideoPaths,
+      source_selection_id: _sourceSelectionId,
+      process_mode: _processMode,
+      ...persisted
+    } = settings;
+    localStorage.setItem(SAVED_REUP_SETTINGS_KEY, JSON.stringify(persisted));
+  } catch {
+    // LocalStorage can be full or disabled; rendering must not depend on this convenience cache.
+  }
+}
+
+function clearSavedDouyinSettings() {
+  try {
+    localStorage.removeItem(SAVED_REUP_SETTINGS_KEY);
+  } catch {
+    // Ignore browser storage errors.
+  }
 }
 
 function readRecentFolders(key: string): StartRecentFolder[] {
@@ -548,10 +589,17 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   const [projectName, setProjectName] = useState(() => defaultProjectName(initialWorkflow));
   const [sourceFolder, setSourceFolder] = useState('');
   const [outputFolder, setOutputFolder] = useState(() => localStorage.getItem('auto-tool.default-output-folder') || './examples/outputs');
-  const [settings, setSettings] = useState<DouyinReupSettings>(() => normalizeDouyinSettings({
-    music_folder: localStorage.getItem('auto-tool.default-bgm-folder') || DEFAULT_SETTINGS.music_folder,
-    silent_caption_tone: localStorage.getItem(LAST_TONE_KEY) || DEFAULT_SETTINGS.silent_caption_tone,
-  }));
+  const [settings, setSettings] = useState<DouyinReupSettings>(() => {
+    const savedSettings = readSavedDouyinSettings();
+    return normalizeDouyinSettings({
+      ...savedSettings,
+      music_folder: savedSettings.music_folder ?? localStorage.getItem('auto-tool.default-bgm-folder') ?? DEFAULT_SETTINGS.music_folder,
+      silent_caption_tone: localStorage.getItem(LAST_TONE_KEY) || savedSettings.silent_caption_tone || DEFAULT_SETTINGS.silent_caption_tone,
+      selected_video_paths: [],
+      source_selection_id: null,
+      process_mode: 'all',
+    });
+  });
   const [silentProductContext, setSilentProductContext] = useState<SilentProductContext>({
     product_name: '',
     industry: localStorage.getItem(LAST_INDUSTRY_KEY) || 'general_product',
@@ -682,11 +730,18 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   const jobStartedView: JobStartedView | null = jobId ? { jobId, projectName: projectName.trim() || defaultProjectName(initialWorkflow), jobStatus } : null;
 
   useEffect(() => {
+    const savedSettings = readSavedDouyinSettings();
+    const hasSavedSettings = Object.keys(savedSettings).length > 0;
     getLocalAppConfig()
       .then((config) => {
         if (!localStorage.getItem('auto-tool.default-output-folder')) setOutputFolder(config.default_output_folder);
         if (!localStorage.getItem('auto-tool.default-bgm-folder') && config.default_music_folder) {
-          setSettings((current) => ({ ...current, music_folder: config.default_music_folder }));
+          setSettings((current) => {
+            if (current.music_folder) return current;
+            const next = { ...current, music_folder: config.default_music_folder };
+            saveDouyinSettings(next);
+            return next;
+          });
         }
         setSourceFolder((current) => current || config.default_source_folder);
       })
@@ -710,11 +765,15 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         const selectedPreset = savedPreset ?? defaultPreset;
         if (selectedPreset) {
           setSelectedPresetId(selectedPreset.id);
-          setSettings(normalizeDouyinSettings({
-            ...selectedPreset.settings,
-            music_folder: localStorage.getItem('auto-tool.default-bgm-folder') || DEFAULT_SETTINGS.music_folder,
-            silent_caption_tone: localStorage.getItem(LAST_TONE_KEY) || selectedPreset.settings.silent_caption_tone,
-          }));
+          if (!hasSavedSettings) {
+            const next = normalizeDouyinSettings({
+              ...selectedPreset.settings,
+              music_folder: localStorage.getItem('auto-tool.default-bgm-folder') || DEFAULT_SETTINGS.music_folder,
+              silent_caption_tone: localStorage.getItem(LAST_TONE_KEY) || selectedPreset.settings.silent_caption_tone,
+            });
+            saveDouyinSettings(next);
+            setSettings(next);
+          }
         }
       })
       .catch(() => setPresets([]));
@@ -807,7 +866,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         preset_id: presetId,
         current_settings: settings,
       });
-      setSettings(normalizeDouyinSettings(response.settings));
+      const next = normalizeDouyinSettings(response.settings);
+      saveDouyinSettings(next);
+      setSettings(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể áp dụng preset.');
     }
@@ -955,7 +1016,11 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     if (typeof updates.silent_caption_tone === 'string') {
       localStorage.setItem(LAST_TONE_KEY, updates.silent_caption_tone);
     }
-    setSettings((current) => ({ ...current, ...updates }));
+    setSettings((current) => {
+      const next = { ...current, ...updates };
+      saveDouyinSettings(next);
+      return next;
+    });
   }
 
   function updateSilentProductContext(updates: Partial<SilentProductContext>) {
@@ -1013,11 +1078,17 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       subtitle_cover_height_ratio: settings.subtitle_cover_height_ratio,
       subtitle_cover_bottom_ratio: settings.subtitle_cover_bottom_ratio,
       subtitle_cover_padding_ratio: settings.subtitle_cover_padding_ratio,
+      subtitle_cover_lead_seconds: settings.subtitle_cover_lead_seconds,
+      subtitle_cover_tail_seconds: settings.subtitle_cover_tail_seconds,
+      subtitle_cover_radius_ratio: settings.subtitle_cover_radius_ratio,
       add_overlay: settings.add_overlay,
       overlay_mode: settings.overlay_mode,
       generate_voiceover_for_silent_video: settings.generate_voiceover_for_silent_video,
       silent_voiceover_provider: settings.silent_voiceover_provider,
       silent_voiceover_voice: settings.silent_voiceover_voice,
+      voiceover_auto_slow_video: settings.voiceover_auto_slow_video,
+      voiceover_max_video_slowdown: settings.voiceover_max_video_slowdown,
+      voiceover_comfort_speedup: settings.voiceover_comfort_speedup,
       auto_route_speech_to_voice_reup: settings.auto_route_speech_to_voice_reup,
       auto_route_no_speech_to_silent_reup: settings.auto_route_no_speech_to_silent_reup,
       auto_route_speech_threshold: settings.auto_route_speech_threshold,
@@ -1253,16 +1324,20 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   }
 
   function updateOcrManualRegion(key: 'x' | 'y' | 'width' | 'height', value: number) {
-    setSettings((current) => ({
-      ...current,
-      ocr_manual_region: {
-        x: current.ocr_manual_region?.x ?? 0,
-        y: current.ocr_manual_region?.y ?? 1200,
-        width: current.ocr_manual_region?.width ?? 1080,
-        height: current.ocr_manual_region?.height ?? 500,
-        [key]: value,
-      },
-    }));
+    setSettings((current) => {
+      const next = {
+        ...current,
+        ocr_manual_region: {
+          x: current.ocr_manual_region?.x ?? 0,
+          y: current.ocr_manual_region?.y ?? 1200,
+          width: current.ocr_manual_region?.width ?? 1080,
+          height: current.ocr_manual_region?.height ?? 500,
+          [key]: value,
+        },
+      };
+      saveDouyinSettings(next);
+      return next;
+    });
   }
 
   async function handleRetryFailed() {
@@ -1330,6 +1405,16 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     updateSettings(updates);
   }
 
+  function saveCurrentReupSettings() {
+    saveDouyinSettings(settings);
+    setActionMessage('Đã lưu cài đặt reup hiện tại. Lần sau mở lại tool sẽ tự dùng cấu hình này.');
+  }
+
+  function clearCurrentReupSettings() {
+    clearSavedDouyinSettings();
+    setActionMessage('Đã xóa cài đặt reup đã lưu. Cấu hình hiện tại vẫn giữ nguyên cho phiên này.');
+  }
+
   function applyVietnameseSubtitleStylePreset(preset: VietnameseSubtitleStylePreset) {
     updateAdvancedSettings({
       burn_subtitle: true,
@@ -1342,6 +1427,24 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   function renderAdvancedSettings() {
     return (
       <>
+        <GlassCard className="grid gap-3 p-4" strong>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-white">Cài đặt đã lưu</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-400">
+                Tool tự lưu các chỉnh sửa nâng cao trên máy này để lần sau dùng nhanh, không phải cấu hình lại từ đầu.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="rounded-md border border-cyan-300/50 bg-cyan-300/15 px-3 py-2 text-sm font-semibold text-cyan-50 hover:bg-cyan-300/25" type="button" onClick={saveCurrentReupSettings}>
+                Lưu cài đặt
+              </button>
+              <button className="rounded-md border border-white/15 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-rose-300/60 hover:text-rose-100" type="button" onClick={clearCurrentReupSettings}>
+                Xóa bản đã lưu
+              </button>
+            </div>
+          </div>
+        </GlassCard>
         <GlassCard className="grid gap-4 p-4" strong>
           <h3 className="font-semibold text-white">Subtitle</h3>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1407,6 +1510,30 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   onChange={(value) => updateAdvancedSettings({ subtitle_cover_padding_ratio: value })}
                 />
               ) : null}
+              <SliderInput
+                label={`Che sớm hơn sub Việt: ${settings.subtitle_cover_lead_seconds.toFixed(2)}s`}
+                min={0}
+                max={2}
+                step={0.05}
+                value={settings.subtitle_cover_lead_seconds}
+                onChange={(value) => updateAdvancedSettings({ subtitle_cover_lead_seconds: value })}
+              />
+              <SliderInput
+                label={`Giữ nền sau sub Việt: ${settings.subtitle_cover_tail_seconds.toFixed(2)}s`}
+                min={0}
+                max={2}
+                step={0.05}
+                value={settings.subtitle_cover_tail_seconds}
+                onChange={(value) => updateAdvancedSettings({ subtitle_cover_tail_seconds: value })}
+              />
+              <SliderInput
+                label={`Bo góc nền sub: ${Math.round(settings.subtitle_cover_radius_ratio * 100)}%`}
+                min={0}
+                max={0.12}
+                step={0.005}
+                value={settings.subtitle_cover_radius_ratio}
+                onChange={(value) => updateAdvancedSettings({ subtitle_cover_radius_ratio: value })}
+              />
               {settings.subtitle_cover_auto_position && settings.subtitle_cover_probe_if_no_ocr ? (
                 <SliderInput
                   label={`FPS quét vị trí sub: ${settings.subtitle_cover_probe_sample_fps.toFixed(1)}`}
@@ -1489,6 +1616,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 className="min-w-[220px] rounded-md border border-white/10 px-4 py-3 text-center"
                 style={{
                   backgroundColor: settings.subtitle_cover_enabled ? hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity) : 'rgba(15, 23, 42, 0.85)',
+                  borderRadius: `${Math.round(Math.max(0, settings.subtitle_cover_radius_ratio || 0) * 220)}px`,
                   color: settings.subtitle_font_color,
                   fontFamily: settings.subtitle_font_family || 'Arial',
                   fontSize: `${Math.max(18, Math.min(34, Math.round(settings.subtitle_font_size * 0.5)))}px`,
@@ -1757,6 +1885,27 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 onChange={(value) => updateAdvancedSettings({ original_voice_reduction_strength: value })}
               />
             ) : null}
+            <Toggle
+              label="Tự làm chậm video nếu voice Việt quá nhanh"
+              checked={settings.voiceover_auto_slow_video}
+              onChange={(value) => updateAdvancedSettings({ voiceover_auto_slow_video: value })}
+            />
+            <SliderInput
+              label={`Video chậm tối đa: ${settings.voiceover_max_video_slowdown.toFixed(2)}x`}
+              min={1}
+              max={1.5}
+              step={0.01}
+              value={settings.voiceover_max_video_slowdown}
+              onChange={(value) => updateAdvancedSettings({ voiceover_max_video_slowdown: value })}
+            />
+            <SliderInput
+              label={`Tốc độ voice dễ nghe: ${settings.voiceover_comfort_speedup.toFixed(2)}x`}
+              min={1}
+              max={1.8}
+              step={0.01}
+              value={settings.voiceover_comfort_speedup}
+              onChange={(value) => updateAdvancedSettings({ voiceover_comfort_speedup: value })}
+            />
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-slate-200">Visual style</span>
               <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.visual_style_preset_id} onChange={(event) => updateAdvancedSettings({ visual_style_preset_id: event.target.value })}>

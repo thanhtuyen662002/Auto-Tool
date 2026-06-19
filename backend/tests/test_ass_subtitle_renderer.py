@@ -144,10 +144,55 @@ def test_generate_ass_subtitle_uses_timed_cover_segments(tmp_path) -> None:
 
     assert "Dialogue: 0,0:00:00.00,0:00:01.00,SubtitleCover" in content
     assert "Dialogue: 0,0:00:01.00,0:00:02.00,SubtitleCover" in content
-    assert "Dialogue: 1,0:00:00.00,0:00:01.00,Default" in content
-    assert "Dialogue: 1,0:00:01.00,0:00:02.00,Default" in content
-    assert "Dialogue: 1,0:00:00.00,0:00:02.00,Default" not in content
+    assert "Dialogue: 1,0:00:00.00,0:00:02.00,Default" in content
     assert r"m 108 1382 l 972 1382 l 972 1498 l 108 1498" in content
     assert r"m 162 1267 l 918 1267 l 918 1382 l 162 1382" in content
     assert r"\pos(540,1440)" in content
-    assert r"\pos(540,1324)" in content
+
+
+def test_generate_ass_subtitle_can_lead_cover_and_round_corners(tmp_path) -> None:
+    preset = get_visual_style_preset("clean_review_light")
+    output_path = tmp_path / "video_001_rounded_cover.ass"
+
+    generate_ass_subtitle(
+        [{"start_hint": 1.0, "end_hint": 2.0, "text": "Nền che xuất hiện sớm hơn"}],
+        preset,
+        1080,
+        1920,
+        str(output_path),
+        cover_background_enabled=True,
+        cover_background_height_ratio=0.12,
+        cover_background_lead_seconds=0.75,
+        cover_background_tail_seconds=0.25,
+        cover_background_radius_ratio=0.04,
+    )
+
+    content = output_path.read_text(encoding="utf-8")
+
+    assert "Dialogue: 0,0:00:00.25,0:00:02.25,SubtitleCover" in content
+    assert "Dialogue: 1,0:00:01.00,0:00:02.00,Default" in content
+    assert r"{\p1\pos(0,0)}m 9 1690" in content
+    assert " b " in content
+
+
+def test_generate_ass_subtitle_can_cover_source_timing_separately_from_voice_text(tmp_path) -> None:
+    preset = get_visual_style_preset("clean_review_light")
+    output_path = tmp_path / "video_001_cover_reference.ass"
+
+    generate_ass_subtitle(
+        [{"start_hint": 1.0, "end_hint": 2.0, "text": "Sub Việt theo voice"}],
+        preset,
+        1080,
+        1920,
+        str(output_path),
+        cover_background_enabled=True,
+        cover_background_height_ratio=0.12,
+        cover_background_reference_lines=[
+            {"start_hint": 0.2, "end_hint": 0.9, "text": "中文字幕"},
+        ],
+    )
+
+    content = output_path.read_text(encoding="utf-8")
+
+    assert "Dialogue: 0,0:00:00.20,0:00:00.90,SubtitleCover" in content
+    assert "Dialogue: 1,0:00:01.00,0:00:02.00,Default" in content

@@ -77,6 +77,9 @@ class DouyinReupSettings(BaseModel):
     subtitle_cover_height_ratio: float = Field(default=0.12, ge=0.05, le=0.45)
     subtitle_cover_bottom_ratio: float = Field(default=0.0, ge=0, le=0.2)
     subtitle_cover_padding_ratio: float = Field(default=0.035, ge=0, le=0.12)
+    subtitle_cover_lead_seconds: float = Field(default=0.85, ge=0, le=3.0)
+    subtitle_cover_tail_seconds: float = Field(default=0.25, ge=0, le=3.0)
+    subtitle_cover_radius_ratio: float = Field(default=0.035, ge=0, le=0.12)
     keep_original_audio: bool = True
     add_bgm: bool = True
     music_folder: str | None = None
@@ -127,8 +130,8 @@ class DouyinReupSettings(BaseModel):
     silent_voiceover_provider: str = "edge_tts"
     silent_voiceover_voice: str = "vi-VN-HoaiMyNeural"
     voiceover_auto_slow_video: bool = True
-    voiceover_max_video_slowdown: float = Field(default=1.18, ge=1.0, le=1.5)
-    voiceover_comfort_speedup: float = Field(default=1.35, ge=1.0, le=3.0)
+    voiceover_max_video_slowdown: float = Field(default=1.28, ge=1.0, le=1.5)
+    voiceover_comfort_speedup: float = Field(default=1.18, ge=1.0, le=3.0)
     keep_immersive_original_audio: bool = True
     immersive_original_audio_volume: float = Field(default=0.75, ge=0, le=1)
     add_bgm_for_silent_video: bool = True
