@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.29
+
+### Highlights
+
+- Added quick Vietnamese subtitle style templates for review, reup, sale, beauty, tech, and minimal product videos.
+- Subtitle style templates now apply text color, cover background, stroke, shadow, font size, line length, and cover thickness in one click.
+- Removed the duplicate advanced settings button from the Douyin Reup side panel.
+- Fixed advanced settings drawer scrolling so the page behind stays locked and only the drawer content scrolls.
+
+### QA
+
+- Frontend production build passed.
+- Browser verification passed on `/douyin-reup`: one advanced settings button, six subtitle templates visible, template selection updates style controls, drawer scroll is isolated.
+
 ## v1.0.28
 
 ### Highlights

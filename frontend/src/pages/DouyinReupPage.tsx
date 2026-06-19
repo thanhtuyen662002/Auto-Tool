@@ -131,6 +131,167 @@ const VIETNAMESE_TTS_VOICES = [
   { provider: 'google_cloud_tts', voice: 'vi-VN-Wavenet-D', label: 'Google Cloud - Wavenet D (nam)' },
 ];
 
+type VietnameseSubtitleStylePreset = {
+  id: string;
+  name: string;
+  description: string;
+  accentColor: string;
+  settings: Partial<DouyinReupSettings>;
+};
+
+const VIETNAMESE_SUBTITLE_STYLE_PRESETS: VietnameseSubtitleStylePreset[] = [
+  {
+    id: 'review_clear_white',
+    name: 'Review rõ chữ',
+    description: 'Trắng viền đen, nền mỏng, hợp đa số video review sản phẩm.',
+    accentColor: '#FFFFFF',
+    settings: {
+      subtitle_style_custom_enabled: true,
+      subtitle_font_family: 'Arial',
+      subtitle_font_size: 54,
+      subtitle_font_color: '#FFFFFF',
+      subtitle_stroke_color: '#000000',
+      subtitle_stroke_width: 2,
+      subtitle_shadow_enabled: true,
+      subtitle_shadow_color: '#000000',
+      subtitle_shadow_opacity: 0.35,
+      subtitle_shadow_size: 2,
+      subtitle_max_chars_per_line: 22,
+      subtitle_max_lines: 2,
+      subtitle_cover_enabled: true,
+      subtitle_cover_color: '#000000',
+      subtitle_cover_opacity: 0.78,
+      subtitle_cover_height_ratio: 0.11,
+      subtitle_cover_padding_ratio: 0.03,
+    },
+  },
+  {
+    id: 'reup_tiktok_bold',
+    name: 'Reup TikTok đậm',
+    description: 'Chữ vàng to, viền dày, dễ bắt mắt trên video chuyển cảnh nhanh.',
+    accentColor: '#FFF03A',
+    settings: {
+      subtitle_style_custom_enabled: true,
+      subtitle_font_family: 'Arial',
+      subtitle_font_size: 60,
+      subtitle_font_color: '#FFF03A',
+      subtitle_stroke_color: '#000000',
+      subtitle_stroke_width: 4,
+      subtitle_shadow_enabled: true,
+      subtitle_shadow_color: '#000000',
+      subtitle_shadow_opacity: 0.45,
+      subtitle_shadow_size: 3,
+      subtitle_max_chars_per_line: 18,
+      subtitle_max_lines: 2,
+      subtitle_cover_enabled: true,
+      subtitle_cover_color: '#000000',
+      subtitle_cover_opacity: 0.82,
+      subtitle_cover_height_ratio: 0.12,
+      subtitle_cover_padding_ratio: 0.035,
+    },
+  },
+  {
+    id: 'sale_red_yellow',
+    name: 'Sale đỏ vàng',
+    description: 'Nền đỏ, chữ trắng, nhấn CTA và ưu đãi trong video bán hàng.',
+    accentColor: '#FFD54A',
+    settings: {
+      subtitle_style_custom_enabled: true,
+      subtitle_font_family: 'Arial',
+      subtitle_font_size: 58,
+      subtitle_font_color: '#FFFFFF',
+      subtitle_stroke_color: '#4A000A',
+      subtitle_stroke_width: 3,
+      subtitle_shadow_enabled: true,
+      subtitle_shadow_color: '#000000',
+      subtitle_shadow_opacity: 0.32,
+      subtitle_shadow_size: 2,
+      subtitle_max_chars_per_line: 19,
+      subtitle_max_lines: 2,
+      subtitle_cover_enabled: true,
+      subtitle_cover_color: '#B00020',
+      subtitle_cover_opacity: 0.84,
+      subtitle_cover_height_ratio: 0.12,
+      subtitle_cover_padding_ratio: 0.035,
+    },
+  },
+  {
+    id: 'beauty_pastel',
+    name: 'Beauty pastel',
+    description: 'Tone sáng mềm, chữ tối dễ đọc cho mỹ phẩm, thời trang, skincare.',
+    accentColor: '#FF8DBA',
+    settings: {
+      subtitle_style_custom_enabled: true,
+      subtitle_font_family: 'Arial',
+      subtitle_font_size: 52,
+      subtitle_font_color: '#3A2430',
+      subtitle_stroke_color: '#FFFFFF',
+      subtitle_stroke_width: 1,
+      subtitle_shadow_enabled: true,
+      subtitle_shadow_color: '#FFFFFF',
+      subtitle_shadow_opacity: 0.2,
+      subtitle_shadow_size: 2,
+      subtitle_max_chars_per_line: 21,
+      subtitle_max_lines: 2,
+      subtitle_cover_enabled: true,
+      subtitle_cover_color: '#FFF0F6',
+      subtitle_cover_opacity: 0.9,
+      subtitle_cover_height_ratio: 0.12,
+      subtitle_cover_padding_ratio: 0.03,
+    },
+  },
+  {
+    id: 'tech_neon',
+    name: 'Tech neon',
+    description: 'Nền xanh đen, chữ cyan/trắng cho phụ kiện điện tử và gadget.',
+    accentColor: '#35D4FF',
+    settings: {
+      subtitle_style_custom_enabled: true,
+      subtitle_font_family: 'Arial',
+      subtitle_font_size: 54,
+      subtitle_font_color: '#EAFBFF',
+      subtitle_stroke_color: '#002432',
+      subtitle_stroke_width: 2,
+      subtitle_shadow_enabled: true,
+      subtitle_shadow_color: '#35D4FF',
+      subtitle_shadow_opacity: 0.45,
+      subtitle_shadow_size: 3,
+      subtitle_max_chars_per_line: 22,
+      subtitle_max_lines: 2,
+      subtitle_cover_enabled: true,
+      subtitle_cover_color: '#050816',
+      subtitle_cover_opacity: 0.84,
+      subtitle_cover_height_ratio: 0.11,
+      subtitle_cover_padding_ratio: 0.035,
+    },
+  },
+  {
+    id: 'minimal_transparent',
+    name: 'Minimal trong',
+    description: 'Nền đen trong hơn, giữ nhiều hình sản phẩm nhưng vẫn che sub gốc.',
+    accentColor: '#CBD5E1',
+    settings: {
+      subtitle_style_custom_enabled: true,
+      subtitle_font_family: 'Arial',
+      subtitle_font_size: 50,
+      subtitle_font_color: '#FFFFFF',
+      subtitle_stroke_color: '#000000',
+      subtitle_stroke_width: 2,
+      subtitle_shadow_enabled: true,
+      subtitle_shadow_color: '#000000',
+      subtitle_shadow_opacity: 0.28,
+      subtitle_shadow_size: 2,
+      subtitle_max_chars_per_line: 24,
+      subtitle_max_lines: 2,
+      subtitle_cover_enabled: true,
+      subtitle_cover_color: '#000000',
+      subtitle_cover_opacity: 0.58,
+      subtitle_cover_height_ratio: 0.1,
+      subtitle_cover_padding_ratio: 0.025,
+    },
+  },
+];
+
 const DEFAULT_SETTINGS: DouyinReupSettings = {
   enabled: true,
   preset_id: 'safe_review',
@@ -1094,6 +1255,15 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     updateSettings(updates);
   }
 
+  function applyVietnameseSubtitleStylePreset(preset: VietnameseSubtitleStylePreset) {
+    updateAdvancedSettings({
+      burn_subtitle: true,
+      subtitle_cover_auto_position: true,
+      subtitle_cover_probe_if_no_ocr: true,
+      ...preset.settings,
+    });
+  }
+
   function renderAdvancedSettings() {
     return (
       <>
@@ -1184,6 +1354,54 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             </div>
           ) : null}
           <div className="grid gap-3 border-t border-white/10 pt-4">
+            <div className="grid gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h4 className="font-semibold text-white">Mẫu sub Việt</h4>
+                  <p className="mt-1 text-sm leading-6 text-slate-400">Chọn nhanh style cho video review, reup, sale. Bạn vẫn có thể chỉnh tay sau khi chọn mẫu.</p>
+                </div>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {VIETNAMESE_SUBTITLE_STYLE_PRESETS.map((preset) => {
+                  const active = isVietnameseSubtitleStylePresetActive(preset, settings);
+                  const presetBackground = String(preset.settings.subtitle_cover_color || '#000000');
+                  const presetOpacity = Number(preset.settings.subtitle_cover_opacity ?? 0.8);
+                  return (
+                    <button
+                      className={`grid gap-2 rounded-md border p-3 text-left transition ${
+                        active
+                          ? 'border-cyan-300/70 bg-cyan-300/12 text-cyan-50'
+                          : 'border-white/10 bg-slate-950/45 text-slate-200 hover:border-cyan-300/35 hover:bg-white/8'
+                      }`}
+                      key={preset.id}
+                      type="button"
+                      onClick={() => applyVietnameseSubtitleStylePreset(preset)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="grid h-11 w-16 place-items-center rounded border border-white/15 text-sm font-black"
+                          style={{
+                            backgroundColor: hexToRgba(presetBackground, presetOpacity),
+                            color: String(preset.settings.subtitle_font_color || '#FFFFFF'),
+                            textShadow: preset.settings.subtitle_shadow_enabled
+                              ? `0 2px ${preset.settings.subtitle_shadow_size || 2}px ${hexToRgba(String(preset.settings.subtitle_shadow_color || '#000000'), Number(preset.settings.subtitle_shadow_opacity ?? 0.35))}`
+                              : 'none',
+                            WebkitTextStroke: `${Math.max(0, Math.min(3, Number(preset.settings.subtitle_stroke_width || 0)))}px ${String(preset.settings.subtitle_stroke_color || '#000000')}`,
+                          }}
+                        >
+                          Sub
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold">{preset.name}</span>
+                          <span className="mt-0.5 block text-xs leading-5 text-slate-400">{preset.description}</span>
+                        </span>
+                      </div>
+                      <span className="h-1 rounded-full" style={{ backgroundColor: preset.accentColor }} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Toggle
                 label="Tùy chỉnh style sub Việt"
@@ -1193,13 +1411,13 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               <div
                 className="min-w-[220px] rounded-md border border-white/10 px-4 py-3 text-center"
                 style={{
-                  backgroundColor: settings.subtitle_cover_enabled ? settings.subtitle_cover_color : 'rgba(15, 23, 42, 0.85)',
+                  backgroundColor: settings.subtitle_cover_enabled ? hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity) : 'rgba(15, 23, 42, 0.85)',
                   color: settings.subtitle_font_color,
                   fontFamily: settings.subtitle_font_family || 'Arial',
                   fontSize: `${Math.max(18, Math.min(34, Math.round(settings.subtitle_font_size * 0.5)))}px`,
                   fontWeight: 700,
                   textShadow: settings.subtitle_shadow_enabled
-                    ? `0 2px ${settings.subtitle_shadow_size}px ${settings.subtitle_shadow_color}`
+                    ? `0 2px ${settings.subtitle_shadow_size}px ${hexToRgba(settings.subtitle_shadow_color, settings.subtitle_shadow_opacity)}`
                     : 'none',
                   WebkitTextStroke: `${Math.max(0, Math.min(3, settings.subtitle_stroke_width))}px ${settings.subtitle_stroke_color}`,
                 }}
@@ -1619,7 +1837,6 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             <StartAdvancedSettingsDrawer
               open={advancedOpen}
               custom={mode === 'advanced'}
-              onOpen={() => setAdvancedOpen(true)}
               onClose={() => setAdvancedOpen(false)}
               onReset={() => void handlePresetSelect(selectedPresetId)}
             >
@@ -2712,6 +2929,27 @@ function VoiceoverCard({
       ) : null}
     </GlassCard>
   );
+}
+
+function isVietnameseSubtitleStylePresetActive(preset: VietnameseSubtitleStylePreset, settings: DouyinReupSettings): boolean {
+  return Object.entries(preset.settings).every(([key, expected]) => {
+    const current = settings[key as keyof DouyinReupSettings];
+    if (typeof expected === 'number' && typeof current === 'number') {
+      return Math.abs(current - expected) < 0.001;
+    }
+    return current === expected;
+  });
+}
+
+function hexToRgba(hexColor: string | undefined, opacity = 1): string {
+  const cleaned = (hexColor || '#000000').trim().replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(cleaned)) {
+    return `rgba(0, 0, 0, ${Math.max(0, Math.min(1, opacity))})`;
+  }
+  const red = parseInt(cleaned.slice(0, 2), 16);
+  const green = parseInt(cleaned.slice(2, 4), 16);
+  const blue = parseInt(cleaned.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${Math.max(0, Math.min(1, opacity))})`;
 }
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
