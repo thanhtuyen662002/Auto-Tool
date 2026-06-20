@@ -33,6 +33,122 @@ DOWNLOAD_HISTORY_LIMIT = 20000
 SCANNED_CHANNEL_HISTORY_LIMIT = 60
 SCANNED_LINKS_PER_CHANNEL_LIMIT = 10000
 DOUYIN_VIDEO_URL_PATTERN = re.compile(r"(?:https?://(?:www\.)?douyin\.com)?/video/(\d+)")
+CHANNEL_SCROLL_SCRIPT = """
+const amount = Math.max(1800, Math.floor((window.innerHeight || 900) * 1.9));
+const blockedSelector = [
+  '[role="dialog"]',
+  'aside',
+  'header',
+  'footer',
+  '[class*="modal" i]',
+  '[class*="popup" i]',
+  '[class*="comment" i]',
+  '[class*="sidebar" i]'
+].join(',');
+
+function isVisible(element) {
+  if (!element || element.closest?.(blockedSelector)) return false;
+  const style = window.getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
+  return (
+    style.display !== 'none' &&
+    style.visibility !== 'hidden' &&
+    Number(style.opacity || 1) > 0 &&
+    rect.width >= 240 &&
+    rect.height >= 180 &&
+    rect.bottom > 0 &&
+    rect.right > 0 &&
+    rect.top < (window.innerHeight || 900) &&
+    rect.left < (window.innerWidth || 1200)
+  );
+}
+
+function scrollMetrics(element) {
+  if (!element) return null;
+  const scrollTop = Number(element.scrollTop || 0);
+  const scrollHeight = Number(element.scrollHeight || 0);
+  const clientHeight = Number(element.clientHeight || 0);
+  return {
+    scrollTop,
+    scrollHeight,
+    clientHeight,
+    canScrollDown: scrollHeight - clientHeight - scrollTop > 8,
+  };
+}
+
+function scoreCandidate(element) {
+  if (!element) return -1;
+  const metrics = scrollMetrics(element);
+  if (!metrics || metrics.scrollHeight <= metrics.clientHeight + 24) return -1;
+  const isRoot = element === document.scrollingElement || element === document.documentElement || element === document.body;
+  if (!isRoot && !isVisible(element)) return -1;
+  const style = window.getComputedStyle(element);
+  const rect = isRoot
+    ? { width: window.innerWidth || 1200, height: window.innerHeight || 900, top: 0, left: 0 }
+    : element.getBoundingClientRect();
+  const overflowY = `${style.overflowY || ''} ${style.overflow || ''}`.toLowerCase();
+  const overflowBonus = /(auto|scroll|overlay)/.test(overflowY) ? 80 : 0;
+  const areaScore = Math.min(140, (rect.width * rect.height) / 12000);
+  const feedBonus = element.querySelector?.('a[href*="/video/"], video') ? 130 : 0;
+  const centralY = ((rect.top || 0) + rect.height / 2) / Math.max(1, window.innerHeight || 900);
+  const centralBonus = Math.max(0, 60 - Math.abs(centralY - 0.55) * 120);
+  const rootPenalty = isRoot ? 45 : 0;
+  return overflowBonus + areaScore + feedBonus + centralBonus + (metrics.canScrollDown ? 100 : 0) - rootPenalty;
+}
+
+const candidates = Array.from(new Set([
+  document.scrollingElement,
+  document.documentElement,
+  document.body,
+  ...document.querySelectorAll('main, [role="main"], [class*="scroll" i], [class*="list" i], [class*="feed" i], [class*="waterfall" i], [class*="virtual" i], div')
+])).filter(Boolean).map((element) => ({ element, score: scoreCandidate(element) }))
+  .filter((item) => item.score >= 0)
+  .sort((a, b) => b.score - a.score);
+
+const target = candidates[0]?.element || document.scrollingElement || document.documentElement || document.body;
+const before = scrollMetrics(target) || { scrollTop: 0, scrollHeight: 0, clientHeight: 0 };
+const beforeWindowY = Number(window.scrollY || window.pageYOffset || 0);
+const beforeCandidateTops = candidates.slice(0, 12).map((item) => Number(item.element.scrollTop || 0));
+
+function fireWheel(element) {
+  const rect = element?.getBoundingClientRect?.();
+  const x = rect ? Math.max(1, Math.min(window.innerWidth - 2, rect.left + rect.width / 2)) : Math.floor((window.innerWidth || 1200) / 2);
+  const y = rect ? Math.max(1, Math.min(window.innerHeight - 2, rect.top + rect.height / 2)) : Math.floor((window.innerHeight || 900) / 2);
+  const wheelTarget = document.elementFromPoint(x, y) || element || document.body;
+  wheelTarget.dispatchEvent(new WheelEvent('wheel', {
+    deltaY: amount,
+    deltaX: 0,
+    bubbles: true,
+    cancelable: true,
+    view: window,
+  }));
+}
+
+fireWheel(target);
+if (target?.scrollBy) {
+  target.scrollBy({ top: amount, left: 0, behavior: 'auto' });
+}
+if (target && typeof target.scrollTop === 'number') {
+  target.scrollTop = Math.min(target.scrollTop + amount, Math.max(0, target.scrollHeight - target.clientHeight));
+}
+window.scrollBy({ top: amount, left: 0, behavior: 'auto' });
+document.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', code: 'PageDown', bubbles: true }));
+document.dispatchEvent(new KeyboardEvent('keyup', { key: 'PageDown', code: 'PageDown', bubbles: true }));
+
+const after = scrollMetrics(target) || { scrollTop: 0, scrollHeight: 0, clientHeight: 0 };
+const afterWindowY = Number(window.scrollY || window.pageYOffset || 0);
+const anyCandidateMoved = candidates.slice(0, 12).some((item, index) => Math.abs(Number(item.element.scrollTop || 0) - beforeCandidateTops[index]) > 4);
+return {
+  scrolled: Math.abs(after.scrollTop - before.scrollTop) > 4 || Math.abs(afterWindowY - beforeWindowY) > 4 || anyCandidateMoved,
+  beforeTop: before.scrollTop,
+  afterTop: after.scrollTop,
+  beforeWindowY,
+  afterWindowY,
+  scrollableCount: candidates.length,
+  targetTag: target?.tagName || '',
+  targetClass: String(target?.className || '').slice(0, 120),
+};
+"""
 LOGIN_COOKIE_NAMES = {
     "sessionid",
     "sessionid_ss",
@@ -491,7 +607,11 @@ class DouyinDownloaderService:
                     if index == 0 or index % 5 == 4:
                         job.log(f"Đã tìm thấy {current_count} đường dẫn video.")
 
-                    self._scroll_channel_page(driver)
+                    scroll_result = self._scroll_channel_page(driver)
+                    if not scroll_result.get("scrolled") and (index == 0 or index % 5 == 4):
+                        job.log(
+                            "Chưa thấy trang đổi vị trí sau lệnh cuộn; đang thử cuộn container feed nội bộ của Douyin."
+                        )
                     time.sleep(random.uniform(1.0, 1.8))
 
                     if current_count == last_count:
@@ -1024,21 +1144,19 @@ class DouyinDownloaderService:
                 result.append(normalized)
         return list(dict.fromkeys(result))
 
-    def _scroll_channel_page(self, driver: Any) -> None:
+    def _scroll_channel_page(self, driver: Any) -> dict[str, Any]:
         try:
+            result = driver.execute_script(CHANNEL_SCROLL_SCRIPT)
+            return dict(result) if isinstance(result, dict) else {}
+        except Exception:
             driver.execute_script(
                 """
-                const amount = Math.max(1800, Math.floor((window.innerHeight || 900) * 1.8));
-                const root = document.scrollingElement || document.documentElement || document.body;
-                if (root && typeof root.scrollBy === 'function') {
-                  root.scrollBy({ top: amount, left: 0, behavior: 'smooth' });
-                } else {
-                  window.scrollBy({ top: amount, left: 0, behavior: 'smooth' });
-                }
+                const amount = 2400;
+                window.scrollBy(0, amount);
+                document.body && document.body.dispatchEvent(new WheelEvent('wheel', { deltaY: amount, bubbles: true, cancelable: true }));
                 """
             )
-        except Exception:
-            driver.execute_script("window.scrollBy(0, 2400);")
+            return {"scrolled": False, "fallback": True}
 
     def _is_valid_downloaded_video_file(self, path: Path) -> bool:
         try:
