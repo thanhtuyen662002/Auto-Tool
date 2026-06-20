@@ -32,6 +32,7 @@ SCAN_NO_NEW_LINK_LIMIT = 18
 DOWNLOAD_HISTORY_LIMIT = 20000
 SCANNED_CHANNEL_HISTORY_LIMIT = 60
 SCANNED_LINKS_PER_CHANNEL_LIMIT = 10000
+DOUYIN_VIDEO_URL_PATTERN = re.compile(r"(?:https?://(?:www\.)?douyin\.com)?/video/(\d+)")
 LOGIN_COOKIE_NAMES = {
     "sessionid",
     "sessionid_ss",
@@ -474,13 +475,10 @@ class DouyinDownloaderService:
                     if job.pause_requested:
                         self._mark_job_paused(job)
                         return
-                    anchors = driver.find_elements("css selector", 'a[href*="/video/"]')
-                    for anchor in anchors:
-                        href = anchor.get_attribute("href")
-                        if href:
-                            normalized_href = self._normalize_link(href)
-                            if normalized_href and not self._is_note_link(normalized_href):
-                                links.add(normalized_href)
+                    page_links = self._extract_channel_video_links(driver)
+                    for normalized_href in page_links:
+                        if normalized_href and not self._is_note_link(normalized_href):
+                            links.add(normalized_href)
                     current_count = len(links)
                     job.links = sorted(links)
                     job.total_items = current_count
@@ -493,13 +491,7 @@ class DouyinDownloaderService:
                     if index == 0 or index % 5 == 4:
                         job.log(f"Đã tìm thấy {current_count} đường dẫn video.")
 
-                    if anchors:
-                        try:
-                            driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'end'});", anchors[-1])
-                        except Exception:
-                            driver.execute_script("window.scrollBy(0, 2400);")
-                    else:
-                        driver.execute_script("window.scrollBy(0, 2400);")
+                    self._scroll_channel_page(driver)
                     time.sleep(random.uniform(1.0, 1.8))
 
                     if current_count == last_count:
@@ -967,6 +959,87 @@ class DouyinDownloaderService:
     def _is_note_link(self, link: str) -> bool:
         return "/note/" in self._normalize_link(link).lower()
 
+    def _normalize_video_link(self, link: str) -> str:
+        cleaned = self._normalize_link(link)
+        match = DOUYIN_VIDEO_URL_PATTERN.search(cleaned)
+        if not match:
+            return ""
+        return f"{DOUYIN_HOME_URL}video/{match.group(1)}"
+
+    def _extract_channel_video_links(self, driver: Any) -> list[str]:
+        script = """
+            const anchors = Array.from(document.querySelectorAll('a[href*="/video/"]'));
+            const blockedSelector = [
+              '[role="dialog"]',
+              'aside',
+              'header',
+              'footer',
+              '[class*="modal" i]',
+              '[class*="popup" i]',
+              '[class*="comment" i]',
+              '[class*="recommend" i]',
+              '[class*="related" i]',
+              '[class*="sidebar" i]'
+            ].join(',');
+
+            function visibleRect(element) {
+              let current = element;
+              for (let depth = 0; current && depth < 5; depth += 1) {
+                if (current === document.body || current === document.documentElement) return null;
+                const style = window.getComputedStyle(current);
+                const rect = current.getBoundingClientRect();
+                if (
+                  style.display !== 'none' &&
+                  style.visibility !== 'hidden' &&
+                  Number(style.opacity || 1) > 0 &&
+                  rect.width >= 72 &&
+                  rect.height >= 72
+                ) {
+                  return rect;
+                }
+                current = current.parentElement;
+              }
+              return null;
+            }
+
+            const results = [];
+            for (const anchor of anchors) {
+              const href = anchor.href || anchor.getAttribute('href') || '';
+              if (!/\\/video\\/\\d+/.test(href)) continue;
+              if (anchor.closest(blockedSelector)) continue;
+              const rect = visibleRect(anchor);
+              if (!rect) continue;
+              results.push(href);
+            }
+            return Array.from(new Set(results));
+        """
+        try:
+            raw_links = driver.execute_script(script)
+        except Exception:
+            raw_links = []
+        result: list[str] = []
+        for raw_link in raw_links or []:
+            normalized = self._normalize_video_link(str(raw_link))
+            if normalized:
+                result.append(normalized)
+        return list(dict.fromkeys(result))
+
+    def _scroll_channel_page(self, driver: Any) -> None:
+        try:
+            driver.execute_script(
+                """
+                const amount = Math.max(1800, Math.floor((window.innerHeight || 900) * 1.8));
+                const root = document.scrollingElement || document.documentElement || document.body;
+                if (root && typeof root.scrollBy === 'function') {
+                  root.scrollBy({ top: amount, left: 0, behavior: 'smooth' });
+                } else {
+                  window.scrollBy({ top: amount, left: 0, behavior: 'smooth' });
+                }
+                """
+            )
+        except Exception:
+            driver.execute_script("window.scrollBy(0, 2400);")
+
     def _is_valid_downloaded_video_file(self, path: Path) -> bool:
         try:
             self._validate_downloaded_video(path)
@@ -1096,7 +1169,7 @@ class DouyinDownloaderService:
         seen: set[str] = set()
         cleaned: list[str] = []
         for link in links:
-            normalized = self._normalize_link(link)
+            normalized = self._normalize_video_link(link) or self._normalize_link(link)
             if not normalized or normalized in seen:
                 continue
             cleaned.append(normalized)
