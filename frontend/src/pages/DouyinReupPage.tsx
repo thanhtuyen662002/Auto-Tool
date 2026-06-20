@@ -645,6 +645,8 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   ocr_merge_gap_ms: 600,
   ocr_min_duration_ms: 500,
   ocr_max_duration_ms: 6000,
+  ocr_filter_watermarks: true,
+  ocr_watermark_terms: ['小米同学', '小米同學'],
   prefer_ocr_over_asr_when_text_visible: false,
   visual_style_preset_id: 'clean_review_light',
   burn_subtitle: true,
@@ -758,6 +760,10 @@ function defaultProjectName(workflow: 'douyin' | 'silent'): string {
 
 function normalizeDouyinSettings(settings: Partial<DouyinReupSettings>): DouyinReupSettings {
   return { ...DEFAULT_SETTINGS, ...settings };
+}
+
+function splitWatermarkTerms(value: string): string[] {
+  return value.split(/[,;，\n]+/).map((item) => item.trim()).filter(Boolean);
 }
 
 function readSavedDouyinSettings(): Partial<DouyinReupSettings> {
@@ -1357,6 +1363,8 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       batch_watchdog_stale_minutes: settings.batch_watchdog_stale_minutes,
       batch_pause_on_repeated_failures: settings.batch_pause_on_repeated_failures,
       batch_max_consecutive_failures: settings.batch_max_consecutive_failures,
+      ocr_filter_watermarks: settings.ocr_filter_watermarks,
+      ocr_watermark_terms: settings.ocr_watermark_terms,
     };
   }
 
@@ -2265,6 +2273,16 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           <div className="grid gap-3 sm:grid-cols-2">
             <SliderInput label={`Độ chắc chắn tối thiểu khi đọc chữ`} min={0} max={1} step={0.05} value={settings.ocr_min_confidence} onChange={(value) => updateAdvancedSettings({ ocr_min_confidence: value })} />
             <Toggle label="Ưu tiên chữ trên màn hình" checked={settings.prefer_ocr_over_asr_when_text_visible} onChange={(value) => updateAdvancedSettings({ prefer_ocr_over_asr_when_text_visible: value })} />
+            <Toggle label="Lọc watermark khi đọc chữ" checked={settings.ocr_filter_watermarks} onChange={(value) => updateAdvancedSettings({ ocr_filter_watermarks: value })} />
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">Watermark bỏ qua</span>
+              <input
+                className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                value={settings.ocr_watermark_terms.join(', ')}
+                onChange={(event) => updateAdvancedSettings({ ocr_watermark_terms: splitWatermarkTerms(event.target.value) })}
+                placeholder="小米同学, tên kênh..."
+              />
+            </label>
           </div>
           {settings.ocr_region_mode === 'manual' ? (
             <div className="grid gap-2 sm:grid-cols-4">

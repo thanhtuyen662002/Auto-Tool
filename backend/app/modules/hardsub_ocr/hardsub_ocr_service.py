@@ -133,6 +133,12 @@ class HardSubOCRService:
 
         _progress(progress_callback, "ocr_merging_lines", 95, len(frames), len(frames))
         lines = self.line_merger.merge_frames_to_lines(frame_results, settings)
+        filter_summary = dict(getattr(self.line_merger, "last_filter_summary", {}) or {})
+        watermark_removed_count = int(filter_summary.get("watermark_removed_frame_count", 0) or 0)
+        if watermark_removed_count:
+            warnings.append(
+                f"ocr_watermark_filtered: removed watermark/channel label text from {watermark_removed_count} OCR frame(s) before translation."
+            )
         text_frame_count = sum(1 for frame in frame_results if str(frame.text or "").strip())
         accepted_frame_count = sum(line.frame_count for line in lines)
         if text_frame_count and accepted_frame_count < max(1, int(text_frame_count * 0.35)):
@@ -176,6 +182,7 @@ class HardSubOCRService:
             "detected_line_count": len(lines),
             "average_confidence": round(average_confidence, 4),
             "source_srt_path": source_srt_path,
+            "filter_summary": filter_summary,
             "frames": [
                 {
                     "timestamp_ms": frame.timestamp_ms,

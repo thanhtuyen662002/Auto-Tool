@@ -84,3 +84,48 @@ def test_merger_keeps_useful_low_confidence_chinese_candidates():
 
     assert [line.text for line in lines] == ["家里一定要有一个好用的电炖锅"]
     assert any("ocr_low_confidence_candidate" in warning for warning in lines[0].warnings)
+
+
+def test_merger_strips_known_xiaomi_watermark_from_ocr_text():
+    settings = DouyinReupSettings(enabled=True, ocr_min_confidence=0.55)
+    merger = OCRLineMerger()
+
+    lines = merger.merge_frames_to_lines(
+        [
+            _frame(0, "\u5c0f\u7c73\u540c\u5b66"),
+            _frame(500, "\u5c0f\u7c73\u540c\u5b66 \u8fd9\u4e2a\u771f\u7684\u5f88\u597d\u7528"),
+            _frame(1000, "\u5c0f\u7c73\u540c\u5b66 \u8fd9\u4e2a\u771f\u7684\u5f88\u597d\u7528"),
+        ],
+        settings,
+    )
+
+    assert [line.text for line in lines] == ["\u8fd9\u4e2a\u771f\u7684\u5f88\u597d\u7528"]
+    assert any("ocr_watermark_filtered" in warning for warning in lines[0].warnings)
+    assert merger.last_filter_summary["watermark_removed_frame_count"] == 3
+    assert merger.last_filter_summary["watermark_only_frame_count"] == 1
+
+
+def test_merger_uses_subtitle_raw_block_when_watermark_is_separate():
+    settings = DouyinReupSettings(enabled=True, ocr_min_confidence=0.55)
+    frame = OCRFrameResult(
+        timestamp_ms=0,
+        region=OCRRegion(x=0, y=0, width=1080, height=1920),
+        text="\u5c0f\u7c73\u540c\u5b66 \u8fd9\u4e2a\u6536\u7eb3\u771f\u7684\u5f88\u65b9\u4fbf",
+        confidence=0.9,
+        raw_blocks=[
+            {
+                "box": [[780, 100], [980, 100], [980, 150], [780, 150]],
+                "text": "\u5c0f\u7c73\u540c\u5b66",
+                "confidence": 0.96,
+            },
+            {
+                "box": [[150, 1320], [930, 1320], [930, 1390], [150, 1390]],
+                "text": "\u8fd9\u4e2a\u6536\u7eb3\u771f\u7684\u5f88\u65b9\u4fbf",
+                "confidence": 0.82,
+            },
+        ],
+    )
+
+    lines = OCRLineMerger().merge_frames_to_lines([frame], settings)
+
+    assert [line.text for line in lines] == ["\u8fd9\u4e2a\u6536\u7eb3\u771f\u7684\u5f88\u65b9\u4fbf"]

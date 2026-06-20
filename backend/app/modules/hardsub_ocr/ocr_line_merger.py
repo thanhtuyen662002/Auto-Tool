@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from difflib import SequenceMatcher
+from typing import Any
 
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
 from app.modules.hardsub_ocr.chinese_text_cleaner import ChineseTextCleaner
@@ -13,11 +14,14 @@ LOW_CONFIDENCE_WARNING = (
     "hãy review kỹ dòng này."
 )
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+WATERMARK_FILTER_WARNING = "ocr_watermark_filtered: removed an OCR watermark/channel label before subtitle translation."
+DEFAULT_WATERMARK_TERMS = ("\u5c0f\u7c73\u540c\u5b66", "\u5c0f\u7c73\u540c\u5b78")
 
 
 class OCRLineMerger:
     def __init__(self, cleaner: ChineseTextCleaner | None = None) -> None:
         self.cleaner = cleaner or ChineseTextCleaner()
+        self.last_filter_summary: dict[str, int] = {}
 
     def merge_frames_to_lines(
         self,
@@ -31,9 +35,19 @@ class OCRLineMerger:
         min_duration = int(settings.ocr_min_duration_ms)
         max_duration = int(settings.ocr_max_duration_ms)
 
+        self.last_filter_summary = {
+            "watermark_removed_frame_count": 0,
+            "watermark_only_frame_count": 0,
+        }
         candidates: list[dict] = []
         for frame in sorted(frame_results, key=lambda item: item.timestamp_ms):
-            text = self.cleaner.clean(frame.text)
+            frame_text = _filtered_frame_text(frame, settings, self.cleaner)
+            text = frame_text["text"]
+            watermark_removed = bool(frame_text["watermark_removed"])
+            if watermark_removed:
+                self.last_filter_summary["watermark_removed_frame_count"] += 1
+                if not text:
+                    self.last_filter_summary["watermark_only_frame_count"] += 1
             if not self.cleaner.looks_like_chinese_subtitle(text, min_text_length=min_text_length):
                 continue
             confidence = float(frame.confidence)
@@ -51,6 +65,7 @@ class OCRLineMerger:
                     "text": text,
                     "confidence": confidence,
                     "is_low_confidence": is_low_confidence,
+                    "warnings": [WATERMARK_FILTER_WARNING] if watermark_removed else [],
                 }
             )
 
@@ -61,8 +76,9 @@ class OCRLineMerger:
             text = str(candidate["text"])
             confidence = float(candidate["confidence"])
             is_low_confidence = bool(candidate["is_low_confidence"])
+            candidate_warnings = list(candidate.get("warnings") or [])
             if current is None:
-                current = _new_line(timestamp_ms, text, confidence, is_low_confidence)
+                current = _new_line(timestamp_ms, text, confidence, is_low_confidence, candidate_warnings)
                 continue
 
             gap = timestamp_ms - int(current["last_ts"])
@@ -77,6 +93,9 @@ class OCRLineMerger:
                 current["is_low_confidence"] = bool(current.get("is_low_confidence")) or is_low_confidence
                 if is_low_confidence and LOW_CONFIDENCE_WARNING not in current["warnings"]:
                     current["warnings"].append(LOW_CONFIDENCE_WARNING)
+                for warning in candidate_warnings:
+                    if warning not in current["warnings"]:
+                        current["warnings"].append(warning)
                 if _is_better_text(
                     str(current["text"]),
                     float(current.get("best_confidence", 0.0)),
@@ -88,7 +107,7 @@ class OCRLineMerger:
                 continue
 
             lines.append(_close_line(current, len(lines) + 1, min_duration, max_duration))
-            current = _new_line(timestamp_ms, text, confidence, is_low_confidence)
+            current = _new_line(timestamp_ms, text, confidence, is_low_confidence, candidate_warnings)
 
         if current is not None:
             lines.append(_close_line(current, len(lines) + 1, min_duration, max_duration))
@@ -99,7 +118,13 @@ def similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
-def _new_line(timestamp_ms: int, text: str, confidence: float, is_low_confidence: bool = False) -> dict:
+def _new_line(
+    timestamp_ms: int,
+    text: str,
+    confidence: float,
+    is_low_confidence: bool = False,
+    warnings: list[str] | None = None,
+) -> dict:
     return {
         "start_ms": int(timestamp_ms),
         "last_ts": int(timestamp_ms),
@@ -108,7 +133,7 @@ def _new_line(timestamp_ms: int, text: str, confidence: float, is_low_confidence
         "best_confidence": float(confidence),
         "is_low_confidence": bool(is_low_confidence),
         "frame_count": 1,
-        "warnings": [LOW_CONFIDENCE_WARNING] if is_low_confidence else [],
+        "warnings": _dedupe_warnings(([LOW_CONFIDENCE_WARNING] if is_low_confidence else []) + list(warnings or [])),
     }
 
 
@@ -128,6 +153,223 @@ def _close_line(current: dict, index: int, min_duration_ms: int, max_duration_ms
         frame_count=int(current["frame_count"]),
         warnings=list(current.get("warnings") or []),
     )
+
+
+def _filtered_frame_text(
+    frame: OCRFrameResult,
+    settings: DouyinReupSettings,
+    cleaner: ChineseTextCleaner,
+) -> dict[str, Any]:
+    if not bool(getattr(settings, "ocr_filter_watermarks", True)):
+        return {"text": cleaner.clean(frame.text), "watermark_removed": False}
+
+    raw_result = _text_from_raw_blocks(frame, settings, cleaner)
+    if raw_result["used_raw_blocks"]:
+        return {"text": raw_result["text"], "watermark_removed": raw_result["watermark_removed"]}
+
+    text, watermark_removed = _strip_watermark_terms(cleaner.clean(frame.text), settings)
+    return {"text": cleaner.clean(text), "watermark_removed": watermark_removed}
+
+
+def _text_from_raw_blocks(
+    frame: OCRFrameResult,
+    settings: DouyinReupSettings,
+    cleaner: ChineseTextCleaner,
+) -> dict[str, Any]:
+    raw_blocks = list(frame.raw_blocks or [])
+    if not raw_blocks:
+        return {"text": "", "watermark_removed": False, "used_raw_blocks": False}
+
+    blocks: list[dict[str, Any]] = []
+    watermark_removed = False
+    for raw in raw_blocks:
+        if not isinstance(raw, dict):
+            continue
+        text, removed = _strip_watermark_terms(cleaner.clean(raw.get("text", "")), settings)
+        watermark_removed = watermark_removed or removed
+        text = cleaner.clean(text)
+        if not text:
+            continue
+        bounds = _raw_block_bounds(raw)
+        blocks.append(
+            {
+                "text": text,
+                "confidence": _safe_float(raw.get("confidence"), float(frame.confidence)),
+                "left": bounds[0] if bounds else None,
+                "top": bounds[1] if bounds else None,
+                "right": bounds[2] if bounds else None,
+                "bottom": bounds[3] if bounds else None,
+            }
+        )
+
+    if not blocks:
+        return {"text": "", "watermark_removed": watermark_removed, "used_raw_blocks": watermark_removed}
+
+    selected = _select_subtitle_blocks(blocks, width=max(1, frame.region.width), height=max(1, frame.region.height))
+    text = cleaner.clean(" ".join(block["text"] for block in _sort_blocks_for_reading(selected)))
+    return {"text": text, "watermark_removed": watermark_removed, "used_raw_blocks": True}
+
+
+def _strip_watermark_terms(text: str, settings: DouyinReupSettings) -> tuple[str, bool]:
+    output = str(text or "")
+    removed = False
+    for term in _watermark_terms(settings):
+        pattern = _watermark_pattern(term)
+        if not pattern:
+            continue
+        next_output = re.sub(pattern, " ", output, flags=re.IGNORECASE)
+        if next_output != output:
+            output = next_output
+            removed = True
+    return re.sub(r"\s+", " ", output).strip(), removed
+
+
+def _watermark_terms(settings: DouyinReupSettings) -> list[str]:
+    raw_terms = getattr(settings, "ocr_watermark_terms", None)
+    terms = raw_terms if raw_terms is not None else list(DEFAULT_WATERMARK_TERMS)
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        text = re.sub(r"\s+", "", str(term or ""))
+        if not text:
+            continue
+        key = _normalize_for_similarity(text).lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(text)
+    return cleaned
+
+
+def _watermark_pattern(term: str) -> str:
+    compact = [char for char in str(term or "") if not char.isspace()]
+    if not compact:
+        return ""
+    separator = r"[\s\-_.:：·•|/\\]*"
+    return separator.join(re.escape(char) for char in compact)
+
+
+def _raw_block_bounds(raw: dict[str, Any]) -> tuple[float, float, float, float] | None:
+    xs: list[float] = []
+    ys: list[float] = []
+    for point in raw.get("box") or []:
+        try:
+            xs.append(float(point[0]))
+            ys.append(float(point[1]))
+        except Exception:
+            continue
+    if not xs or not ys:
+        return None
+    left = min(xs)
+    right = max(xs)
+    top = min(ys)
+    bottom = max(ys)
+    if right <= left or bottom <= top:
+        return None
+    return left, top, right, bottom
+
+
+def _select_subtitle_blocks(blocks: list[dict[str, Any]], *, width: int, height: int) -> list[dict[str, Any]]:
+    boxed = [block for block in blocks if block.get("left") is not None]
+    if not boxed:
+        return blocks
+
+    candidates: list[dict[str, Any]] = []
+    for block in boxed:
+        width_ratio = (float(block["right"]) - float(block["left"])) / max(1.0, float(width))
+        center_x = ((float(block["left"]) + float(block["right"])) / 2.0) / max(1.0, float(width))
+        visible_length = _visible_text_length(str(block["text"]))
+        if visible_length <= 2 and width_ratio < 0.22:
+            continue
+        if visible_length <= 4 and width_ratio < 0.16 and _center_score(center_x) < 0.65:
+            continue
+        candidates.append(block)
+
+    clusters = _cluster_blocks_by_y(candidates or boxed, height=height)
+    if not clusters:
+        return blocks
+    return max(clusters, key=lambda cluster: _cluster_score(cluster, width=width, height=height))
+
+
+def _cluster_blocks_by_y(blocks: list[dict[str, Any]], *, height: int) -> list[list[dict[str, Any]]]:
+    max_gap = max(18.0, float(height) * 0.12)
+    clusters: list[list[dict[str, Any]]] = []
+    for block in sorted(blocks, key=lambda item: (float(item["top"]), float(item["left"]))):
+        if not clusters:
+            clusters.append([block])
+            continue
+        current = clusters[-1]
+        current_bottom = max(float(item["bottom"]) for item in current)
+        if float(block["top"]) <= current_bottom + max_gap:
+            current.append(block)
+        else:
+            clusters.append([block])
+    return clusters
+
+
+def _cluster_score(cluster: list[dict[str, Any]], *, width: int, height: int) -> float:
+    left = min(float(block["left"]) for block in cluster)
+    right = max(float(block["right"]) for block in cluster)
+    top = min(float(block["top"]) for block in cluster)
+    bottom = max(float(block["bottom"]) for block in cluster)
+    width_ratio = (right - left) / max(1.0, float(width))
+    center_x = ((left + right) / 2.0) / max(1.0, float(width))
+    center_y = ((top + bottom) / 2.0) / max(1.0, float(height))
+    text_length = sum(_visible_text_length(str(block["text"])) for block in cluster)
+    confidence = _average([float(block["confidence"]) for block in cluster if float(block["confidence"]) > 0])
+    score = (
+        len(cluster) * 0.35
+        + confidence * 1.2
+        + min(1.0, width_ratio) * 3.0
+        + min(1.6, text_length / 10.0)
+        + _center_score(center_x) * 1.4
+    )
+    if 0.35 <= center_y <= 0.86:
+        score += 0.6
+    if center_y >= 0.92 and width_ratio < 0.45:
+        score -= 1.8
+    if center_y <= 0.18 and width_ratio < 0.28:
+        score -= 1.1
+    return score
+
+
+def _sort_blocks_for_reading(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        blocks,
+        key=lambda block: (
+            float(block["top"]) if block.get("top") is not None else 0.0,
+            float(block["left"]) if block.get("left") is not None else 0.0,
+        ),
+    )
+
+
+def _safe_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _visible_text_length(text: str) -> int:
+    return sum(1 for char in str(text or "") if char.isalnum() or CJK_RE.match(char))
+
+
+def _center_score(center_x_ratio: float) -> float:
+    return max(0.0, 1.0 - abs(float(center_x_ratio) - 0.5) * 2.0)
+
+
+def _average(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def _dedupe_warnings(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
 
 
 def _accept_low_confidence_candidate(

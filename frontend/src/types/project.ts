@@ -153,6 +153,8 @@ export interface DouyinReupSettings {
   ocr_merge_gap_ms: number;
   ocr_min_duration_ms: number;
   ocr_max_duration_ms: number;
+  ocr_filter_watermarks: boolean;
+  ocr_watermark_terms: string[];
   prefer_ocr_over_asr_when_text_visible: boolean;
   visual_style_preset_id: string;
   burn_subtitle: boolean;

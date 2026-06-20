@@ -48,6 +48,8 @@ class DouyinReupSettings(BaseModel):
     ocr_merge_gap_ms: int = Field(default=600, ge=0, le=10_000)
     ocr_min_duration_ms: int = Field(default=500, ge=100, le=10_000)
     ocr_max_duration_ms: int = Field(default=6000, ge=500, le=30_000)
+    ocr_filter_watermarks: bool = True
+    ocr_watermark_terms: list[str] = Field(default_factory=lambda: ["\u5c0f\u7c73\u540c\u5b66", "\u5c0f\u7c73\u540c\u5b78"])
     prefer_ocr_over_asr_when_text_visible: bool = False
     visual_style_preset_id: str = "clean_review_light"
     burn_subtitle: bool = True
@@ -236,6 +238,16 @@ class DouyinReupSettings(BaseModel):
         allowed = {"bottom_auto", "middle_lower", "full_frame", "manual"}
         if cleaned not in allowed:
             raise ValueError(f"ocr_region_mode phải là một trong: {', '.join(sorted(allowed))}")
+        return cleaned
+
+    @field_validator("ocr_watermark_terms")
+    @classmethod
+    def clean_ocr_watermark_terms(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for item in value:
+            text = " ".join(str(item or "").split())
+            if text and text not in cleaned:
+                cleaned.append(text)
         return cleaned
 
     @field_validator("default_rewrite_style")
