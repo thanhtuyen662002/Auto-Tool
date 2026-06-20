@@ -69,6 +69,8 @@ class DouyinReupSettings(BaseModel):
     subtitle_max_chars_per_line: int = Field(default=22, ge=10, le=48)
     subtitle_max_lines: int = Field(default=2, ge=1, le=3)
     subtitle_cover_enabled: bool = True
+    subtitle_cover_mode: Literal["solid", "blur"] = "solid"
+    subtitle_cover_blur_strength: int = Field(default=12, ge=2, le=30)
     subtitle_cover_color: str = "#000000"
     subtitle_cover_opacity: float = Field(default=0.86, ge=0, le=1)
     subtitle_cover_auto_position: bool = True

@@ -268,19 +268,26 @@ class DouyinRenderPipeline:
             {"start_hint": block.start, "end_hint": block.end, "text": block.text}
             for block in subtitle_blocks
         ]
-        if settings.burn_subtitle and subtitle_ass_path_override and Path(subtitle_ass_path_override).exists():
-            subtitle_ass_path = Path(subtitle_ass_path_override)
-        elif settings.burn_subtitle and subtitle_lines:
-            cover_options = self._subtitle_cover_options(
+        subtitle_cover_options = (
+            self._subtitle_cover_options(
                 settings=settings,
                 video=video,
                 source_ocr_debug_path=source_ocr_debug_path,
                 warnings=warnings,
             )
+            if settings.burn_subtitle and settings.subtitle_cover_enabled
+            else None
+        )
+        if settings.burn_subtitle and subtitle_ass_path_override and Path(subtitle_ass_path_override).exists():
+            subtitle_ass_path = Path(subtitle_ass_path_override)
+        elif settings.burn_subtitle and subtitle_lines:
+            cover_options = dict(subtitle_cover_options or {})
             cover_options["cover_background_reference_lines"] = [
                 {"start_hint": block.start, "end_hint": block.end, "text": block.text}
                 for block in cover_reference_blocks
             ]
+            if settings.subtitle_cover_mode == "blur":
+                cover_options["cover_background_draw"] = False
             generate_ass_subtitle(
                 subtitle_lines,
                 preset,
@@ -320,6 +327,7 @@ class DouyinRenderPipeline:
                 voiceover_path=voiceover_path,
                 render_duration=render_duration,
                 video_slowdown_factor=video_slowdown_factor,
+                subtitle_cover_options=subtitle_cover_options if settings.subtitle_cover_mode == "blur" else None,
                 warnings=warnings,
             )
         except FFmpegError as exc:
@@ -343,6 +351,7 @@ class DouyinRenderPipeline:
                         voiceover_path=voiceover_path,
                         render_duration=render_duration,
                         video_slowdown_factor=video_slowdown_factor,
+                        subtitle_cover_options=None,
                         warnings=warnings,
                     )
                 except FFmpegError as retry_exc:
@@ -367,6 +376,7 @@ class DouyinRenderPipeline:
                         voiceover_path=voiceover_path,
                         render_duration=render_duration,
                         video_slowdown_factor=video_slowdown_factor,
+                        subtitle_cover_options=None,
                         warnings=warnings,
                     )
                 subtitle_ass_path = None  # type: ignore[assignment]
@@ -390,6 +400,7 @@ class DouyinRenderPipeline:
                     voiceover_path=voiceover_path,
                     render_duration=render_duration,
                     video_slowdown_factor=video_slowdown_factor,
+                    subtitle_cover_options=None,
                     warnings=warnings,
                 )
             else:
@@ -535,6 +546,7 @@ class DouyinRenderPipeline:
         voiceover_path: str | None = None,
         render_duration: float | None = None,
         video_slowdown_factor: float = 1.0,
+        subtitle_cover_options: dict | None = None,
         warnings: list[str] | None = None,
     ) -> None:
         try:
@@ -550,6 +562,7 @@ class DouyinRenderPipeline:
                 voiceover_path=voiceover_path,
                 render_duration=render_duration,
                 video_slowdown_factor=video_slowdown_factor,
+                subtitle_cover_options=subtitle_cover_options,
             )
         except FFmpegError:
             if not settings.reduce_original_voice:
@@ -575,6 +588,7 @@ class DouyinRenderPipeline:
                 voiceover_path=voiceover_path,
                 render_duration=render_duration,
                 video_slowdown_factor=video_slowdown_factor,
+                subtitle_cover_options=subtitle_cover_options,
             )
             if warnings is not None:
                 warnings.append(
@@ -595,6 +609,7 @@ class DouyinRenderPipeline:
         voiceover_path: str | None = None,
         render_duration: float | None = None,
         video_slowdown_factor: float = 1.0,
+        subtitle_cover_options: dict | None = None,
     ) -> None:
         duration = max(0.1, float(render_duration or video.duration))
         slowdown = max(1.0, float(video_slowdown_factor or 1.0))
@@ -633,6 +648,18 @@ class DouyinRenderPipeline:
                 f"{current_label}[ov]overlay=0:0:eof_action=repeat:shortest=0:repeatlast=1[v1]"
             )
             current_label = "[v1]"
+        if subtitle_cover_options:
+            blur_filter = _build_static_subtitle_cover_blur_filter(
+                current_label,
+                "vblur",
+                width,
+                height,
+                subtitle_cover_options,
+                settings.subtitle_cover_blur_strength,
+            )
+            if blur_filter:
+                video_filters.append(blur_filter)
+                current_label = "[vblur]"
         if subtitle_ass_path:
             video_filters.append(f"{current_label}ass=filename='{_escape_filter_path(subtitle_ass_path)}'[vout]")
         else:
@@ -748,6 +775,37 @@ def _escape_filter_path(path: str) -> str:
         .replace("[", r"\[")
         .replace("]", r"\]")
     )
+
+
+def _build_static_subtitle_cover_blur_filter(
+    input_label: str,
+    output_label: str,
+    width: int,
+    height: int,
+    cover_options: dict,
+    blur_strength: int,
+) -> str | None:
+    if width <= 0 or height <= 0:
+        return None
+    height_ratio = _clamp_float(float(cover_options.get("cover_background_height_ratio") or 0.12), 0.05, 0.45)
+    bottom_ratio = _clamp_float(float(cover_options.get("cover_background_bottom_ratio") or 0.0), 0.0, 0.35)
+    cover_h = max(2, min(height, int(round(height * height_ratio))))
+    cover_bottom = max(cover_h, min(height, height - int(round(height * bottom_ratio))))
+    cover_y = max(0, min(height - cover_h, cover_bottom - cover_h))
+    radius = max(2, min(int(blur_strength), 30, max(2, cover_h // 2 - 1)))
+    base_label = f"{output_label}_base"
+    crop_label = f"{output_label}_crop"
+    blur_label = f"{output_label}_area"
+    return (
+        f"{input_label}split=2[{base_label}][{crop_label}];"
+        f"[{crop_label}]crop={width}:{cover_h}:0:{cover_y},"
+        f"boxblur=luma_radius={radius}:luma_power=1:chroma_radius={radius}:chroma_power=1[{blur_label}];"
+        f"[{base_label}][{blur_label}]overlay=0:{cover_y}[{output_label}]"
+    )
+
+
+def _clamp_float(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, float(value)))
 
 
 def _clamp_volume(value: float) -> float:

@@ -666,6 +666,8 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   subtitle_max_chars_per_line: 22,
   subtitle_max_lines: 2,
   subtitle_cover_enabled: true,
+  subtitle_cover_mode: 'solid',
+  subtitle_cover_blur_strength: 12,
   subtitle_cover_color: '#000000',
   subtitle_cover_opacity: 0.86,
   subtitle_cover_auto_position: true,
@@ -1322,6 +1324,8 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       subtitle_max_chars_per_line: settings.subtitle_max_chars_per_line,
       subtitle_max_lines: settings.subtitle_max_lines,
       subtitle_cover_enabled: settings.subtitle_cover_enabled,
+      subtitle_cover_mode: settings.subtitle_cover_mode,
+      subtitle_cover_blur_strength: settings.subtitle_cover_blur_strength,
       subtitle_cover_color: settings.subtitle_cover_color,
       subtitle_cover_opacity: settings.subtitle_cover_opacity,
       subtitle_cover_auto_position: settings.subtitle_cover_auto_position,
@@ -1745,6 +1749,26 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           </div>
           {settings.subtitle_cover_enabled ? (
             <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-2 rounded-md border border-white/10 bg-slate-950/45 p-3 sm:col-span-3 md:grid-cols-2">
+                {[
+                  { value: 'solid', label: 'Nền màu', detail: 'Che chữ Trung bằng nền màu rõ, dễ đọc nhất.' },
+                  { value: 'blur', label: 'Làm mờ', detail: 'Làm nhòe chữ Trung, giữ cảm giác tự nhiên hơn.' },
+                ].map((option) => (
+                  <button
+                    className={`rounded-md border px-3 py-2 text-left transition ${
+                      settings.subtitle_cover_mode === option.value
+                        ? 'border-cyan-300/65 bg-cyan-300/15 text-cyan-50'
+                        : 'border-white/10 bg-white/5 text-slate-300 hover:border-cyan-300/35 hover:bg-white/8'
+                    }`}
+                    key={option.value}
+                    type="button"
+                    onClick={() => updateAdvancedSettings({ subtitle_cover_mode: option.value })}
+                  >
+                    <span className="block text-sm font-semibold">{option.label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-400">{option.detail}</span>
+                  </button>
+                ))}
+              </div>
               <Toggle
                 label="Tự tìm vị trí phụ đề Trung"
                 checked={settings.subtitle_cover_auto_position}
@@ -1781,14 +1805,25 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 value={settings.subtitle_cover_text_y_offset_ratio}
                 onChange={(value) => updateAdvancedSettings({ subtitle_cover_text_y_offset_ratio: value })}
               />
-              <SliderInput
-                label={`Độ đậm nền che sub: ${Math.round(settings.subtitle_cover_opacity * 100)}%`}
-                min={0.2}
-                max={1}
-                step={0.01}
-                value={settings.subtitle_cover_opacity}
-                onChange={(value) => updateAdvancedSettings({ subtitle_cover_opacity: value })}
-              />
+              {settings.subtitle_cover_mode === 'blur' ? (
+                <SliderInput
+                  label={`Mức làm mờ chữ Trung: ${settings.subtitle_cover_blur_strength}`}
+                  min={2}
+                  max={30}
+                  step={1}
+                  value={settings.subtitle_cover_blur_strength}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_cover_blur_strength: Math.round(value) })}
+                />
+              ) : (
+                <SliderInput
+                  label={`Độ đậm nền che sub: ${Math.round(settings.subtitle_cover_opacity * 100)}%`}
+                  min={0.2}
+                  max={1}
+                  step={0.01}
+                  value={settings.subtitle_cover_opacity}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_cover_opacity: value })}
+                />
+              )}
               {settings.subtitle_cover_auto_position ? (
                 <SliderInput
                   label={`Nới rộng vùng che quanh chữ Trung: ${Math.round(settings.subtitle_cover_padding_ratio * 100)}%`}
@@ -1833,15 +1868,17 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   onChange={(value) => updateAdvancedSettings({ subtitle_cover_probe_sample_fps: value })}
                 />
               ) : null}
-              <label className="block">
-                <span className="mb-1.5 block text-sm font-medium text-slate-200">Màu nền che sub</span>
-                <input
-                  className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
-                  type="color"
-                  value={settings.subtitle_cover_color || '#000000'}
-                  onChange={(event) => updateAdvancedSettings({ subtitle_cover_color: event.target.value })}
-                />
-              </label>
+              {settings.subtitle_cover_mode !== 'blur' ? (
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-200">Màu nền che sub</span>
+                  <input
+                    className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                    type="color"
+                    value={settings.subtitle_cover_color || '#000000'}
+                    onChange={(event) => updateAdvancedSettings({ subtitle_cover_color: event.target.value })}
+                  />
+                </label>
+              ) : null}
               <div className="grid gap-3 rounded-md border border-white/10 bg-slate-950/45 p-3 sm:col-span-3 lg:grid-cols-[220px_1fr]">
                 <div>
                   <div className="text-sm font-semibold text-white">Xem thử vị trí che phụ đề gốc</div>
@@ -1895,7 +1932,11 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                     style={{
                       bottom: `${coverBottomPercent}%`,
                       height: `${coverHeightPercent}%`,
-                      backgroundColor: settings.subtitle_cover_enabled ? hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity) : 'rgba(15, 23, 42, 0.85)',
+                      backgroundColor: settings.subtitle_cover_mode === 'blur'
+                        ? 'rgba(15, 23, 42, 0.16)'
+                        : settings.subtitle_cover_enabled ? hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity) : 'rgba(15, 23, 42, 0.85)',
+                      backdropFilter: settings.subtitle_cover_mode === 'blur' ? `blur(${Math.max(2, Math.round(settings.subtitle_cover_blur_strength / 2))}px)` : undefined,
+                      WebkitBackdropFilter: settings.subtitle_cover_mode === 'blur' ? `blur(${Math.max(2, Math.round(settings.subtitle_cover_blur_strength / 2))}px)` : undefined,
                       borderRadius: `${Math.round(Math.max(0, settings.subtitle_cover_radius_ratio || 0) * 220)}px`,
                     }}
                   >
@@ -1981,7 +2022,11 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               <div
                 className="min-w-[220px] rounded-md border border-white/10 px-4 py-3 text-center"
                 style={{
-                  backgroundColor: settings.subtitle_cover_enabled ? hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity) : 'rgba(15, 23, 42, 0.85)',
+                  backgroundColor: settings.subtitle_cover_mode === 'blur'
+                    ? 'rgba(15, 23, 42, 0.16)'
+                    : settings.subtitle_cover_enabled ? hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity) : 'rgba(15, 23, 42, 0.85)',
+                  backdropFilter: settings.subtitle_cover_mode === 'blur' ? `blur(${Math.max(2, Math.round(settings.subtitle_cover_blur_strength / 2))}px)` : undefined,
+                  WebkitBackdropFilter: settings.subtitle_cover_mode === 'blur' ? `blur(${Math.max(2, Math.round(settings.subtitle_cover_blur_strength / 2))}px)` : undefined,
                   borderRadius: `${Math.round(Math.max(0, settings.subtitle_cover_radius_ratio || 0) * 220)}px`,
                   color: settings.subtitle_font_color,
                   fontFamily: settings.subtitle_font_family || 'Arial',

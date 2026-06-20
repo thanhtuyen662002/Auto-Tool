@@ -174,6 +174,8 @@ export interface DouyinReupSettings {
   subtitle_max_chars_per_line: number;
   subtitle_max_lines: number;
   subtitle_cover_enabled: boolean;
+  subtitle_cover_mode: 'solid' | 'blur' | string;
+  subtitle_cover_blur_strength: number;
   subtitle_cover_color: string;
   subtitle_cover_opacity: number;
   subtitle_cover_auto_position: boolean;

@@ -46,6 +46,7 @@ def generate_ass_subtitle(
     cover_background_radius_ratio: float = 0.0,
     cover_background_text_y_offset_ratio: float = 0.0,
     cover_background_reference_lines: list[Any] | None = None,
+    cover_background_draw: bool = True,
 ) -> str:
     target = Path(output_path)
     ensure_dir(target.parent)
@@ -104,7 +105,9 @@ def generate_ass_subtitle(
         f"5,{margin_l},{margin_r},{margin_v},1",
     ]
 
-    if cover_background_enabled:
+    draw_cover_background = bool(cover_background_enabled and cover_background_draw)
+
+    if draw_cover_background:
         content.append(
             "Style: SubtitleCover,"
             f"{subtitle.font_family},"
@@ -125,7 +128,7 @@ def generate_ass_subtitle(
     )
 
     display_lines = _expand_lines_for_display(lines, subtitle.max_chars_per_line, subtitle.max_lines)
-    if cover_background_enabled:
+    if draw_cover_background:
         reference_lines = _normalize_subtitle_lines(cover_background_reference_lines or []) or display_lines
         for line in reference_lines:
             start_seconds = float(line.start_hint or 0.0)
