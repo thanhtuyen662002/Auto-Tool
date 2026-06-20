@@ -50,7 +50,8 @@ export default function DouyinDownloadPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [channelUrl, setChannelUrl] = useState(DEFAULT_DOUYIN_URL);
   const [outputFolder, setOutputFolder] = useState(DEFAULT_DOWNLOAD_FOLDER);
-  const [maxScrolls, setMaxScrolls] = useState(40);
+  const [maxScrolls, setMaxScrolls] = useState(5000);
+  const [scanUntilEnd, setScanUntilEnd] = useState(true);
   const [skipExisting, setSkipExisting] = useState(true);
   const [manualLinks, setManualLinks] = useState('');
   const [selectedLinks, setSelectedLinks] = useState<string[]>([]);
@@ -62,6 +63,17 @@ export default function DouyinDownloadPage() {
   const recentJobs = history?.recent_jobs?.slice(0, 5) ?? [];
   const recentChannels = history?.recent_channel_urls?.slice(0, 5) ?? [];
   const recentFolders = history?.recent_output_folders?.slice(0, 5) ?? [];
+  const cachedChannelDownload = useMemo(() => {
+    if (!history?.channel_downloads || !channelUrl.trim()) return null;
+    const normalized = normalizeDouyinLink(channelUrl);
+    return history.channel_downloads[normalized] ?? history.channel_downloads[normalized.replace(/\/$/, '')] ?? null;
+  }, [history, channelUrl]);
+  const cachedLinks = useMemo(() => {
+    if (cachedChannelDownload?.links?.length) return cachedChannelDownload.links;
+    if (!history?.scanned_channels || !channelUrl.trim()) return [];
+    const normalized = normalizeDouyinLink(channelUrl);
+    return history.scanned_channels[normalized] ?? history.scanned_channels[normalized.replace(/\/$/, '')] ?? [];
+  }, [history, channelUrl]);
 
   useEffect(() => {
     void refreshStatus();
@@ -86,6 +98,7 @@ export default function DouyinDownloadPage() {
     if (job.job_type === 'scan') {
       setSelectedLinks(job.links);
       setManualLinks(job.links.join('\n'));
+      void refreshHistory();
     }
     if (job.job_type === 'download') {
       void refreshHistory();
@@ -186,6 +199,7 @@ export default function DouyinDownloadPage() {
       const next = await startDouyinDownloaderScan({
         channel_url: channelUrl.trim(),
         max_scrolls: maxScrolls,
+        scan_until_end: scanUntilEnd,
       });
       setJob(next);
       setNotice('Đã bắt đầu quét đường dẫn Douyin.');
@@ -194,6 +208,23 @@ export default function DouyinDownloadPage() {
   }
 
   async function handleDownload() {
+    await startDownload(usableLinks, outputFolder, skipExisting);
+  }
+
+  async function handleContinueCachedDownload() {
+    const folder = cachedChannelDownload?.output_folder || outputFolder;
+    if (folder) setOutputFolder(folder);
+    if (cachedLinks.length) {
+      setManualLinks(cachedLinks.join('\n'));
+      setSelectedLinks(cachedLinks);
+    }
+    await startDownload(cachedLinks, folder, true);
+  }
+
+  async function startDownload(links: string[], folder: string, shouldSkipExisting: boolean) {
+    const usableLinks = links;
+    const outputFolder = folder;
+    const skipExisting = shouldSkipExisting;
     await runAction('download', async () => {
       if (!outputFolder.trim()) throw new Error('Chưa chọn thư mục lưu video.');
       if (!usableLinks.length) throw new Error('Chưa có đường dẫn Douyin nào để tải.');
@@ -201,6 +232,7 @@ export default function DouyinDownloadPage() {
         links: usableLinks,
         output_folder: outputFolder.trim(),
         skip_existing: skipExisting,
+        channel_url: channelUrl.trim() || null,
       });
       setJob(next);
       await addRecentSourceFolder(outputFolder.trim()).catch(() => undefined);
@@ -248,6 +280,14 @@ export default function DouyinDownloadPage() {
 
   function clearSelectedLinks() {
     setSelectedLinks([]);
+  }
+
+  function useCachedScannedLinks() {
+    if (!cachedLinks.length) return;
+    if (cachedChannelDownload?.output_folder) setOutputFolder(cachedChannelDownload.output_folder);
+    setManualLinks(cachedLinks.join('\n'));
+    setSelectedLinks(cachedLinks);
+    setNotice(`Đã nạp ${cachedLinks.length} link đã quét trước đó cho kênh này.`);
   }
 
   async function copyText(value: string) {
@@ -329,13 +369,37 @@ export default function DouyinDownloadPage() {
             </Field>
             {recentChannels.length ? <ChipRow label="Đã dùng gần đây" values={recentChannels} onUse={setChannelUrl} /> : null}
 
-            <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
-              <Field label="Số lần cuộn">
+            {cachedLinks.length ? (
+              <div className="rounded-md border border-emerald-300/25 bg-emerald-300/10 p-3 text-sm text-emerald-50">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span>Đã có {cachedLinks.length} link được lưu từ lần quét trước của kênh này.</span>
+                  {cachedChannelDownload?.output_folder ? (
+                    <span className="max-w-full truncate text-xs text-emerald-100/80" title={cachedChannelDownload.output_folder}>
+                      Thư mục cũ: {compactPath(cachedChannelDownload.output_folder)}
+                    </span>
+                  ) : null}
+                  <GlassButton className="whitespace-nowrap px-3" variant="primary" disabled={Boolean(activeJob)} onClick={() => void handleContinueCachedDownload()}>
+                    Tiếp tục tải
+                  </GlassButton>
+                  <GlassButton className="whitespace-nowrap px-3" disabled={Boolean(activeJob)} onClick={useCachedScannedLinks}>
+                    Dùng link đã quét
+                  </GlassButton>
+                </div>
+              </div>
+            ) : null}
+
+            <label className="flex items-start gap-2 rounded-md border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+              <input className="mt-1" type="checkbox" checked={scanUntilEnd} onChange={(event) => setScanUntilEnd(event.target.checked)} />
+              <span>Quét đến khi hết video trong kênh. Bài dạng ảnh/slide sẽ được bỏ qua.</span>
+            </label>
+
+            <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+              <Field label="Giới hạn an toàn số lần cuộn">
                 <input
                   className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white outline-none transition focus:border-cyan-300"
                   type="number"
                   min={1}
-                  max={300}
+                  max={5000}
                   value={maxScrolls}
                   onChange={(event) => setMaxScrolls(Number(event.target.value) || 1)}
                 />
@@ -518,7 +582,7 @@ function JobPanel({
   onPause: () => void;
   onResume: () => void;
 }) {
-  const canPause = job.job_type === 'download' && (job.status === 'running' || job.status === 'queued');
+  const canPause = job.status === 'running' || job.status === 'queued';
   const canResume = job.job_type === 'download' && job.status === 'paused';
   const latestLogs = job.logs.slice(-8).reverse();
   const latestOutputs = job.outputs.slice(-8).reverse();
@@ -547,7 +611,7 @@ function JobPanel({
         <div className="mt-3 flex gap-2">
           {canPause ? (
             <GlassButton className="flex-1 whitespace-nowrap px-3" loading={busy === 'pause-job'} onClick={onPause}>
-              <PauseCircle size={16} /> Dừng tải
+              <PauseCircle size={16} /> {job.job_type === 'scan' ? 'Dừng quét' : 'Dừng tải'}
             </GlassButton>
           ) : null}
           {canResume ? (
@@ -596,6 +660,10 @@ function parseLinks(value: string): string[] {
       seen.add(line);
       return true;
     });
+}
+
+function normalizeDouyinLink(value: string) {
+  return value.trim().split('?')[0];
 }
 
 function compactPath(value: string) {

@@ -17,6 +17,7 @@ from typing import Any
 
 from app.modules.douyin_downloader.downloader_schema import (
     DouyinDownloaderHistoryResponse,
+    DouyinDownloaderChannelDownloadHistory,
     DouyinDownloaderJobActionResponse,
     DouyinDownloaderJobResponse,
     DouyinDownloaderOutputItem,
@@ -26,6 +27,11 @@ from app.utils.app_paths import app_data_dir
 
 
 DOUYIN_HOME_URL = "https://www.douyin.com/"
+DEFAULT_SCAN_UNTIL_END_SCROLL_LIMIT = 5000
+SCAN_NO_NEW_LINK_LIMIT = 18
+DOWNLOAD_HISTORY_LIMIT = 20000
+SCANNED_CHANNEL_HISTORY_LIMIT = 60
+SCANNED_LINKS_PER_CHANNEL_LIMIT = 10000
 LOGIN_COOKIE_NAMES = {
     "sessionid",
     "sessionid_ss",
@@ -296,15 +302,15 @@ class DouyinDownloaderService:
     def check_login(self) -> DouyinDownloaderStatusResponse:
         return self.get_status()
 
-    def start_scan(self, channel_url: str, max_scrolls: int = 40) -> DouyinDownloaderJobResponse:
+    def start_scan(self, channel_url: str, max_scrolls: int = DEFAULT_SCAN_UNTIL_END_SCROLL_LIMIT, scan_until_end: bool = True) -> DouyinDownloaderJobResponse:
         self._require_browser()
         job = self._create_job("scan")
         self._remember_channel_url(channel_url)
-        thread = threading.Thread(target=self._run_scan_job, args=(job.job_id, channel_url, max_scrolls), daemon=True)
+        thread = threading.Thread(target=self._run_scan_job, args=(job.job_id, channel_url, max_scrolls, scan_until_end), daemon=True)
         thread.start()
         return job.to_response()
 
-    def start_download(self, links: list[str], output_folder: str, skip_existing: bool = True) -> DouyinDownloaderJobResponse:
+    def start_download(self, links: list[str], output_folder: str, skip_existing: bool = True, channel_url: str | None = None) -> DouyinDownloaderJobResponse:
         self._require_browser()
         cleaned_links = self._clean_links(links)
         if not cleaned_links:
@@ -318,6 +324,8 @@ class DouyinDownloaderService:
         job.skip_existing = skip_existing
         job.touch()
         self._remember_output_folder(str(output_dir))
+        if channel_url:
+            self._remember_channel_download(channel_url, str(output_dir), cleaned_links)
         self._save_job(job)
         thread = threading.Thread(target=self._run_download_job, args=(job.job_id, cleaned_links, output_dir, skip_existing), daemon=True)
         thread.start()
@@ -342,11 +350,21 @@ class DouyinDownloaderService:
                 recent_output_folders=list(self._history.get("recent_output_folders") or [])[:20],
                 recent_jobs=[job.to_response() for job in recent_jobs],
                 downloaded_links=downloaded,
+                scanned_channels={
+                    str(channel): [str(link) for link in links]
+                    for channel, links in (self._history.get("scanned_channels") or {}).items()
+                    if isinstance(links, list)
+                },
+                channel_downloads={
+                    str(channel): DouyinDownloaderChannelDownloadHistory.model_validate(item)
+                    for channel, item in (self._history.get("channel_downloads") or {}).items()
+                    if isinstance(item, dict)
+                },
             )
 
     def pause_job(self, job_id: str) -> DouyinDownloaderJobActionResponse:
         job = self._must_get_job(job_id)
-        if job.job_type != "download":
+        if job.job_type not in {"scan", "download"}:
             raise DouyinDownloaderError("Chỉ hỗ trợ dừng tạm thời tác vụ tải video.")
         if job.status not in {"queued", "running"}:
             return DouyinDownloaderJobActionResponse(success=True, message="Tác vụ không còn đang tải.", job=job.to_response())
@@ -433,8 +451,11 @@ class DouyinDownloaderService:
             return None
         return None
 
-    def _run_scan_job(self, job_id: str, channel_url: str, max_scrolls: int) -> None:
+    def _run_scan_job(self, job_id: str, channel_url: str, max_scrolls: int, scan_until_end: bool = True) -> None:
         job = self._must_get_job(job_id)
+        max_scrolls = max(1, int(max_scrolls or DEFAULT_SCAN_UNTIL_END_SCROLL_LIMIT))
+        if scan_until_end:
+            max_scrolls = max(max_scrolls, DEFAULT_SCAN_UNTIL_END_SCROLL_LIMIT)
         job.status = "running"
         job.current_step = "Đang mở trang Douyin"
         job.log("Bắt đầu quét đường dẫn video Douyin.")
@@ -450,16 +471,25 @@ class DouyinDownloaderService:
                 last_count = 0
                 stuck_count = 0
                 for index in range(max_scrolls):
-                    anchors = driver.find_elements("css selector", 'a[href*="/video/"], a[href*="/note/"]')
+                    if job.pause_requested:
+                        self._mark_job_paused(job)
+                        return
+                    anchors = driver.find_elements("css selector", 'a[href*="/video/"]')
                     for anchor in anchors:
                         href = anchor.get_attribute("href")
                         if href:
-                            links.add(self._normalize_link(href))
+                            normalized_href = self._normalize_link(href)
+                            if normalized_href and not self._is_note_link(normalized_href):
+                                links.add(normalized_href)
                     current_count = len(links)
                     job.links = sorted(links)
                     job.total_items = current_count
-                    job.progress = int(((index + 1) / max_scrolls) * 95)
-                    job.current_step = f"Đang cuộn trang ({index + 1}/{max_scrolls})"
+                    if scan_until_end:
+                        job.progress = min(95, max(job.progress, int(((index + 1) / max_scrolls) * 95)))
+                        job.current_step = f"Đang quét tới cuối kênh: đã cuộn {index + 1} lần, tìm được {current_count} video"
+                    else:
+                        job.progress = int(((index + 1) / max_scrolls) * 95)
+                        job.current_step = f"Đang cuộn trang ({index + 1}/{max_scrolls})"
                     if index == 0 or index % 5 == 4:
                         job.log(f"Đã tìm thấy {current_count} đường dẫn video.")
 
@@ -481,11 +511,12 @@ class DouyinDownloaderService:
                     else:
                         stuck_count = 0
                     last_count = current_count
-                    if stuck_count >= 8:
+                    if stuck_count >= SCAN_NO_NEW_LINK_LIMIT:
                         job.log("Trang không tải thêm video mới, dừng quét.")
                         break
 
             job.links = sorted(links)
+            self._remember_scanned_channel_links(channel_url, job.links)
             job.completed_items = len(job.links)
             job.progress = 100
             job.status = "completed"
@@ -570,13 +601,21 @@ class DouyinDownloaderService:
             self._save_job(job)
 
     def _download_one(self, link: str, output_dir: Path, skip_existing: bool, job: _DownloadJob | None = None) -> dict[str, Any]:
+        if self._is_note_link(link):
+            return {
+                "link": link,
+                "title": None,
+                "path": None,
+                "status": "skipped",
+                "message": "Bỏ qua bài Douyin dạng ảnh/slide, chỉ tải bài có video thật.",
+            }
         resolved = self._resolve_video(link)
         title = resolved.get("title") or f"douyin_{int(time.time())}"
         safe_title = self._safe_filename(title)
         existing = sorted(output_dir.glob(f"{safe_title}.*"))
         if skip_existing:
             for file in existing:
-                if file.suffix.lower() in {".mp4", ".mov", ".webm", ".mkv"} and file.stat().st_size > 0:
+                if file.suffix.lower() in {".mp4", ".mov", ".webm", ".mkv"} and self._is_valid_downloaded_video_file(file):
                     return {
                         "link": link,
                         "title": title,
@@ -589,6 +628,21 @@ class DouyinDownloaderService:
         if mp4_url and not str(mp4_url).startswith("blob:"):
             output_path = output_dir / f"{safe_title}.mp4"
             self._download_direct(str(mp4_url), output_path, resolved.get("cookies") or [], job)
+            try:
+                self._validate_downloaded_video(output_path)
+            except Exception:
+                output_path.unlink(missing_ok=True)
+                if job:
+                    job.log("Link tải trực tiếp không tạo được video xem được, chuyển sang phương án tải dự phòng.")
+                output_path = self._download_with_ytdlp(link, output_dir, safe_title, resolved.get("cookies") or [])
+                self._validate_downloaded_video(output_path)
+                return {
+                    "link": link,
+                    "title": title,
+                    "path": str(output_path),
+                    "status": "success",
+                    "message": f"Đã tải xong bằng phương án dự phòng: {output_path.name}",
+                }
             return {
                 "link": link,
                 "title": title,
@@ -598,6 +652,7 @@ class DouyinDownloaderService:
             }
 
         output_path = self._download_with_ytdlp(link, output_dir, safe_title, resolved.get("cookies") or [])
+        self._validate_downloaded_video(output_path)
         return {
             "link": link,
             "title": title,
@@ -745,17 +800,33 @@ class DouyinDownloaderService:
         return cookie_file
 
     def _load_history(self) -> dict[str, Any]:
-        default = {"recent_channel_urls": [], "recent_output_folders": [], "downloaded_links": {}}
+        default = {"recent_channel_urls": [], "recent_output_folders": [], "downloaded_links": {}, "scanned_channels": {}, "channel_downloads": {}}
         if not self.history_path.exists():
             return default
         try:
             payload = json.loads(self.history_path.read_text(encoding="utf-8"))
             if not isinstance(payload, dict):
                 return default
+            scanned_payload = payload.get("scanned_channels") or {}
+            if not isinstance(scanned_payload, dict):
+                scanned_payload = {}
+            channel_downloads_payload = payload.get("channel_downloads") or {}
+            if not isinstance(channel_downloads_payload, dict):
+                channel_downloads_payload = {}
             return {
                 "recent_channel_urls": list(payload.get("recent_channel_urls") or [])[:20],
                 "recent_output_folders": list(payload.get("recent_output_folders") or [])[:20],
                 "downloaded_links": dict(payload.get("downloaded_links") or {}),
+                "scanned_channels": {
+                    str(channel): [str(link) for link in links]
+                    for channel, links in scanned_payload.items()
+                    if isinstance(links, list)
+                },
+                "channel_downloads": {
+                    str(channel): dict(item)
+                    for channel, item in channel_downloads_payload.items()
+                    if isinstance(item, dict)
+                },
             }
         except Exception:
             return default
@@ -791,10 +862,62 @@ class DouyinDownloaderService:
             self._history["recent_channel_urls"] = self._prepend_unique(self._history.get("recent_channel_urls") or [], normalized, 20)
             self._save_history()
 
+    def _remember_scanned_channel_links(self, channel_url: str, links: list[str]) -> None:
+        normalized = self._normalize_link(channel_url)
+        if not normalized:
+            return
+        clean_links = self._clean_links(links)[:SCANNED_LINKS_PER_CHANNEL_LIMIT]
+        with self._history_lock:
+            scanned = dict(self._history.get("scanned_channels") or {})
+            scanned[normalized] = clean_links
+            if len(scanned) > SCANNED_CHANNEL_HISTORY_LIMIT:
+                scanned = dict(list(scanned.items())[-SCANNED_CHANNEL_HISTORY_LIMIT:])
+            self._history["scanned_channels"] = scanned
+            channel_downloads = dict(self._history.get("channel_downloads") or {})
+            existing = dict(channel_downloads.get(normalized) or {})
+            channel_downloads[normalized] = {
+                "channel_url": normalized,
+                "output_folder": existing.get("output_folder"),
+                "links": clean_links,
+                "total_links": len(clean_links),
+                "updated_at": datetime.now().replace(microsecond=0).isoformat(),
+            }
+            if len(channel_downloads) > SCANNED_CHANNEL_HISTORY_LIMIT:
+                channel_downloads = dict(list(channel_downloads.items())[-SCANNED_CHANNEL_HISTORY_LIMIT:])
+            self._history["channel_downloads"] = channel_downloads
+            self._save_history()
+
     def _remember_output_folder(self, output_folder: str) -> None:
         value = str(Path(output_folder).expanduser().resolve())
         with self._history_lock:
             self._history["recent_output_folders"] = self._prepend_unique(self._history.get("recent_output_folders") or [], value, 20)
+            self._save_history()
+
+    def _remember_channel_download(self, channel_url: str, output_folder: str, links: list[str]) -> None:
+        normalized = self._normalize_link(channel_url)
+        if not normalized:
+            return
+        clean_links = self._clean_links(links)[:SCANNED_LINKS_PER_CHANNEL_LIMIT]
+        with self._history_lock:
+            self._history["recent_channel_urls"] = self._prepend_unique(self._history.get("recent_channel_urls") or [], normalized, 20)
+            self._history["recent_output_folders"] = self._prepend_unique(self._history.get("recent_output_folders") or [], output_folder, 20)
+            scanned = dict(self._history.get("scanned_channels") or {})
+            if clean_links:
+                scanned[normalized] = clean_links
+                if len(scanned) > SCANNED_CHANNEL_HISTORY_LIMIT:
+                    scanned = dict(list(scanned.items())[-SCANNED_CHANNEL_HISTORY_LIMIT:])
+            self._history["scanned_channels"] = scanned
+            channel_downloads = dict(self._history.get("channel_downloads") or {})
+            channel_downloads[normalized] = {
+                "channel_url": normalized,
+                "output_folder": output_folder,
+                "links": clean_links or list(scanned.get(normalized) or []),
+                "total_links": len(clean_links or list(scanned.get(normalized) or [])),
+                "updated_at": datetime.now().replace(microsecond=0).isoformat(),
+            }
+            if len(channel_downloads) > SCANNED_CHANNEL_HISTORY_LIMIT:
+                channel_downloads = dict(list(channel_downloads.items())[-SCANNED_CHANNEL_HISTORY_LIMIT:])
+            self._history["channel_downloads"] = channel_downloads
             self._save_history()
 
     def _remember_downloaded_link(self, link: str, result: dict[str, Any]) -> None:
@@ -810,8 +933,8 @@ class DouyinDownloaderService:
                 "status": result.get("status"),
                 "message": result.get("message") or "",
             }
-            if len(downloaded) > 1000:
-                downloaded = dict(list(downloaded.items())[-1000:])
+            if len(downloaded) > DOWNLOAD_HISTORY_LIMIT:
+                downloaded = dict(list(downloaded.items())[-DOWNLOAD_HISTORY_LIMIT:])
             self._history["downloaded_links"] = downloaded
             self._save_history()
 
@@ -837,9 +960,31 @@ class DouyinDownloaderService:
             return False
         try:
             file = Path(str(path)).expanduser()
-            return file.exists() and file.is_file() and file.stat().st_size > 0
+            return self._is_valid_downloaded_video_file(file)
         except Exception:
             return False
+
+    def _is_note_link(self, link: str) -> bool:
+        return "/note/" in self._normalize_link(link).lower()
+
+    def _is_valid_downloaded_video_file(self, path: Path) -> bool:
+        try:
+            self._validate_downloaded_video(path)
+            return True
+        except Exception:
+            return False
+
+    def _validate_downloaded_video(self, path: Path) -> None:
+        if not path.exists() or not path.is_file() or path.stat().st_size <= 0:
+            raise DouyinDownloaderError("File tải về bị rỗng hoặc không tồn tại.")
+        try:
+            from app.adapters.ffmpeg_adapter import probe_video
+
+            media = probe_video(str(path))
+        except Exception as exc:
+            raise DouyinDownloaderError(f"File tải về không có luồng video hợp lệ: {path.name}.") from exc
+        if media.width <= 0 or media.height <= 0 or media.duration <= 0:
+            raise DouyinDownloaderError(f"File tải về không phải video xem được: {path.name}.")
 
     def _upsert_output(self, job: _DownloadJob, result: dict[str, Any]) -> None:
         normalized = self._normalize_link(str(result.get("link") or ""))
@@ -871,6 +1016,17 @@ class DouyinDownloaderService:
         return [link for link in job.links if self._normalize_link(link) not in done]
 
     def _mark_job_paused(self, job: _DownloadJob) -> None:
+        if job.job_type == "scan":
+            job.status = "paused"
+            job.pause_requested = False
+            job.completed_items = len(job.links)
+            job.total_items = len(job.links)
+            job.progress = max(0, min(99, int(job.progress)))
+            job.current_step = "Đã dừng quét, có thể dùng các link đã tìm được"
+            job.log("Đã dừng quét an toàn. Danh sách hiện tại vẫn được giữ lại để tải nếu cần.")
+            job.touch()
+            self._save_job(job)
+            return
         self._refresh_job_counts(job)
         job.status = "paused"
         job.pause_requested = False

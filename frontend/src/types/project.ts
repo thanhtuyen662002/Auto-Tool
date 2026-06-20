@@ -414,12 +414,14 @@ export interface DouyinDownloaderCloseResponse {
 export interface DouyinDownloaderScanRequest {
   channel_url: string;
   max_scrolls: number;
+  scan_until_end?: boolean;
 }
 
 export interface DouyinDownloaderDownloadRequest {
   links: string[];
   output_folder: string;
   skip_existing: boolean;
+  channel_url?: string | null;
 }
 
 export interface DouyinDownloaderOutputItem {
@@ -455,6 +457,16 @@ export interface DouyinDownloaderHistoryResponse {
   recent_output_folders: string[];
   recent_jobs: DouyinDownloaderJobResponse[];
   downloaded_links: Record<string, DouyinDownloaderOutputItem>;
+  scanned_channels: Record<string, string[]>;
+  channel_downloads: Record<string, DouyinDownloaderChannelDownloadHistory>;
+}
+
+export interface DouyinDownloaderChannelDownloadHistory {
+  channel_url: string;
+  output_folder?: string | null;
+  links: string[];
+  total_links: number;
+  updated_at?: string | null;
 }
 
 export interface DouyinDownloaderJobActionResponse {

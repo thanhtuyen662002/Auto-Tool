@@ -925,7 +925,7 @@ def create_app() -> FastAPI:
     @app.post("/api/douyin-downloader/scan", response_model=DouyinDownloaderJobResponse)
     def start_douyin_downloader_scan(request: DouyinDownloaderScanRequest) -> DouyinDownloaderJobResponse:
         try:
-            return douyin_downloader_service.start_scan(request.channel_url, request.max_scrolls)
+            return douyin_downloader_service.start_scan(request.channel_url, request.max_scrolls, request.scan_until_end)
         except DouyinDownloaderError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
@@ -938,6 +938,7 @@ def create_app() -> FastAPI:
                 links=request.links,
                 output_folder=request.output_folder,
                 skip_existing=request.skip_existing,
+                channel_url=request.channel_url,
             )
         except DouyinDownloaderError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

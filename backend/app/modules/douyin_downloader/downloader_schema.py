@@ -27,13 +27,15 @@ class DouyinDownloaderCloseResponse(BaseModel):
 
 class DouyinDownloaderScanRequest(BaseModel):
     channel_url: str = Field(min_length=1)
-    max_scrolls: int = Field(default=40, ge=1, le=300)
+    max_scrolls: int = Field(default=5000, ge=1, le=5000)
+    scan_until_end: bool = True
 
 
 class DouyinDownloaderDownloadRequest(BaseModel):
     links: list[str] = Field(default_factory=list)
     output_folder: str = Field(min_length=1)
     skip_existing: bool = True
+    channel_url: str | None = None
 
     @field_validator("links")
     @classmethod
@@ -77,11 +79,21 @@ class DouyinDownloaderJobResponse(BaseModel):
     updated_at: str
 
 
+class DouyinDownloaderChannelDownloadHistory(BaseModel):
+    channel_url: str
+    output_folder: str | None = None
+    links: list[str] = Field(default_factory=list)
+    total_links: int = 0
+    updated_at: str | None = None
+
+
 class DouyinDownloaderHistoryResponse(BaseModel):
     recent_channel_urls: list[str] = Field(default_factory=list)
     recent_output_folders: list[str] = Field(default_factory=list)
     recent_jobs: list[DouyinDownloaderJobResponse] = Field(default_factory=list)
     downloaded_links: dict[str, DouyinDownloaderOutputItem] = Field(default_factory=dict)
+    scanned_channels: dict[str, list[str]] = Field(default_factory=dict)
+    channel_downloads: dict[str, DouyinDownloaderChannelDownloadHistory] = Field(default_factory=dict)
 
 
 class DouyinDownloaderJobActionResponse(BaseModel):
