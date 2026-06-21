@@ -1,5 +1,18 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.43
+
+### Highlights
+
+- Replaced the Vietnamese subtitle style presets with eight practical Vietnamese-friendly options for basic readability, TikTok yellow, modern clean, sale red, skincare pink, tech blue, food yellow-orange, and bright-background subtitles.
+- Matched each preset to the requested text color, cover background color/opacity, stroke color, and shadow opacity.
+- Clarified in the UI that selected subtitle presets and manual style tweaks are saved automatically for future sessions.
+
+### QA
+
+- Verified all eight subtitle presets against the requested color table.
+- Frontend production build passed.
+
 ## v1.0.42
 
 ### Highlights
