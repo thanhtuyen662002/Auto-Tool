@@ -535,7 +535,7 @@ class VoiceGenerator:
         return timeline
 
     @staticmethod
-    def _split_subtitle_text(text: str, max_chars: int = 38) -> list[str]:
+    def _split_subtitle_text(text: str, max_chars: int = 76) -> list[str]:
         cleaned = re.sub(r"\s+", " ", text.replace("\n", " ")).strip()
         if not cleaned:
             return []

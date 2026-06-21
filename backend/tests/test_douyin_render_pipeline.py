@@ -29,6 +29,25 @@ def test_smooth_voiceover_groups_fragmented_subtitle_blocks():
     assert lines[1].text == "Xem kỹ trước khi chọn nhé."
 
 
+def test_smooth_voiceover_separates_new_sentence_blocks_and_adds_periods():
+    blocks = [
+        SubtitleBlock(index=1, start=0.0, end=0.8, text="Mua dong di ra ngoai hay di xe nhat dinh"),
+        SubtitleBlock(index=2, start=0.82, end=1.6, text="phai mang loai gang tay nay"),
+        SubtitleBlock(index=3, start=1.62, end=2.4, text="Ben trong lot long day dan, rat am ap"),
+        SubtitleBlock(index=4, start=2.42, end=3.2, text="Con co the cam ung man hinh"),
+        SubtitleBlock(index=5, start=3.22, end=4.0, text="Co tay bo chun khong lo gio lua vao"),
+    ]
+
+    lines = _build_smooth_voiceover_lines(blocks)
+
+    assert [line.text for line in lines] == [
+        "Mua dong di ra ngoai hay di xe nhat dinh phai mang loai gang tay nay.",
+        "Ben trong lot long day dan, rat am ap.",
+        "Con co the cam ung man hinh.",
+        "Co tay bo chun khong lo gio lua vao.",
+    ]
+
+
 def test_smooth_voiceover_skips_near_duplicate_blocks():
     blocks = [
         SubtitleBlock(index=1, start=0.0, end=1.0, text="Sản phẩm này rất đáng xem"),

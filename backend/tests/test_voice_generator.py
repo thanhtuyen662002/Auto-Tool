@@ -193,3 +193,11 @@ def test_global_voice_fit_speeds_up_before_trimming():
 
     assert audio_filter.startswith("atempo=1.400")
     assert "atrim=0:10.000" in audio_filter
+
+
+def test_voice_subtitle_split_keeps_complete_sentence_when_two_lines_fit():
+    text = "Day la mot cau phu de vua du de hien thi thanh hai dong ro rang."
+
+    chunks = VoiceGenerator._split_subtitle_text(text)
+
+    assert chunks == [text]

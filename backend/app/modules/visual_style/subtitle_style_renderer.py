@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,6 +9,11 @@ from typing import Any
 from app.modules.script_writer.script_writer import SubtitleLine
 from app.modules.visual_style.style_schema import VisualStylePreset
 from app.utils.file_utils import ensure_dir
+
+
+TERMINAL_SENTENCE_PUNCTUATION = (".", "!", "?", "\u2026", "\u3002", "\uff01", "\uff1f")
+TRAILING_SOFT_PUNCTUATION_RE = re.compile(r"[\s,;:\-\u2013\u2014\u3001\uff0c\uff1b\uff1a]+$")
+MAX_AUTO_LINE_CHARS = 48
 
 
 @dataclass(frozen=True)
@@ -312,16 +318,13 @@ def _safe_float(value: Any, default: float) -> float:
 
 
 def wrap_subtitle_text(text: str, max_chars_per_line: int, max_lines: int) -> list[str]:
-    cleaned = " ".join(str(text).replace("\r", " ").replace("\n", " ").split())
+    cleaned = _clean_display_text(text)
     if not cleaned:
         return [""]
-    lines = textwrap.wrap(
-        cleaned,
-        width=max_chars_per_line,
-        break_long_words=False,
-        break_on_hyphens=False,
-    )
-    return _rebalance_short_text_lines(lines, max_chars_per_line)
+    lines = _wrap_as_display_lines(cleaned, max_chars_per_line, max_lines)
+    if lines:
+        return lines
+    return _rebalance_short_text_lines(_wrap_lines(cleaned, max_chars_per_line), max_chars_per_line)
 
 
 def _expand_lines_for_display(
@@ -360,32 +363,85 @@ def _expand_lines_for_display(
 
 
 def _split_text_for_display(text: str, max_chars_per_line: int, max_lines: int) -> list[str]:
-    cleaned = " ".join(str(text).replace("\r", " ").replace("\n", " ").split())
+    cleaned = _clean_display_text(text)
     if not cleaned:
         return []
 
     line_limit = max(10, int(max_chars_per_line))
     lines_per_chunk = max(1, int(max_lines))
     chunks: list[str] = []
-    current_lines: list[str] = []
-    current_line = ""
-
-    for word in cleaned.split():
-        candidate = word if not current_line else f"{current_line} {word}"
-        if len(candidate) <= line_limit or not current_line:
-            current_line = candidate
-            continue
-        current_lines.append(current_line)
-        current_line = word
-        if len(current_lines) >= lines_per_chunk:
-            chunks.append("\n".join(current_lines))
-            current_lines = []
-
-    if current_line:
-        current_lines.append(current_line)
-    if current_lines:
-        chunks.append("\n".join(current_lines))
+    for sentence in _split_display_sentences(cleaned):
+        chunks.extend(_display_chunks_for_sentence(sentence, line_limit, lines_per_chunk))
     return _rebalance_short_display_chunks(chunks, line_limit)
+
+
+def _clean_display_text(text: str) -> str:
+    return " ".join(str(text).replace("\r", " ").replace("\n", " ").split()).strip()
+
+
+def _split_display_sentences(text: str) -> list[str]:
+    cleaned = _clean_display_text(text)
+    if not cleaned:
+        return []
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?\u2026\u3002\uff01\uff1f])\s+", cleaned) if part.strip()]
+    return sentences or [cleaned]
+
+
+def _display_chunks_for_sentence(sentence: str, line_limit: int, lines_per_chunk: int) -> list[str]:
+    text = _ensure_sentence_stop(sentence)
+    if not text:
+        return []
+    lines = _wrap_as_display_lines(text, line_limit, lines_per_chunk)
+    if lines:
+        return ["\n".join(lines)]
+
+    chunks: list[str] = []
+    current_words: list[str] = []
+    for word in text.split():
+        candidate = " ".join([*current_words, word])
+        if current_words and _wrap_as_display_lines(candidate, line_limit, lines_per_chunk) is None:
+            chunk_lines = _wrap_as_display_lines(" ".join(current_words), line_limit, lines_per_chunk)
+            chunks.append("\n".join(chunk_lines or _wrap_lines(" ".join(current_words), MAX_AUTO_LINE_CHARS)))
+            current_words = [word]
+        else:
+            current_words.append(word)
+    if current_words:
+        chunk_lines = _wrap_as_display_lines(" ".join(current_words), line_limit, lines_per_chunk)
+        chunks.append("\n".join(chunk_lines or _wrap_lines(" ".join(current_words), MAX_AUTO_LINE_CHARS)))
+    return [chunk for chunk in chunks if chunk.strip()]
+
+
+def _wrap_as_display_lines(text: str, max_chars_per_line: int, max_lines: int) -> list[str] | None:
+    cleaned = _clean_display_text(text)
+    if not cleaned:
+        return []
+    line_limit = max(10, int(max_chars_per_line))
+    lines_per_chunk = max(1, int(max_lines))
+    needed_limit = min(MAX_AUTO_LINE_CHARS, max(line_limit, (len(cleaned) + lines_per_chunk - 1) // lines_per_chunk))
+    for width in dict.fromkeys([line_limit, needed_limit, MAX_AUTO_LINE_CHARS]):
+        lines = _wrap_lines(cleaned, width)
+        if len(lines) <= lines_per_chunk:
+            return _rebalance_short_text_lines(lines, width)
+    return None
+
+
+def _wrap_lines(text: str, width: int) -> list[str]:
+    return textwrap.wrap(
+        text,
+        width=max(10, int(width)),
+        break_long_words=False,
+        break_on_hyphens=False,
+    ) or [text]
+
+
+def _ensure_sentence_stop(text: str) -> str:
+    cleaned = _clean_display_text(text)
+    if not cleaned:
+        return ""
+    if cleaned.rstrip().endswith(TERMINAL_SENTENCE_PUNCTUATION):
+        return cleaned
+    cleaned = TRAILING_SOFT_PUNCTUATION_RE.sub("", cleaned).rstrip()
+    return f"{cleaned}." if cleaned else ""
 
 
 def _rebalance_short_display_chunks(chunks: list[str], line_limit: int) -> list[str]:

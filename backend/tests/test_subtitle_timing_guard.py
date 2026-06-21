@@ -37,8 +37,9 @@ def test_subtitle_timing_guard_does_not_drop_long_text(tmp_path):
     blocks = parse_srt_blocks(str(output))
     combined = " ".join(block.text.replace("\n", " ") for block in blocks)
 
-    assert len(blocks) > 1
-    assert combined == text
+    assert len(blocks) == 1
+    assert all(len(block.text.splitlines()) <= 2 for block in blocks)
+    assert combined == f"{text}."
 
 
 def test_subtitle_timing_guard_can_shift_asr_subtitles_earlier(tmp_path):
@@ -65,15 +66,36 @@ def test_wrap_srt_text_preserves_all_wrapped_lines():
     assert " ".join(lines) == "Một câu tiếng Việt khá dài để kiểm tra xuống dòng"
 
 
-def test_split_text_for_display_keeps_each_chunk_at_most_two_lines():
+def test_split_text_for_display_keeps_complete_sentence_when_it_fits_two_lines():
+    text = "Mot cau tieng Viet kha dai de kiem tra xuong dong thanh mot block"
+    chunks = split_text_for_display(text, max_chars_per_line=18, max_lines=2)
+
+    assert len(chunks) == 1
+    assert all(len(chunk.splitlines()) <= 2 for chunk in chunks)
+    assert " ".join(chunks[0].splitlines()) == f"{text}."
+
+
+def test_split_text_for_display_splits_multiple_sentences():
     chunks = split_text_for_display(
-        "Một câu tiếng Việt khá dài để kiểm tra xuống dòng thành nhiều block",
+        "Cau mot hien rieng. Cau hai hien rieng.",
         max_chars_per_line=18,
         max_lines=2,
     )
 
+    assert [" ".join(chunk.splitlines()) for chunk in chunks] == ["Cau mot hien rieng.", "Cau hai hien rieng."]
+
+
+def test_split_text_for_display_splits_extremely_long_sentence_without_dropping_words():
+    text = (
+        "Mot cau qua dai de hien thi trong hai dong nen can duoc tach mem nhung van giu du thong tin "
+        "quan trong ve san pham cach su dung loi ich va ly do nen mua ngay hom nay"
+    )
+
+    chunks = split_text_for_display(text, max_chars_per_line=18, max_lines=2)
+
     assert len(chunks) > 1
     assert all(len(chunk.splitlines()) <= 2 for chunk in chunks)
+    assert " ".join(chunk.replace("\n", " ") for chunk in chunks) == f"{text}."
 
 
 def test_format_srt_timestamp():

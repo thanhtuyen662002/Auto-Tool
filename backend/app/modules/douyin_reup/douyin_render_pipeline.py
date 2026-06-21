@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from dataclasses import asdict
 from difflib import SequenceMatcher
@@ -930,7 +931,7 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
 
     def flush() -> None:
         nonlocal current_texts, current_start, current_end
-        text = _clean_spoken_text(" ".join(current_texts))
+        text = _join_spoken_texts(current_texts)
         if text:
             groups.append(VoiceoverLine(time_hint=f"{current_start:.2f}-{current_end:.2f}s", text=text))
         current_texts = []
@@ -952,7 +953,7 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
             last_accepted_end = max(last_accepted_end, float(block.end))
             continue
         if current_texts and _should_skip_repeated_spoken_block(
-            _clean_spoken_text(" ".join(current_texts)),
+            _join_spoken_texts(current_texts),
             text,
             max(0.0, float(block.start) - current_end),
         ):
@@ -968,7 +969,7 @@ def _build_smooth_voiceover_lines(blocks: list[SubtitleBlock]) -> list[Voiceover
             remember(text, float(block.end))
             continue
 
-        previous_text = _clean_spoken_text(" ".join(current_texts))
+        previous_text = _join_spoken_texts(current_texts)
         gap = max(0.0, float(block.start) - current_end)
         span = max(0.0, float(block.end) - current_start)
         combined_len = len(f"{previous_text} {text}".strip())
@@ -1041,24 +1042,99 @@ def _should_merge_spoken_subtitle_block(
 ) -> bool:
     if gap > 0.65 or span > 8.0 or combined_len > 180:
         return False
-    if len(previous_text) < 34:
+    if _ends_soft_clause(previous_text):
         return True
-    if previous_text.rstrip().endswith((",", ";", ":", "-", "–", "—")):
+    if _starts_spoken_continuation(next_text):
         return True
-    if not _ends_sentence(previous_text):
-        return True
-    first = next_text[:1]
-    if first and first.islower():
-        return True
-    return False
+    if _ends_sentence(previous_text):
+        return False
+    if _starts_new_sentence(next_text):
+        return False
+    return len(previous_text) < 34
 
 
 def _clean_spoken_text(text: str) -> str:
     return " ".join(str(text).replace("\r", " ").replace("\n", " ").split()).strip()
 
 
+def _join_spoken_texts(texts: list[str]) -> str:
+    joined = ""
+    for raw_text in texts:
+        text = _clean_spoken_text(raw_text)
+        if not text:
+            continue
+        if joined and _should_insert_sentence_stop(joined, text):
+            joined = _ensure_sentence_stop(joined)
+        joined = f"{joined} {text}".strip() if joined else text
+    return _ensure_sentence_stop(joined)
+
+
+def _should_insert_sentence_stop(previous_text: str, next_text: str) -> bool:
+    if not previous_text or not next_text:
+        return False
+    if _ends_sentence(previous_text) or _ends_soft_clause(previous_text):
+        return False
+    return _starts_new_sentence(next_text) and not _starts_spoken_continuation(next_text)
+
+
+def _ensure_sentence_stop(text: str) -> str:
+    cleaned = _clean_spoken_text(text)
+    if not cleaned:
+        return ""
+    if _ends_sentence(cleaned):
+        return cleaned
+    cleaned = re.sub(r"[\s,;:\-\u2013\u2014\u3001\uff0c\uff1b\uff1a]+$", "", cleaned).rstrip()
+    return f"{cleaned}." if cleaned else ""
+
+
+def _starts_spoken_continuation(text: str) -> bool:
+    stripped = _clean_spoken_text(text)
+    if not stripped:
+        return False
+    first = stripped[:1]
+    if first and first.islower():
+        return True
+    head = stripped.split(maxsplit=1)[0].strip(".,;:!?").casefold()
+    return head in {
+        "and",
+        "but",
+        "or",
+        "so",
+        "then",
+        "v\u00e0",
+        "nh\u01b0ng",
+        "n\u00ean",
+        "th\u00ec",
+        "\u0111\u1ec3",
+        "khi",
+        "n\u1ebfu",
+        "m\u00e0",
+        "ho\u1eb7c",
+        "hay",
+        "r\u1ed3i",
+        "gi\u00fap",
+        "cho",
+        "c\u1ee7a",
+        "v\u1edbi",
+    }
+
+
+def _starts_new_sentence(text: str) -> bool:
+    stripped = _clean_spoken_text(text).lstrip("\"'([{ ")
+    for char in stripped:
+        if char.isalnum():
+            return char.isupper() or char.isdigit()
+        if not char.isspace():
+            continue
+    return False
+
+
+def _ends_soft_clause(text: str) -> bool:
+    return text.rstrip().endswith((",", ";", ":", "-", "\u2013", "\u2014", "\u3001", "\uff0c", "\uff1b", "\uff1a"))
+
+
 def _ends_sentence(text: str) -> bool:
-    return text.rstrip().endswith((".", "!", "?", "…"))
+    return text.rstrip().endswith((".", "!", "?", "\u2026", "\u3002", "\uff01", "\uff1f"))
 
 
 def _allow_render_without_subtitle() -> bool:

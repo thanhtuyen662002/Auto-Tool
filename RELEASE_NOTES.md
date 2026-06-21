@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.40
+
+### Highlights
+
+- Improved Vietnamese subtitle display so each cue prefers one complete sentence instead of chopped fragments.
+- Limited subtitle display to a maximum of two lines when the sentence can fit, with soft splitting only for unusually long sentences.
+- Added punctuation safeguards so merged Vietnamese subtitle/voiceover text no longer runs two sentences together without a period.
+- Applied the same sentence-first behavior across fixed SRT, voice-synced SRT, and rendered ASS subtitles.
+
+### QA
+
+- Focused backend tests passed for subtitle timing, ASS rendering, voice subtitle sync, Douyin render pipeline, one-click batch, service flow, and subtitle translation.
+- Verified against a real tested output subtitle file that the generated SRT/ASS keeps complete sentences with at most two display lines.
+
 ## v1.0.39
 
 ### Highlights

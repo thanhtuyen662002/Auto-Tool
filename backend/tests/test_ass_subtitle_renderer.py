@@ -13,15 +13,15 @@ def test_hex_to_ass_color_converts_rgb_to_ass_bgr() -> None:
     assert hex_to_ass_color("#FFFFFF", alpha=0.5) == "&H80FFFFFF"
 
 
-def test_wrap_subtitle_text_preserves_all_lines() -> None:
+def test_wrap_subtitle_text_keeps_sentence_within_two_lines_when_possible() -> None:
     lines = wrap_subtitle_text(
-        "Đây là một câu subtitle dài cần được xuống dòng hợp lý",
+        "Day la mot cau subtitle dai can duoc xuong dong hop ly",
         max_chars_per_line=18,
         max_lines=2,
     )
 
-    assert len(lines) > 2
-    assert " ".join(lines) == "Đây là một câu subtitle dài cần được xuống dòng hợp lý"
+    assert len(lines) <= 2
+    assert " ".join(lines) == "Day la mot cau subtitle dai can duoc xuong dong hop ly"
 
 
 def test_wrap_subtitle_text_rebalances_short_last_word() -> None:
@@ -59,7 +59,10 @@ def test_generate_ass_subtitle_writes_positioned_ass_file(tmp_path) -> None:
 def test_generate_ass_subtitle_splits_long_lines_without_dropping_text(tmp_path) -> None:
     preset = get_visual_style_preset("sale_bold_red")
     output_path = tmp_path / "video_001_sub.ass"
-    text = "Một câu rất dài có nhiều thông tin quan trọng không được phép bị cắt mất khi render subtitle"
+    text = (
+        "Một câu rất dài có nhiều thông tin quan trọng không được phép bị cắt mất khi render subtitle "
+        "và vẫn cần được chia mềm khi vượt quá khả năng hiển thị hai dòng trên màn hình dọc"
+    )
 
     generate_ass_subtitle(
         [{"start_hint": 0, "end_hint": 4, "text": text}],
@@ -74,6 +77,26 @@ def test_generate_ass_subtitle_splits_long_lines_without_dropping_text(tmp_path)
     assert content.count("Dialogue: 0,") > 1
     for phrase in ["Một câu rất dài", "thông", "tin", "quan", "trọng", "render subtitle"]:
         assert phrase in content
+
+
+def test_generate_ass_subtitle_keeps_complete_sentence_in_one_dialogue_when_two_lines_fit(tmp_path) -> None:
+    preset = get_visual_style_preset("sale_bold_red")
+    output_path = tmp_path / "video_001_sentence.ass"
+    text = "Day la mot cau phu de vua du de hien thi thanh hai dong ro rang"
+
+    generate_ass_subtitle(
+        [{"start_hint": 0, "end_hint": 4, "text": text}],
+        preset,
+        1080,
+        1920,
+        str(output_path),
+    )
+
+    content = output_path.read_text(encoding="utf-8")
+
+    assert content.count("Dialogue: 0,") == 1
+    assert r"\N" in content
+    assert text.replace(" ", "") in content.replace(r"\N", " ").replace(" ", "")
 
 
 def test_generate_ass_subtitle_can_draw_cover_background(tmp_path) -> None:
