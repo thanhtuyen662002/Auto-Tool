@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   CheckCircle2,
@@ -55,6 +55,11 @@ export default function DouyinDownloadPage() {
   const [skipExisting, setSkipExisting] = useState(true);
   const [manualLinks, setManualLinks] = useState('');
   const [selectedLinks, setSelectedLinks] = useState<string[]>([]);
+  const leftDownloadCardRef = useRef<HTMLDivElement | null>(null);
+  const rightDownloadCardRef = useRef<HTMLDivElement | null>(null);
+  const linkListScrollRef = useRef<HTMLDivElement | null>(null);
+  const manualLinksRef = useRef<HTMLTextAreaElement | null>(null);
+  const [linkListMaxHeight, setLinkListMaxHeight] = useState<number | null>(null);
 
   const activeJob = job && (job.status === 'queued' || job.status === 'running') ? job : null;
   const scannedLinks = job?.links ?? [];
@@ -104,6 +109,40 @@ export default function DouyinDownloadPage() {
       void refreshHistory();
     }
   }, [job?.job_id, job?.status]);
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const leftCard = leftDownloadCardRef.current;
+      const rightCard = rightDownloadCardRef.current;
+      const listElement = linkListScrollRef.current || manualLinksRef.current;
+      if (!leftCard || !rightCard || !listElement) {
+        setLinkListMaxHeight(null);
+        return;
+      }
+      const leftRect = leftCard.getBoundingClientRect();
+      const rightRect = rightCard.getBoundingClientRect();
+      const listRect = listElement.getBoundingClientRect();
+      const bottomPadding = 20;
+      const availableHeight = Math.floor(rightRect.height - (listRect.top - leftRect.top) - bottomPadding);
+      setLinkListMaxHeight(Math.max(224, availableHeight));
+    };
+
+    measure();
+    window.addEventListener('resize', measure);
+    const observers: ResizeObserver[] = [];
+    if (typeof ResizeObserver !== 'undefined') {
+      [leftDownloadCardRef.current, rightDownloadCardRef.current].forEach((element) => {
+        if (!element) return;
+        const observer = new ResizeObserver(measure);
+        observer.observe(element);
+        observers.push(observer);
+      });
+    }
+    return () => {
+      window.removeEventListener('resize', measure);
+      observers.forEach((observer) => observer.disconnect());
+    };
+  }, [cachedLinks.length, scannedLinks.length, linkLines.length, job?.job_id, job?.status, job?.logs.length, job?.outputs.length, recentFolders.length]);
 
   async function refreshStatus() {
     try {
@@ -348,14 +387,15 @@ export default function DouyinDownloadPage() {
       <ApiErrorBox error={error} />
       {notice ? <div className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">{notice}</div> : null}
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <GlassCard className="flex min-h-0 min-w-0 flex-col p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-white">Quét đường dẫn video</h2>
-            <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-300">
-              Đã chọn {usableLinks.length} đường dẫn
-            </span>
-          </div>
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px] xl:items-start">
+        <div ref={leftDownloadCardRef} className="min-w-0">
+          <GlassCard className="min-w-0 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-white">Quét đường dẫn video</h2>
+              <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-300">
+                Đã chọn {usableLinks.length} đường dẫn
+              </span>
+            </div>
 
           <div className="mt-4 grid gap-4">
             <Field label="Đường dẫn kênh hoặc trang Douyin">
@@ -418,10 +458,10 @@ export default function DouyinDownloadPage() {
             </div>
           </div>
 
-          <div className="mt-5 flex min-h-0 flex-1 flex-col">
+          <div className="mt-5">
             <h3 className="mb-2 text-sm font-semibold text-slate-100">Danh sách đường dẫn</h3>
             {scannedLinks.length ? (
-              <div className="min-h-72 flex-1 overflow-y-auto rounded-md border border-white/10 bg-slate-950/55">
+              <div ref={linkListScrollRef} className="min-h-56 overflow-y-auto rounded-md border border-white/10 bg-slate-950/55" style={linkListMaxHeight ? { maxHeight: `${linkListMaxHeight}px` } : undefined}>
                 {scannedLinks.map((link) => (
                   <label key={link} className="flex min-w-0 cursor-pointer items-start gap-3 border-b border-white/5 px-3 py-2 text-sm text-slate-300 last:border-b-0">
                     <input className="mt-1 shrink-0" type="checkbox" checked={selectedLinks.includes(link)} onChange={() => toggleLink(link)} />
@@ -434,7 +474,9 @@ export default function DouyinDownloadPage() {
               </div>
             ) : (
               <textarea
-                className="min-h-40 w-full flex-1 rounded-md border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300"
+                ref={manualLinksRef}
+                className="min-h-40 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300"
+                style={linkListMaxHeight ? { maxHeight: `${linkListMaxHeight}px` } : undefined}
                 value={manualLinks}
                 onChange={(event) => setManualLinks(event.target.value)}
                 placeholder="Có thể dán mỗi dòng một đường dẫn video Douyin nếu không cần quét kênh."
@@ -443,8 +485,10 @@ export default function DouyinDownloadPage() {
             )}
           </div>
         </GlassCard>
+        </div>
 
-        <GlassCard className="min-w-0 p-5">
+        <div ref={rightDownloadCardRef} className="min-w-0">
+          <GlassCard className="min-w-0 p-5">
           <h2 className="text-lg font-semibold text-white">Tải về máy</h2>
           <div className="mt-4 grid gap-4">
             <Field label="Thư mục lưu video">
@@ -482,7 +526,8 @@ export default function DouyinDownloadPage() {
               onResume={() => void handleResumeJob()}
             />
           ) : null}
-        </GlassCard>
+          </GlassCard>
+        </div>
       </section>
 
       {recentJobs.length ? (

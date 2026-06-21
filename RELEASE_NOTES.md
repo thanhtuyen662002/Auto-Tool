@@ -1,5 +1,16 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.44
+
+### Highlights
+
+- Fixed the Douyin download link list so it no longer grows past the right-side download card when many links are loaded.
+- The link list now measures the right panel height and scrolls inside its own box, keeping both desktop columns aligned.
+
+### QA
+
+- Frontend production build passed.
+
 ## v1.0.43
 
 ### Highlights
