@@ -13,7 +13,7 @@ export default function StartPresetCard({
 }) {
   return (
     <button
-      className={`group min-h-[150px] rounded-md border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-cyan-300/40 ${
+      className={`group min-h-[132px] rounded-md border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-cyan-300/40 ${
         active ? 'border-cyan-300/70 bg-cyan-300/12 shadow-[0_0_30px_rgba(34,211,238,0.14)]' : 'border-white/10 bg-white/5 hover:border-cyan-300/35 hover:bg-white/8'
       }`}
       type="button"
@@ -26,7 +26,7 @@ export default function StartPresetCard({
           </span>
           <div>
             <div className="font-semibold text-white">{preset.name}</div>
-            <div className="mt-0.5 text-xs text-slate-500">{preset.autoRender ? 'Xuất ngay' : preset.reviewRequired ? 'Cần duyệt' : 'Không cần duyệt'}</div>
+            <div className="mt-0.5 text-xs text-slate-500">{preset.autoRender ? 'Xuất MP4' : preset.reviewRequired ? 'Duyệt trước' : 'Không cần duyệt'}</div>
           </div>
         </div>
         {active ? <CheckCircle2 className="shrink-0 text-cyan-200" size={18} /> : null}

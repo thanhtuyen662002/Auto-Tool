@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import shutil
+from datetime import datetime
 from pathlib import Path
 
-from app.modules.douyin_reup.douyin_reup_service import DouyinReupService
+from app.modules.douyin_reup.douyin_reup_service import DouyinReupService, _douyin_run_folder_name
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem, SubtitleSourceResult, TranslationResult
 from app.modules.job_recovery import JobCheckpointService, JobStepStatus, RecoverableStep
 from app.modules.silent_immersive_reup.silent_schema import (
@@ -45,6 +46,13 @@ def _project_config(tmp_path: Path, source_folder: Path, output_folder: Path) ->
             ).model_dump(mode="json"),
         }
     )
+
+
+def test_douyin_run_folder_name_does_not_repeat_default_project_slug():
+    created_at = datetime(2026, 6, 20, 23, 12, 22)
+
+    assert _douyin_run_folder_name("douyin_reup_2026_06_20", created_at) == "douyin_reup_2026_06_20-231222"
+    assert _douyin_run_folder_name("my-shop", created_at) == "my-shop-2026-06-20-231222"
 
 
 def test_douyin_reup_service_processes_each_video_without_crashing_batch(tmp_path, monkeypatch):

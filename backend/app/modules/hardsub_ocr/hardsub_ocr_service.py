@@ -8,7 +8,7 @@ from PIL import Image
 from app.adapters.ffmpeg_adapter import probe_video
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
 from app.modules.hardsub_ocr.frame_sampler import FrameSampler
-from app.modules.hardsub_ocr.hardsub_ocr_schema import HardSubOCRResult, OCRFrameResult
+from app.modules.hardsub_ocr.hardsub_ocr_schema import HardSubOCRResult, OCRFrameResult, OCRRegion
 from app.modules.hardsub_ocr.ocr_line_merger import OCRLineMerger
 from app.modules.hardsub_ocr.ocr_provider import BaseOCRProvider, build_ocr_provider
 from app.modules.hardsub_ocr.ocr_srt_builder import OCRSRTBuilder
@@ -69,10 +69,11 @@ class HardSubOCRService:
                 "width": int(float(manual_region.get("width", media.width)) * scale_x),
                 "height": int(float(manual_region.get("height", media.height)) * scale_y),
             }
+        requested_region_mode = settings.ocr_region_mode
         region = self.region_detector.detect_region(
             frame_width,
             frame_height,
-            mode=settings.ocr_region_mode,
+            mode=requested_region_mode,
             manual_region=manual_region,
         )
         _progress(progress_callback, "ocr_recognizing", 20)
@@ -135,6 +136,8 @@ class HardSubOCRService:
         lines = self.line_merger.merge_frames_to_lines(frame_results, settings)
         filter_summary = dict(getattr(self.line_merger, "last_filter_summary", {}) or {})
         watermark_removed_count = int(filter_summary.get("watermark_removed_frame_count", 0) or 0)
+        fallback_attempts: list[dict[str, Any]] = []
+        effective_region_mode = requested_region_mode
         if watermark_removed_count:
             warnings.append(
                 f"ocr_watermark_filtered: removed watermark/channel label text from {watermark_removed_count} OCR frame(s) before translation."
@@ -156,6 +159,59 @@ class HardSubOCRService:
                 f"ocr_low_confidence_lines: Đã giữ {low_confidence_line_count} dòng OCR confidence thấp "
                 "vì vẫn có đủ dấu hiệu chữ Trung; cần review kỹ bản dịch."
             )
+        if _should_retry_full_frame(
+            requested_region_mode=requested_region_mode,
+            line_count=len(lines),
+            average_confidence=sum(line.confidence for line in lines) / len(lines) if lines else 0.0,
+            text_frame_count=text_frame_count,
+            accepted_frame_count=accepted_frame_count,
+        ):
+            fallback_region = self.region_detector.detect_region(frame_width, frame_height, mode="full_frame")
+            _progress(progress_callback, "ocr_retry_full_frame", 92, len(frames), len(frames))
+            fallback_frame_results, fallback_warnings = _recognize_frames_for_region(
+                provider,
+                frames,
+                fallback_region,
+                progress_callback,
+            )
+            fallback_lines = self.line_merger.merge_frames_to_lines(fallback_frame_results, settings)
+            fallback_filter_summary = dict(getattr(self.line_merger, "last_filter_summary", {}) or {})
+            fallback_average_confidence = (
+                sum(line.confidence for line in fallback_lines) / len(fallback_lines) if fallback_lines else 0.0
+            )
+            fallback_text_frame_count = sum(1 for frame in fallback_frame_results if str(frame.text or "").strip())
+            fallback_accepted_frame_count = sum(line.frame_count for line in fallback_lines)
+            fallback_used = _fallback_result_is_better(
+                current_line_count=len(lines),
+                current_average_confidence=sum(line.confidence for line in lines) / len(lines) if lines else 0.0,
+                current_accepted_frame_count=accepted_frame_count,
+                fallback_line_count=len(fallback_lines),
+                fallback_average_confidence=fallback_average_confidence,
+                fallback_accepted_frame_count=fallback_accepted_frame_count,
+            )
+            fallback_attempts.append(
+                {
+                    "region_mode": "full_frame",
+                    "region": fallback_region.model_dump(mode="json"),
+                    "detected_line_count": len(fallback_lines),
+                    "average_confidence": round(fallback_average_confidence, 4),
+                    "text_frame_count": fallback_text_frame_count,
+                    "accepted_frame_count": fallback_accepted_frame_count,
+                    "used": fallback_used,
+                }
+            )
+            if fallback_used:
+                region = fallback_region
+                frame_results = fallback_frame_results
+                lines = fallback_lines
+                filter_summary = fallback_filter_summary
+                text_frame_count = fallback_text_frame_count
+                accepted_frame_count = fallback_accepted_frame_count
+                effective_region_mode = "full_frame"
+                warnings.extend(fallback_warnings)
+                warnings.append(
+                    "ocr_region_fallback_full_frame: initial OCR region was weak, retried full-frame and used the stronger result."
+                )
         average_confidence = sum(line.confidence for line in lines) / len(lines) if lines else 0.0
         source_srt_path = None
         if lines:
@@ -173,7 +229,8 @@ class HardSubOCRService:
             "video_path": video_path,
             "provider": provider.provider_name,
             "language": settings.ocr_language,
-            "region_mode": settings.ocr_region_mode,
+            "requested_region_mode": requested_region_mode,
+            "region_mode": effective_region_mode,
             "region": region.model_dump(mode="json"),
             "frame_width": frame_width,
             "frame_height": frame_height,
@@ -183,6 +240,7 @@ class HardSubOCRService:
             "average_confidence": round(average_confidence, 4),
             "source_srt_path": source_srt_path,
             "filter_summary": filter_summary,
+            "fallback_attempts": fallback_attempts,
             "frames": [
                 {
                     "timestamp_ms": frame.timestamp_ms,
@@ -205,7 +263,7 @@ class HardSubOCRService:
             video_path=video_path,
             provider=provider.provider_name,
             language=settings.ocr_language,
-            region_mode=settings.ocr_region_mode,
+            region_mode=effective_region_mode,
             source_srt_path=source_srt_path,
             debug_json_path=str(debug_path),
             frame_count=len(frames),
@@ -233,3 +291,109 @@ def _progress(
                 "total_frames": total_frames,
             }
         )
+
+
+def _recognize_frames_for_region(
+    provider: BaseOCRProvider,
+    frames: list[tuple[int, str]],
+    region: OCRRegion,
+    progress_callback: Callable[[dict[str, Any]], None] | None,
+) -> tuple[list[OCRFrameResult], list[str]]:
+    frame_results: list[OCRFrameResult] = []
+    warnings: list[str] = []
+    total_frames = max(1, len(frames))
+    frames_to_process = frames
+    if type(provider).recognize_batch is not BaseOCRProvider.recognize_batch:
+        batch_size = 4
+        for batch_start in range(0, len(frames), batch_size):
+            batch = frames[batch_start : batch_start + batch_size]
+            try:
+                recognized = provider.recognize_batch([frame_path for _timestamp, frame_path in batch], region)
+            except Exception as exc:
+                recognized = [
+                    OCRFrameResult(
+                        timestamp_ms=timestamp_ms,
+                        frame_path=frame_path,
+                        region=region,
+                        text="",
+                        confidence=0.0,
+                        warnings=[f"OCR frame error: {exc}"],
+                    )
+                    for timestamp_ms, frame_path in batch
+                ]
+            for (timestamp_ms, _frame_path), result in zip(batch, recognized):
+                if result.timestamp_ms != timestamp_ms:
+                    result = result.model_copy(update={"timestamp_ms": timestamp_ms})
+                frame_results.append(result)
+                warnings.extend(result.warnings)
+            completed_frames = min(len(frames), batch_start + len(batch))
+            percent = 92 + int((completed_frames / total_frames) * 3)
+            _progress(progress_callback, "ocr_retry_full_frame", min(95, percent), completed_frames, total_frames)
+        frames_to_process = []
+
+    for frame_index, (timestamp_ms, frame_path) in enumerate(frames_to_process, start=1):
+        try:
+            result = provider.recognize(frame_path, region)
+            if result.timestamp_ms != timestamp_ms:
+                result = result.model_copy(update={"timestamp_ms": timestamp_ms})
+            frame_results.append(result)
+            warnings.extend(result.warnings)
+        except Exception as exc:
+            frame_results.append(
+                OCRFrameResult(
+                    timestamp_ms=timestamp_ms,
+                    frame_path=frame_path,
+                    region=region,
+                    text="",
+                    confidence=0.0,
+                    warnings=[f"OCR frame error: {exc}"],
+                )
+            )
+            warnings.append(f"OCR frame error: {exc}")
+
+        if frame_index == total_frames or frame_index % max(1, total_frames // 15) == 0:
+            percent = 92 + int((frame_index / total_frames) * 3)
+            _progress(progress_callback, "ocr_retry_full_frame", min(95, percent), frame_index, total_frames)
+    return frame_results, warnings
+
+
+def _should_retry_full_frame(
+    *,
+    requested_region_mode: str,
+    line_count: int,
+    average_confidence: float,
+    text_frame_count: int,
+    accepted_frame_count: int,
+) -> bool:
+    mode = (requested_region_mode or "").strip().lower()
+    if mode in {"full_frame", "manual"}:
+        return False
+    if line_count <= 0:
+        return True
+    if average_confidence < 0.12:
+        return True
+    return bool(text_frame_count and accepted_frame_count < max(1, int(text_frame_count * 0.35)))
+
+
+def _fallback_result_is_better(
+    *,
+    current_line_count: int,
+    current_average_confidence: float,
+    current_accepted_frame_count: int,
+    fallback_line_count: int,
+    fallback_average_confidence: float,
+    fallback_accepted_frame_count: int,
+) -> bool:
+    if fallback_line_count <= 0:
+        return False
+    if current_line_count <= 0:
+        return True
+    if fallback_line_count >= current_line_count + 2:
+        return fallback_average_confidence >= max(0.02, current_average_confidence * 0.5)
+    if fallback_line_count >= current_line_count and fallback_average_confidence >= current_average_confidence + 0.05:
+        return True
+    return (
+        current_average_confidence < 0.12
+        and fallback_line_count >= current_line_count
+        and fallback_accepted_frame_count > current_accepted_frame_count
+    )

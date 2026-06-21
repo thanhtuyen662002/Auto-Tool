@@ -21,6 +21,6 @@ bash "$ROOT/scripts/check_production_build.sh"
 
 export AUTO_TOOL_ROOT="$ROOT"
 export AUTO_TOOL_PORT=8000
-export AUTO_TOOL_STRICT_PORT=1
+export AUTO_TOOL_STRICT_PORT=0
 cd "$ROOT/backend"
 exec "$VENV/bin/python" -m app.launcher

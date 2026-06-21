@@ -158,6 +158,7 @@ class SubtitleSourceDetector:
             ocr_frame_count=result.frame_count,
             ocr_detected_line_count=result.detected_line_count,
             ocr_average_confidence=result.average_confidence,
+            ocr_region_mode=result.region_mode,
             warnings=[
                 reason,
                 "Phụ đề nguồn được nhận diện bằng OCR từ chữ dính trên video. Vui lòng kiểm tra kỹ vì OCR có thể nhận sai chữ.",

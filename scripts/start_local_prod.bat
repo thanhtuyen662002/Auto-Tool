@@ -29,7 +29,7 @@ if errorlevel 1 exit /b 1
 
 set "AUTO_TOOL_ROOT=%ROOT%"
 set "AUTO_TOOL_PORT=8000"
-set "AUTO_TOOL_STRICT_PORT=1"
+set "AUTO_TOOL_STRICT_PORT=0"
 pushd "%ROOT%\backend"
 "%VENV%\Scripts\python.exe" -m app.launcher
 set "RESULT=%ERRORLEVEL%"

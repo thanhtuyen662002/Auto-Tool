@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type PointerEvent } from 'react';
+import { useEffect, useMemo, useState, type PointerEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AlertTriangle, CheckCircle2, Info, Play, RefreshCw, Route, Settings2 } from 'lucide-react';
 import {
   applyDouyinReupPreset,
   buildSilentReupPlan,
@@ -39,13 +40,9 @@ import OutputFolderCard from '../components/start-workflow/OutputFolderCard';
 import ProductContextCard from '../components/start-workflow/ProductContextCard';
 import SourceFolderCard from '../components/start-workflow/SourceFolderCard';
 import StartAdvancedSettingsDrawer from '../components/start-workflow/StartAdvancedSettingsDrawer';
-import StartBatchButton from '../components/start-workflow/StartBatchButton';
-import StartChecklistCard from '../components/start-workflow/StartChecklistCard';
 import StartPresetSelector from '../components/start-workflow/StartPresetSelector';
-import StartValidationAlert from '../components/start-workflow/StartValidationAlert';
 import StartWorkflowLayout from '../components/start-workflow/StartWorkflowLayout';
 import WorkflowHero from '../components/start-workflow/WorkflowHero';
-import WorkflowPreviewPanel from '../components/start-workflow/WorkflowPreviewPanel';
 import WorkflowStepper from '../components/workflow/WorkflowStepper';
 import {
   browseStartFolder,
@@ -759,7 +756,20 @@ function defaultProjectName(workflow: 'douyin' | 'silent'): string {
 }
 
 function normalizeDouyinSettings(settings: Partial<DouyinReupSettings>): DouyinReupSettings {
-  return { ...DEFAULT_SETTINGS, ...settings };
+  return { ...DEFAULT_SETTINGS, ...migrateDouyinSettings(settings) };
+}
+
+function migrateDouyinSettings(settings: Partial<DouyinReupSettings>): Partial<DouyinReupSettings> {
+  const next = { ...settings };
+  if (
+    next.preset_id === 'voice_priority'
+    && next.review_subtitles_before_render === true
+    && next.auto_render_after_translation === false
+  ) {
+    next.review_subtitles_before_render = false;
+    next.auto_render_after_translation = true;
+  }
+  return next;
 }
 
 function splitWatermarkTerms(value: string): string[] {
@@ -1151,6 +1161,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       }
       const productContext = buildSilentProductContext(silentProductContext);
       const audioOverrides = buildAudioOverrides();
+      const subtitleSourceOverrides = buildSubtitleSourceOverrides();
       const silentAutoRender = settings.auto_render_after_translation || selectedPresetId === 'silent_sales_recut';
       const response = initialWorkflow === 'silent'
         ? await startSilentOneClick({
@@ -1167,6 +1178,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             product_context: productContext,
             advanced_overrides: {
               ...audioOverrides,
+              ...subtitleSourceOverrides,
               silent_caption_tone: settings.silent_caption_tone,
             },
           })
@@ -1185,6 +1197,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             product_context: productContext,
         advanced_overrides: {
           ...audioOverrides,
+          ...subtitleSourceOverrides,
           ...(mode === 'advanced' ? settings : {}),
           silent_caption_tone: settings.silent_caption_tone,
         },
@@ -1363,8 +1376,36 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       batch_watchdog_stale_minutes: settings.batch_watchdog_stale_minutes,
       batch_pause_on_repeated_failures: settings.batch_pause_on_repeated_failures,
       batch_max_consecutive_failures: settings.batch_max_consecutive_failures,
+    };
+  }
+
+  function buildSubtitleSourceOverrides(): Record<string, unknown> {
+    return {
+      subtitle_source_priority: settings.subtitle_source_priority,
+      use_sidecar_srt: settings.use_sidecar_srt,
+      use_embedded_subtitle: settings.use_embedded_subtitle,
+      use_asr_if_no_subtitle: settings.use_asr_if_no_subtitle,
+      asr_vad_filter: settings.asr_vad_filter,
+      asr_max_audio_seconds: settings.asr_max_audio_seconds,
+      asr_subtitle_offset_seconds: settings.asr_subtitle_offset_seconds,
+      use_ocr_if_asr_failed: settings.use_ocr_if_asr_failed,
+      use_ocr_if_no_subtitle: settings.use_ocr_if_no_subtitle,
+      ocr_provider: settings.ocr_provider,
+      ocr_language: settings.ocr_language,
+      ocr_sample_fps: settings.ocr_sample_fps,
+      ocr_subprocess_isolation: settings.ocr_subprocess_isolation,
+      ocr_timeout_seconds: settings.ocr_timeout_seconds,
+      ocr_region_mode: settings.ocr_region_mode,
+      ocr_manual_region: settings.ocr_manual_region,
+      ocr_min_confidence: settings.ocr_min_confidence,
+      ocr_dedupe_similarity: settings.ocr_dedupe_similarity,
+      ocr_min_text_length: settings.ocr_min_text_length,
+      ocr_merge_gap_ms: settings.ocr_merge_gap_ms,
+      ocr_min_duration_ms: settings.ocr_min_duration_ms,
+      ocr_max_duration_ms: settings.ocr_max_duration_ms,
       ocr_filter_watermarks: settings.ocr_filter_watermarks,
       ocr_watermark_terms: settings.ocr_watermark_terms,
+      prefer_ocr_over_asr_when_text_visible: settings.prefer_ocr_over_asr_when_text_visible,
     };
   }
 
@@ -2285,19 +2326,24 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             </label>
           </div>
           {settings.ocr_region_mode === 'manual' ? (
-            <div className="grid gap-2 sm:grid-cols-4">
-              {(['x', 'y', 'width', 'height'] as const).map((key) => (
-                <label className="block" key={key}>
-                  <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">{key}</span>
-                  <input
-                    className="h-10 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
-                    type="number"
-                    min={0}
-                    value={settings.ocr_manual_region?.[key] ?? (key === 'width' ? 1080 : key === 'height' ? 500 : 0)}
-                    onChange={(event) => updateOcrManualRegion(key, Number(event.target.value || 0))}
-                  />
-                </label>
-              ))}
+            <div className="grid gap-3">
+              <p className="rounded-md border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs leading-5 text-cyan-100">
+                Tự nhập vùng dùng tọa độ theo video gốc: x/y là góc trên bên trái, width/height là kích thước vùng. Ví dụ video 1080x1920 quét nửa trên: x=0, y=0, width=1080, height=900.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-4">
+                {(['x', 'y', 'width', 'height'] as const).map((key) => (
+                  <label className="block" key={key}>
+                    <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">{key}</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                      type="number"
+                      min={0}
+                      value={settings.ocr_manual_region?.[key] ?? (key === 'width' ? 1080 : key === 'height' ? 500 : 0)}
+                      onChange={(event) => updateOcrManualRegion(key, Number(event.target.value || 0))}
+                    />
+                  </label>
+                ))}
+              </div>
             </div>
           ) : null}
         </GlassCard>
@@ -2398,46 +2444,10 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               recommendationReason={recommendation?.reason ?? recommendationReason(workflowMode, sourceFolder, recommendedPresetCard)}
               onSelect={(presetId) => void handlePresetSelect(presetId)}
             />
-            <ProductContextCard
-              value={silentProductContext}
-              industries={silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES}
-              tone={settings.silent_caption_tone}
-              busy={busy || videos.length === 0}
-              hasPreview={Boolean(captionPreview)}
-              onChange={updateSilentProductContext}
-              onToneChange={(value) => updateSettings({ silent_caption_tone: value })}
-              onPreview={() => void handleGenerateCaptionPreview()}
-              onRegenerate={() => void handleRegenerateCaptionPreview()}
-              onCreateReview={() => void handleCreateCaptionReviewDocument()}
-            />
             <RenderFlowCard
               mode={workflowMode}
               reviewMode={usesManualSubtitleReview}
               onModeChange={(renderMode) => updateRenderFlow(renderMode)}
-            />
-            {workflowMode === 'silent_immersive' ? (
-              <AutoRouteSpeechCard
-                enabled={settings.auto_route_speech_to_voice_reup}
-                threshold={settings.auto_route_speech_threshold}
-                voiceoverEnabled={settings.generate_voiceover_for_silent_video}
-                onEnabledChange={(value) => updateSettings({ auto_route_speech_to_voice_reup: value })}
-                onThresholdChange={(value) => updateSettings({ auto_route_speech_threshold: value })}
-              />
-            ) : (
-              <AutoRouteNoSpeechCard
-                enabled={settings.auto_route_no_speech_to_silent_reup}
-                onEnabledChange={(value) => updateSettings({ auto_route_no_speech_to_silent_reup: value })}
-              />
-            )}
-            <BatchReliabilityCard
-              mode={settings.batch_performance_mode}
-              chunkSize={settings.batch_chunk_size}
-              ffmpegTimeoutSeconds={settings.batch_ffmpeg_timeout_seconds}
-              watchdogMinutes={settings.batch_watchdog_stale_minutes}
-              asrMaxAudioSeconds={settings.asr_max_audio_seconds}
-              pauseOnRepeatedFailures={settings.batch_pause_on_repeated_failures}
-              maxConsecutiveFailures={settings.batch_max_consecutive_failures}
-              onChange={updateSettings}
             />
             <OutputFolderCard
               mode={workflowMode}
@@ -2450,24 +2460,65 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               onUseRecent={setOutputFolder}
               onRemoveRecent={(path) => setRecentOutputFolders((current) => removeRecentFolder(RECENT_OUTPUT_KEY, current, path))}
             />
-            <MusicFolderCard
-              musicFolder={settings.music_folder || ''}
-              addMusic={addMusicEnabled}
-              recentFolders={recentMusicFolders}
-              onAddMusicChange={(value) => updateSettings(initialWorkflow === 'silent' ? { add_bgm_for_silent_video: value, add_bgm: value } : { add_bgm: value })}
-              onBrowse={() => void browseMusicFolder()}
-              onMusicFolderChange={(value) => updateSettings({ music_folder: value })}
-              onUseRecent={(path) => updateSettings({ music_folder: path })}
-              onRemoveRecent={(path) => setRecentMusicFolders((current) => removeRecentFolder(RECENT_MUSIC_KEY, current, path))}
-            />
-            <VoiceoverCard
-              mode={workflowMode}
-              enabled={settings.generate_voiceover_for_silent_video}
-              provider={settings.silent_voiceover_provider}
-              voice={settings.silent_voiceover_voice}
-              onEnabledChange={updateVoiceoverEnabled}
-              onVoiceChange={updateVoiceChoice}
-            />
+            <AdvancedTuningSection
+              hasCustomSettings={mode === 'advanced'}
+              onOpenAdvanced={() => setAdvancedOpen(true)}
+            >
+              <ProductContextCard
+                value={silentProductContext}
+                industries={silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES}
+                tone={settings.silent_caption_tone}
+                busy={busy || videos.length === 0}
+                hasPreview={Boolean(captionPreview)}
+                onChange={updateSilentProductContext}
+                onToneChange={(value) => updateSettings({ silent_caption_tone: value })}
+                onPreview={() => void handleGenerateCaptionPreview()}
+                onRegenerate={() => void handleRegenerateCaptionPreview()}
+                onCreateReview={() => void handleCreateCaptionReviewDocument()}
+              />
+              {workflowMode === 'silent_immersive' ? (
+                <AutoRouteSpeechCard
+                  enabled={settings.auto_route_speech_to_voice_reup}
+                  threshold={settings.auto_route_speech_threshold}
+                  voiceoverEnabled={settings.generate_voiceover_for_silent_video}
+                  onEnabledChange={(value) => updateSettings({ auto_route_speech_to_voice_reup: value })}
+                  onThresholdChange={(value) => updateSettings({ auto_route_speech_threshold: value })}
+                />
+              ) : (
+                <AutoRouteNoSpeechCard
+                  enabled={settings.auto_route_no_speech_to_silent_reup}
+                  onEnabledChange={(value) => updateSettings({ auto_route_no_speech_to_silent_reup: value })}
+                />
+              )}
+              <MusicFolderCard
+                musicFolder={settings.music_folder || ''}
+                addMusic={addMusicEnabled}
+                recentFolders={recentMusicFolders}
+                onAddMusicChange={(value) => updateSettings(initialWorkflow === 'silent' ? { add_bgm_for_silent_video: value, add_bgm: value } : { add_bgm: value })}
+                onBrowse={() => void browseMusicFolder()}
+                onMusicFolderChange={(value) => updateSettings({ music_folder: value })}
+                onUseRecent={(path) => updateSettings({ music_folder: path })}
+                onRemoveRecent={(path) => setRecentMusicFolders((current) => removeRecentFolder(RECENT_MUSIC_KEY, current, path))}
+              />
+              <VoiceoverCard
+                mode={workflowMode}
+                enabled={settings.generate_voiceover_for_silent_video}
+                provider={settings.silent_voiceover_provider}
+                voice={settings.silent_voiceover_voice}
+                onEnabledChange={updateVoiceoverEnabled}
+                onVoiceChange={updateVoiceChoice}
+              />
+              <BatchReliabilityCard
+                mode={settings.batch_performance_mode}
+                chunkSize={settings.batch_chunk_size}
+                ffmpegTimeoutSeconds={settings.batch_ffmpeg_timeout_seconds}
+                watchdogMinutes={settings.batch_watchdog_stale_minutes}
+                asrMaxAudioSeconds={settings.asr_max_audio_seconds}
+                pauseOnRepeatedFailures={settings.batch_pause_on_repeated_failures}
+                maxConsecutiveFailures={settings.batch_max_consecutive_failures}
+                onChange={updateSettings}
+              />
+            </AdvancedTuningSection>
             {captionPreview ? (
               <SilentPlanPreview
                 preview={captionPreview}
@@ -2485,23 +2536,25 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         }
         side={
           <>
-            <QuickTuningCard
+            <RunSummaryPanel
               mode={workflowMode}
-              hasCustomSettings={mode === 'advanced'}
-              autoRender={currentAutoRender}
-              addMusic={addMusicEnabled}
-              voiceoverEnabled={settings.generate_voiceover_for_silent_video}
-              autoRouteEnabled={workflowMode === 'silent_immersive' ? settings.auto_route_speech_to_voice_reup : settings.auto_route_no_speech_to_silent_reup}
-              onOpenAdvanced={() => setAdvancedOpen(true)}
-            />
-            <WorkflowPreviewPanel mode={workflowMode} preset={workflowPreviewPreset} scanSummary={scanSummary} jobStatus={jobStatus} />
-            <StartChecklistCard items={checklist} />
-            <StartValidationAlert messages={validationMessages} />
-            <StartBatchButton
+              preset={workflowPreviewPreset}
+              sourceFolder={sourceFolder}
+              outputFolder={outputFolder}
+              scanSummary={scanSummary}
+              checklist={checklist}
+              validationMessages={validationMessages}
+              job={jobStartedView}
+              jobStatus={jobStatus}
               disabled={startDisabled}
               loading={busy && !jobStatus}
-              label={currentAutoRender ? 'Bắt đầu xuất video ngay' : 'Bắt đầu và chờ duyệt'}
-              job={jobStartedView}
+              startLabel={currentAutoRender ? 'Bắt đầu xuất MP4 ngay' : 'Tạo phụ đề để duyệt'}
+              addMusic={addMusicEnabled}
+              musicFolder={settings.music_folder || ''}
+              voiceoverEnabled={settings.generate_voiceover_for_silent_video}
+              autoRouteEnabled={workflowMode === 'silent_immersive' ? settings.auto_route_speech_to_voice_reup : settings.auto_route_no_speech_to_silent_reup}
+              reviewMode={usesManualSubtitleReview}
+              onOpenAdvanced={() => setAdvancedOpen(true)}
               onStart={requestStart}
             />
             <StartAdvancedSettingsDrawer
@@ -2783,6 +2836,242 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         </section>
       ) : null}
     </>
+  );
+}
+
+function RunSummaryPanel({
+  mode,
+  preset,
+  sourceFolder,
+  outputFolder,
+  scanSummary,
+  checklist,
+  validationMessages,
+  job,
+  jobStatus,
+  disabled,
+  loading,
+  startLabel,
+  addMusic,
+  musicFolder,
+  voiceoverEnabled,
+  autoRouteEnabled,
+  reviewMode,
+  onOpenAdvanced,
+  onStart,
+}: {
+  mode: StartWorkflowMode;
+  preset?: StartPresetViewModel;
+  sourceFolder: string;
+  outputFolder: string;
+  scanSummary: StartScanSummary | null;
+  checklist: StartChecklistItem[];
+  validationMessages: StartValidationMessage[];
+  job: JobStartedView | null;
+  jobStatus: JobStatus | null;
+  disabled: boolean;
+  loading: boolean;
+  startLabel: string;
+  addMusic: boolean;
+  musicFolder: string;
+  voiceoverEnabled: boolean;
+  autoRouteEnabled: boolean;
+  reviewMode: boolean;
+  onOpenAdvanced: () => void;
+  onStart: () => void;
+}) {
+  const blockingItems = checklist.filter((item) => item.status === 'missing');
+  const warningItems = checklist.filter((item) => item.status === 'warning');
+  const steps = compactWorkflowSteps(mode, preset);
+  const ready = !disabled && !loading;
+  const missingMusicFolder = addMusic && !musicFolder.trim();
+  const visibleWarningItems = warningItems.filter((item) => !(missingMusicFolder && isMusicFolderWarning(`${item.id} ${item.label} ${item.message || ''}`)));
+  const importantMessages = validationMessages
+    .filter((message) => message.tone !== 'info')
+    .filter((message) => !(missingMusicFolder && isMusicFolderWarning(message.message)))
+    .slice(0, 3);
+
+  return (
+    <GlassCard className="grid content-start gap-4 p-5" strong>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">Trước khi chạy</div>
+          <h2 className="mt-1 text-xl font-semibold text-white">Tóm tắt lô video</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Chỉ cần kiểm tra nhanh các mục dưới đây rồi bấm chạy.
+          </p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${reviewMode ? 'border-amber-300/35 bg-amber-300/10 text-amber-100' : 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100'}`}>
+          {reviewMode ? 'Duyệt trước' : 'Xuất MP4'}
+        </span>
+      </div>
+
+      {reviewMode ? (
+        <div className="rounded-md border border-amber-300/25 bg-amber-300/10 p-3 text-sm leading-6 text-amber-100">
+          <div className="flex gap-2">
+            <AlertTriangle className="mt-1 shrink-0" size={16} />
+            <span>Chế độ này sẽ tạo phụ đề để bạn duyệt trước. Tool chưa xuất MP4 final cho tới khi bạn bấm render sau khi duyệt.</span>
+          </div>
+        </div>
+      ) : null}
+
+      {job ? (
+        <div className="rounded-md border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm text-emerald-100">
+          <div className="font-semibold">Batch đã bắt đầu</div>
+          <div className="mt-1 break-all text-xs">Job: {job.jobId}</div>
+          <div className="mt-1 text-xs">Project: {job.projectName}</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link className="inline-flex min-h-10 items-center gap-2 rounded-md border border-white/15 bg-white/8 px-3 py-2 text-sm font-semibold text-white hover:bg-white/12" to={`/queue/douyin-reup/${job.jobId}`}>
+              <Route size={16} />
+              Xem tiến trình
+            </Link>
+            <Link className="inline-flex min-h-10 items-center gap-2 rounded-md border border-cyan-300/50 bg-cyan-300 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-200" to={`/results/${job.jobId}`}>
+              Mở kết quả
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid gap-2">
+        <SummaryLine label="Nguồn video" value={sourceFolder ? scanSummary ? `${scanSummary.valid}/${scanSummary.total} video hợp lệ` : 'Đã chọn, nên scan trước' : 'Chưa chọn'} tone={sourceFolder ? 'ok' : 'missing'} />
+        <SummaryLine label="Mẫu xử lý" value={preset?.name || 'Chưa chọn'} tone={preset ? 'ok' : 'missing'} />
+        <SummaryLine label="Thư mục đầu ra" value={outputFolder ? compactPath(outputFolder) : 'Chưa chọn'} tone={outputFolder ? 'ok' : 'missing'} />
+        <SummaryLine label="Nhạc nền" value={missingMusicFolder ? 'Bật, chưa chọn thư mục' : addMusic ? 'Bật' : 'Tắt'} tone={missingMusicFolder ? 'warning' : 'ok'} />
+        <SummaryLine label="Tự phân luồng" value={autoRouteEnabled ? 'Bật' : 'Tắt'} tone="ok" />
+        <SummaryLine label="Voiceover" value={voiceoverEnabled ? 'Bật' : 'Tắt'} tone={voiceoverEnabled ? 'warning' : 'ok'} />
+      </div>
+
+      <div className="grid gap-2 border-t border-white/10 pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-semibold text-white">Quy trình sẽ chạy</div>
+          {preset ? <span className="text-xs text-slate-400">{preset.autoRender ? 'Tự động xuất' : 'Có bước duyệt'}</span> : null}
+        </div>
+        <div className="grid gap-2">
+          {steps.map((step, index) => (
+            <div className="flex items-center gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200" key={step}>
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-cyan-300/15 text-xs font-semibold text-cyan-100">{index + 1}</span>
+              <span>{step}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {blockingItems.length || visibleWarningItems.length || importantMessages.length || missingMusicFolder ? (
+        <div className="grid gap-2 border-t border-white/10 pt-4">
+          <div className="text-sm font-semibold text-white">Cần chú ý</div>
+          {missingMusicFolder ? <NoticeRow tone="warning" text="Bạn đang bật nhạc nền nhưng chưa chọn thư mục nhạc. Tool vẫn có thể chạy, nhưng nên chọn thư mục để tránh thiếu BGM." /> : null}
+          {blockingItems.slice(0, 3).map((item) => <NoticeRow key={item.id} tone="error" text={`${item.label}: ${item.message || 'Chưa đủ thông tin.'}`} />)}
+          {visibleWarningItems.slice(0, 3).map((item) => <NoticeRow key={item.id} tone="warning" text={`${item.label}: ${item.message || 'Nên kiểm tra lại.'}`} />)}
+          {importantMessages.map((message) => <NoticeRow key={message.id} tone={message.tone} text={message.message} />)}
+        </div>
+      ) : (
+        <div className="flex items-start gap-2 rounded-md border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-100">
+          <CheckCircle2 className="mt-0.5 shrink-0" size={16} />
+          <span>Cấu hình chính đã sẵn sàng để chạy.</span>
+        </div>
+      )}
+
+      {jobStatus ? (
+        <div className="grid gap-3 border-t border-white/10 pt-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Info size={16} className="text-cyan-200" />
+            {jobStatus.status === 'queued' ? 'Batch đã bắt đầu' : jobStatus.status}
+          </div>
+          <JobProgressPanel progress={jobStatus.progress} currentStep={jobStatus.current_step} completed={jobStatus.completed_outputs} total={jobStatus.total_outputs} failed={jobStatus.failed_outputs} warnings={jobStatus.logs.filter((log) => log.level.toLowerCase() === 'warning').length} />
+        </div>
+      ) : null}
+
+      <div className="grid gap-2 border-t border-white/10 pt-4">
+        <GlassButton className="min-h-12 w-full text-base" variant="primary" loading={loading} disabled={!ready} onClick={onStart}>
+          {loading ? <RefreshCw size={18} /> : <Play size={18} />}
+          {loading ? 'Đang tạo job...' : startLabel}
+        </GlassButton>
+        <GlassButton className="w-full" variant="secondary" onClick={onOpenAdvanced}>
+          <Settings2 size={16} />
+          Mở cài đặt chuyên sâu
+        </GlassButton>
+      </div>
+    </GlassCard>
+  );
+}
+
+function SummaryLine({ label, value, tone }: { label: string; value: string; tone: 'ok' | 'warning' | 'missing' }) {
+  const toneClass = tone === 'ok' ? 'text-emerald-200' : tone === 'warning' ? 'text-amber-200' : 'text-rose-200';
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-slate-950/45 px-3 py-2 text-sm">
+      <span className="text-slate-400">{label}</span>
+      <span className={`max-w-[58%] truncate text-right font-semibold ${toneClass}`} title={value}>{value}</span>
+    </div>
+  );
+}
+
+function NoticeRow({ tone, text }: { tone: 'error' | 'warning' | 'info'; text: string }) {
+  const className = tone === 'error' ? 'border-rose-300/20 bg-rose-400/10 text-rose-100' : tone === 'warning' ? 'border-amber-300/20 bg-amber-400/10 text-amber-100' : 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100';
+  const Icon = tone === 'error' || tone === 'warning' ? AlertTriangle : Info;
+  return (
+    <div className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm leading-6 ${className}`}>
+      <Icon className="mt-1 shrink-0" size={15} />
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function compactWorkflowSteps(mode: StartWorkflowMode, preset?: StartPresetViewModel): string[] {
+  if (mode === 'silent_immersive') {
+    return ['Quét video', 'Tạo caption Việt', preset?.reviewRequired ? 'Duyệt caption' : 'Xuất MP4', 'Kiểm tra cuối'];
+  }
+  if (preset?.autoRender) return ['Quét video', 'Nghe/dịch phụ đề', 'Xuất MP4', 'Kiểm tra cuối'];
+  return ['Quét video', 'Nghe/dịch phụ đề', 'Duyệt phụ đề', 'Xuất MP4'];
+}
+
+function isMusicFolderWarning(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (normalized.includes('music') || normalized.includes('nhạc')) && normalized.includes('thư mục');
+}
+
+function compactPath(path: string): string {
+  const parts = path.replaceAll('\\', '/').split('/').filter(Boolean);
+  if (parts.length <= 2) return path;
+  return `${parts[0]}/.../${parts.at(-1)}`;
+}
+
+function AdvancedTuningSection({
+  children,
+  hasCustomSettings,
+  onOpenAdvanced,
+}: {
+  children: ReactNode;
+  hasCustomSettings: boolean;
+  onOpenAdvanced: () => void;
+}) {
+  return (
+    <details className="group grid gap-3 rounded-md border border-white/10 bg-white/[0.03]">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 marker:hidden">
+        <span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">Không bắt buộc</span>
+          <span className="mt-1 block text-lg font-semibold text-white">Tinh chỉnh thêm</span>
+          <span className="mt-1 block text-sm leading-6 text-slate-400">
+            Nhạc nền, tự phân luồng, ngữ cảnh sản phẩm và hiệu năng batch được giữ ở đây để màn chính gọn hơn.
+          </span>
+        </span>
+        <span className="shrink-0 rounded-md border border-white/15 bg-white/8 px-3 py-2 text-sm font-semibold text-slate-100 group-open:hidden">
+          Mở
+        </span>
+        <span className="hidden shrink-0 rounded-md border border-cyan-300/40 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100 group-open:inline-flex">
+          Thu gọn
+        </span>
+      </summary>
+      <div className="grid gap-4 border-t border-white/10 p-5 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-cyan-300/20 bg-cyan-300/8 p-3 text-sm text-cyan-100">
+          <span>{hasCustomSettings ? 'Bạn đang dùng cấu hình đã tùy chỉnh.' : 'Các tinh chỉnh phổ biến nằm ngay bên dưới.'}</span>
+          <GlassButton variant="secondary" onClick={onOpenAdvanced}>
+            <Settings2 size={16} />
+            Cài đặt chuyên sâu
+          </GlassButton>
+        </div>
+        {children}
+      </div>
+    </details>
   );
 }
 
@@ -3205,26 +3494,26 @@ function RenderFlowCard({
   onModeChange: (mode: 'review' | 'auto') => void;
 }) {
   const isSilent = mode === 'silent_immersive';
-  const reviewTitle = isSilent ? 'Duyệt caption trước khi xuất video' : 'Duyệt phụ đề trước khi xuất video';
+  const reviewTitle = isSilent ? 'Tạo caption để duyệt trước' : 'Tạo phụ đề để duyệt trước';
   const reviewDescription = isSilent
-    ? 'Tool tạo caption trước, bạn kiểm tra trong tab Sửa phụ đề rồi mới xuất MP4.'
-    : 'Tool dịch phụ đề trước, bạn kiểm tra trong tab Sửa phụ đề rồi mới xuất MP4.';
+    ? 'Batch sẽ dừng ở bước duyệt caption. Chưa có MP4 final cho tới khi bạn duyệt và render.'
+    : 'Batch sẽ dừng ở màn Sửa phụ đề. Chưa có MP4 final cho tới khi bạn duyệt và render.';
   const autoDescription = isSilent
     ? 'Tool tạo caption và xuất MP4 luôn. Phù hợp khi cần xử lý nhanh.'
-    : 'Tool nghe lời thoại/đọc chữ, dịch và xuất MP4 luôn. Phù hợp khi đã tin mẫu cấu hình.';
+    : 'Tool nghe lời thoại hoặc đọc chữ, dịch phụ đề và xuất MP4 luôn.';
 
   return (
     <GlassCard className="grid gap-4 p-5" strong>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Quy trình xuất video</div>
-          <h2 className="mt-2 text-xl font-semibold text-white">{reviewMode ? 'Sẽ chờ bạn duyệt trước' : 'Sẽ xuất MP4 ngay'}</h2>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Cách xuất video</div>
+          <h2 className="mt-2 text-xl font-semibold text-white">{reviewMode ? 'Tạo phụ đề để duyệt, chưa xuất MP4' : 'Xuất MP4 ngay sau khi dịch'}</h2>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Chọn rõ cách tool xử lý sau khi dịch để tránh nhầm là tác vụ bị treo.
+            Đây là lựa chọn quan trọng nhất trước khi chạy batch.
           </p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${reviewMode ? 'border-amber-300/35 bg-amber-300/10 text-amber-100' : 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100'}`}>
-          {reviewMode ? 'Cần duyệt' : 'Xuất ngay'}
+          {reviewMode ? 'Chưa có MP4' : 'Xuất ngay'}
         </span>
       </div>
       <div className="grid gap-3 md:grid-cols-2">

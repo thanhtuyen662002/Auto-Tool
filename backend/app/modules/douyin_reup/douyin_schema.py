@@ -358,6 +358,7 @@ class SubtitleSourceResult(BaseModel):
     ocr_frame_count: int = 0
     ocr_detected_line_count: int = 0
     ocr_average_confidence: float = 0.0
+    ocr_region_mode: str | None = None
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 

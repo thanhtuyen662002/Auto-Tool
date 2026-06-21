@@ -22,7 +22,7 @@ export default function StartPresetSelector({
     <GlassCard className="grid gap-4 p-5" strong>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-semibold text-white">Chọn mẫu cấu hình</h2>
+          <h2 className="font-semibold text-white">Chọn kiểu xử lý</h2>
           <p className="mt-1 text-sm leading-6 text-slate-400">
             {mode === 'silent_immersive' ? 'Không thoại / immersive' : 'Có thoại / cần dịch'}
           </p>
@@ -34,13 +34,13 @@ export default function StartPresetSelector({
             onClick={() => onSelect(recommendedPreset.id)}
           >
             <Wand2 size={14} />
-            Gợi ý: {recommendedPreset.name}
+            Dùng gợi ý: {recommendedPreset.name}
           </button>
         ) : null}
       </div>
       {recommendedPreset ? (
         <div className="rounded-md border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm leading-6 text-emerald-100">
-          <span className="font-semibold">Gợi ý cho bạn: {recommendedPreset.name}.</span> {recommendationReason || 'Mẫu này phù hợp nhất với quy trình hiện tại.'}
+          <span className="font-semibold">Gợi ý cho bạn: {recommendedPreset.name}.</span> {recommendationReason || 'Kiểu xử lý này phù hợp nhất với lô video hiện tại.'}
         </div>
       ) : null}
       <div className="grid gap-3 md:grid-cols-2">

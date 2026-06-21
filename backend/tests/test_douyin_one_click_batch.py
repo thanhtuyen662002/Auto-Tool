@@ -68,6 +68,9 @@ def test_douyin_one_click_batch_queues_job_with_preset_settings(tmp_path: Path, 
                     "batch_ffmpeg_timeout_seconds": 600,
                     "batch_watchdog_stale_minutes": 15,
                     "asr_max_audio_seconds": 90,
+                    "ocr_region_mode": "full_frame",
+                    "ocr_sample_fps": 3.0,
+                    "prefer_ocr_over_asr_when_text_visible": True,
                 },
             },
         )
@@ -89,8 +92,10 @@ def test_douyin_one_click_batch_queues_job_with_preset_settings(tmp_path: Path, 
     assert settings["asr_model_size"] == "tiny"
     assert settings["asr_vad_filter"] is True
     assert settings["asr_max_audio_seconds"] == 90
-    assert settings["ocr_sample_fps"] == 2.0
+    assert settings["ocr_region_mode"] == "full_frame"
+    assert settings["ocr_sample_fps"] == 3.0
     assert settings["ocr_min_confidence"] == 0.35
+    assert settings["prefer_ocr_over_asr_when_text_visible"] is True
     assert settings["batch_performance_mode"] == "balanced"
     assert settings["batch_chunk_size"] == 40
     assert settings["batch_ffmpeg_timeout_seconds"] == 600

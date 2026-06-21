@@ -150,12 +150,15 @@ call :log "Frontend build OK"
 "%VENV_PYTHON%" "%DIAGNOSTICS%" health "%APP_URL%" >nul 2>nul
 if not errorlevel 1 goto :existing_server
 "%VENV_PYTHON%" "%DIAGNOSTICS%" port-busy "%API_HOST%" %API_PORT% >nul 2>nul
-if not errorlevel 1 goto :port_busy
+if not errorlevel 1 (
+  echo [WARN] Port %API_PORT% is busy. Auto Tool will try another local port.
+  call :log "WARN: Preferred port %API_PORT% is busy; allowing backend to choose another port"
+)
 
 set "AUTO_TOOL_ROOT=%PROJECT_ROOT%"
 set "AUTO_TOOL_HOST=%API_HOST%"
 set "AUTO_TOOL_PORT=%API_PORT%"
-set "AUTO_TOOL_STRICT_PORT=1"
+set "AUTO_TOOL_STRICT_PORT=0"
 set "AUTO_TOOL_OPEN_BROWSER=0"
 set "AUTO_TOOL_LOG_FILE=%SERVER_APP_LOG_FILE%"
 call :log "Backend start command: python -m app.launcher with AUTO_TOOL_HOST=%API_HOST%, AUTO_TOOL_PORT=%API_PORT%, AUTO_TOOL_LOG_FILE=%SERVER_APP_LOG_FILE%"
@@ -165,9 +168,13 @@ echo [INFO] Starting local server...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $process = Start-Process -FilePath $env:VENV_PYTHON -ArgumentList @('-m','app.launcher') -WorkingDirectory (Join-Path $env:PROJECT_ROOT 'backend') -WindowStyle Hidden -RedirectStandardOutput $env:SERVER_STDOUT_LOG -RedirectStandardError $env:SERVER_STDERR_LOG -PassThru; Set-Content -Path $env:SERVER_PID_FILE -Value $process.Id -Encoding ASCII"
 if errorlevel 1 goto :server_start_failed
 if exist "%SERVER_PID_FILE%" for /f "usebackq delims=" %%P in ("%SERVER_PID_FILE%") do call :log "Backend server PID: %%P"
-"%VENV_PYTHON%" "%DIAGNOSTICS%" wait-health "%APP_URL%" --timeout 45 >nul 2>nul
-if errorlevel 1 goto :server_not_ready
+set "RESOLVED_APP_URL="
+for /f "usebackq delims=" %%U in (`"%VENV_PYTHON%" "%DIAGNOSTICS%" wait-instance "%PROJECT_ROOT%" "%APP_URL%" --timeout 45 2^>nul`) do set "RESOLVED_APP_URL=%%U"
+if not defined RESOLVED_APP_URL goto :server_not_ready
+set "APP_URL=%RESOLVED_APP_URL%"
 echo [OK] Local server is ready.
+echo [INFO] URL: %APP_URL%
+call :log "Resolved app URL: %APP_URL%"
 call :log "Backend health check OK"
 call :open_browser
 goto :success
@@ -230,7 +237,7 @@ call :fail "Frontend build did not create dist\index.html." "Open the launcher l
 exit /b 1
 
 :port_busy
-call :fail "Port 8000 is already in use by another program." "Close that program or the old server window, then run this launcher again."
+call :fail "Port 8000 is already in use by another program." "Auto Tool normally switches to another local port automatically. Run start_auto_tool_studio_debug.bat to inspect why fallback did not start."
 exit /b 1
 
 :server_start_failed

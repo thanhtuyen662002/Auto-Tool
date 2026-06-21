@@ -131,9 +131,7 @@ class DouyinReupService:
             settings = settings.model_copy(update={"enabled": True})
 
         created_at = datetime.now().replace(microsecond=0)
-        output_root = ensure_dir(
-            Path(config.output_folder) / f"{config.project_name}-douyin-reup-{created_at.strftime('%Y-%m-%d-%H%M%S')}"
-        )
+        output_root = _make_douyin_output_root(config, created_at)
         _log(log_callback, "info", f"Bắt đầu xử lý Douyin Reup: {output_root}")
 
         scan_started = time.perf_counter()
@@ -536,7 +534,7 @@ class DouyinReupService:
                     ocr_detected_line_count=source_result.ocr_detected_line_count,
                     ocr_average_confidence=source_result.ocr_average_confidence,
                     ocr_provider=settings.ocr_provider if source_result.source_type == "ocr_hardsub" else None,
-                    ocr_region_mode=settings.ocr_region_mode if source_result.source_type == "ocr_hardsub" else None,
+                    ocr_region_mode=_ocr_region_mode(source_result, settings),
                     log_file=str(log_path),
                     duration=video.duration,
                     durations=_round_durations(durations),
@@ -610,7 +608,7 @@ class DouyinReupService:
                 ocr_detected_line_count=source_result.ocr_detected_line_count,
                 ocr_average_confidence=source_result.ocr_average_confidence,
                 ocr_provider=settings.ocr_provider if source_result.source_type == "ocr_hardsub" else None,
-                ocr_region_mode=settings.ocr_region_mode if source_result.source_type == "ocr_hardsub" else None,
+                ocr_region_mode=_ocr_region_mode(source_result, settings),
                 duration=render_payload.get("duration"),
                 durations=_round_durations(durations),
                 retry_history=retry_history,
@@ -640,7 +638,7 @@ class DouyinReupService:
                 ocr_detected_line_count=source_result.ocr_detected_line_count if source_result else 0,
                 ocr_average_confidence=source_result.ocr_average_confidence if source_result else 0.0,
                 ocr_provider=settings.ocr_provider if source_result and source_result.source_type == "ocr_hardsub" else None,
-                ocr_region_mode=settings.ocr_region_mode if source_result and source_result.source_type == "ocr_hardsub" else None,
+                ocr_region_mode=_ocr_region_mode(source_result, settings),
                 failed_step=failed_step or "process_video",
                 error_message=error_message,
                 can_retry=True,
@@ -681,7 +679,7 @@ class DouyinReupService:
                     payload["ocr"] = {
                         "enabled": True,
                         "provider": settings.ocr_provider,
-                        "region_mode": settings.ocr_region_mode,
+                        "region_mode": _ocr_region_mode(source_result, settings),
                         "sample_fps": settings.ocr_sample_fps,
                         "frame_count": source_result.ocr_frame_count,
                         "detected_line_count": source_result.ocr_detected_line_count,
@@ -1194,6 +1192,19 @@ def _product_context(config: ProjectConfig) -> dict[str, Any]:
     }
 
 
+def _make_douyin_output_root(config: ProjectConfig, created_at: datetime) -> Path:
+    return ensure_dir(Path(config.output_folder) / _douyin_run_folder_name(config.project_name, created_at))
+
+
+def _douyin_run_folder_name(project_name: str, created_at: datetime) -> str:
+    name = str(project_name or "douyin_reup").strip() or "douyin_reup"
+    date_dash = created_at.strftime("%Y-%m-%d")
+    date_underscore = created_at.strftime("%Y_%m_%d")
+    if date_dash in name or date_underscore in name:
+        return f"{name}-{created_at.strftime('%H%M%S')}"
+    return f"{name}-{created_at.strftime('%Y-%m-%d-%H%M%S')}"
+
+
 def _voice_reup_settings_from_silent(settings: DouyinReupSettings) -> DouyinReupSettings:
     generate_voiceover = bool(settings.generate_voiceover_for_silent_video)
     return settings.model_copy(
@@ -1263,6 +1274,12 @@ def _has_blocking_subtitle_source_failure(source_result: SubtitleSourceResult) -
         if "asr" in normalized and ("failed" in normalized or "thất bại" in normalized):
             return True
     return False
+
+
+def _ocr_region_mode(source_result: SubtitleSourceResult | None, settings: DouyinReupSettings) -> str | None:
+    if not source_result or source_result.source_type != "ocr_hardsub":
+        return None
+    return source_result.ocr_region_mode or settings.ocr_region_mode
 
 
 def _progress(

@@ -14,7 +14,7 @@ export default function StartWorkflowLayout({
   return (
     <div className="studio-page grid gap-6">
       {hero}
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.62fr)]">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
         <section className="grid min-w-0 gap-4">{main}</section>
         <aside className="grid min-w-0 content-start gap-4 xl:sticky xl:top-5">{side}</aside>
       </div>

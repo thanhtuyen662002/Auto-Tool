@@ -65,6 +65,13 @@ def test_voice_reup_presets_hide_image_overlay_and_cover_chinese_subtitles():
         assert settings.subtitle_cover_enabled is True
 
 
+def test_voice_priority_auto_renders_after_translation():
+    settings = DouyinReupPresetService().apply_preset("voice_priority")
+
+    assert settings.review_subtitles_before_render is False
+    assert settings.auto_render_after_translation is True
+
+
 def test_apply_silent_product_voiceover_enables_silent_voiceover():
     settings = DouyinReupPresetService().apply_preset("silent_product_voiceover")
 

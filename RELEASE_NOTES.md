@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.39
+
+### Highlights
+
+- Prevented repeated hidden Auto Tool instances by reusing the running server and guarding startup with an instance lock.
+- Let the launcher fall back to a free local port when `8000` is occupied by another app, so non-technical users can still open the tool normally.
+- Improved Douyin Reup OCR so one-click runs carry OCR region settings and weak bottom/middle subtitle scans automatically retry the full video frame.
+- Refined the desktop Douyin Reup start screen to make review, tuning, and final MP4 render actions clearer for Vietnamese users.
+
+### QA
+
+- Focused backend tests passed for launcher, OCR fallback, subtitle source detection, Douyin one-click, presets, and render flow.
+- Frontend production build passed.
+
 ## v1.0.29
 
 ### Highlights
