@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import GlassBadge from '../components/glass/GlassBadge';
 import GlassButton from '../components/glass/GlassButton';
 import GlassModal from '../components/glass/GlassModal';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import {
   cleanupJobLock,
   getRecoveryCandidates,
@@ -105,6 +106,8 @@ export default function RecoveryCenterPage() {
         <GlassButton variant="ghost" onClick={() => navigate('/results')}>Mở kết quả</GlassButton>
       </div>
 
+      <NotifyOnChange value={error} variant="error" />
+      <NotifyOnChange value={message} variant="success" />
       {error ? <Notice tone="error" text={error} /> : null}
       {message ? <Notice tone="success" text={message} /> : null}
 
@@ -233,4 +236,3 @@ function statusLabel(status: string): string {
   };
   return labels[status] ?? status;
 }
-

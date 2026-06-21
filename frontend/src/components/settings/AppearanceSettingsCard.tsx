@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import GlassButton from '../glass/GlassButton';
 import GlassSelect from '../glass/GlassSelect';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import SettingsSection from './SettingsSection';
 import { applyAppearanceSettings, getLocalUiSettings, saveLocalUiSettings, type GlassIntensity, type LayoutDensity } from '../../utils/localSettings';
 
@@ -41,6 +42,7 @@ export default function AppearanceSettingsCard() {
       <div className="mt-4 flex flex-wrap gap-2">
         <GlassButton variant="primary" onClick={save} className="hover:scale-[1.02] active:scale-[0.98] transition-all">Áp dụng</GlassButton>
       </div>
+      <NotifyOnChange value={message} variant="success" />
       {message ? <div className="mt-3 text-sm text-emerald-200">{message}</div> : null}
     </SettingsSection>
   );

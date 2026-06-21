@@ -8,6 +8,7 @@ import {
   updateProductAsset,
 } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import type { ProductAsset, ProductAssetRole, ProjectConfig } from '../types/project';
 
 const ROLE_GROUPS: ProductAssetRole[] = ['main_product', 'reference', 'poster', 'thumbnail', 'description', 'variation', 'unused'];
@@ -147,6 +148,7 @@ export default function ProjectAssetsPage() {
       </div>
 
       <ApiErrorBox error={error} />
+      <NotifyOnChange value={message} variant="success" />
       {message ? <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{message}</div> : null}
 
       {loading ? <p className="rounded-lg border border-line bg-white p-5 text-sm text-muted">Đang tải assets...</p> : null}

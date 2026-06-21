@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { JobStatus } from '../../types/project';
 import { copyText, type NormalizedResultItem } from '../../utils/resultStatus';
 import GlassButton from '../glass/GlassButton';
+import { emitNotification } from '../notifications/NotificationProvider';
 
 export default function ResultTechnicalLogDrawer({
   open,
@@ -35,12 +36,12 @@ export default function ResultTechnicalLogDrawer({
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <GlassButton className="px-3" variant="secondary" onClick={() => void copyText(copyPayload)}>
+          <GlassButton className="px-3" variant="secondary" onClick={() => void copyAndNotify(copyPayload)}>
             <Clipboard size={15} />
             Copy JSON
           </GlassButton>
           {item?.path ? (
-            <GlassButton className="px-3" variant="ghost" onClick={() => void copyText(item.path)}>
+            <GlassButton className="px-3" variant="ghost" onClick={() => void copyAndNotify(item.path)}>
               Copy đường dẫn video
             </GlassButton>
           ) : null}
@@ -93,11 +94,16 @@ function PathRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid min-w-0 gap-1 rounded-md border border-white/10 bg-white/5 p-3 text-xs">
       <div className="font-semibold text-slate-300">{label}</div>
-      <button className="break-all text-left text-slate-400 hover:text-cyan-200" type="button" onClick={() => void copyText(value)}>
+      <button className="break-all text-left text-slate-400 hover:text-cyan-200" type="button" onClick={() => void copyAndNotify(value)}>
         {value}
       </button>
     </div>
   );
+}
+
+async function copyAndNotify(value: string) {
+  await copyText(value);
+  emitNotification({ variant: 'success', message: 'Đã sao chép.' });
 }
 
 function LogLine({ text, tone }: { text: string; tone: 'warning' | 'error' }) {

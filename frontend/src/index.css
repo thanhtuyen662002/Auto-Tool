@@ -37,6 +37,15 @@ button:disabled {
   background: #67e8f9;
 }
 
+@keyframes notification-shrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
 @media (min-width: 1024px) {
   .studio-content-layout {
     padding-left: 268px;

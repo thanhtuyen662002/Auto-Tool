@@ -4,6 +4,7 @@ import { getAppSettings, getGoogleCloudTTSVoices, getSystemDependencies, saveApp
 import ApiErrorBox from '../components/ApiErrorBox';
 import GlassBadge from '../components/glass/GlassBadge';
 import GlassCard from '../components/glass/GlassCard';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import PathInput from '../components/PathInput';
 import TextArea from '../components/TextArea';
 import TextInput from '../components/TextInput';
@@ -102,6 +103,7 @@ export default function AppSettingsPage() {
 
       <div className="space-y-5">
         <ApiErrorBox error={error} />
+        <NotifyOnChange value={message} variant="success" />
         {message ? (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {message}

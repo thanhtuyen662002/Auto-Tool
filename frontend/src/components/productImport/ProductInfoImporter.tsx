@@ -8,6 +8,7 @@ import type {
   ProductValidationIssue,
 } from '../../types/project';
 import ApiErrorBox from '../ApiErrorBox';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import TextArea from '../TextArea';
 
 const IMPORT_TABS: Array<{ id: ProductImportInputType; label: string; placeholder: string }> = [
@@ -54,6 +55,7 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const active = IMPORT_TABS.find((tab) => tab.id === activeTab) ?? IMPORT_TABS[0];
   const suggestedIndustry = useMemo(() => {
@@ -66,6 +68,7 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
     if (activeTab === 'manual') return;
     setLoading(true);
     setError(null);
+    setMessage(null);
     try {
       const response = await importProductInfo({
         input_type: activeTab,
@@ -74,6 +77,7 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
         source_name: sourceName,
       });
       setResult(response);
+      setMessage('Đã phân tích thông tin sản phẩm.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể phân tích thông tin sản phẩm.');
     } finally {
@@ -91,8 +95,10 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
     if (!result?.product) return;
     setApplying(true);
     setError(null);
+    setMessage(null);
     try {
       await onApply(result.product);
+      setMessage('Đã áp dụng thông tin sản phẩm vào project.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể áp dụng thông tin sản phẩm.');
     } finally {
@@ -105,6 +111,7 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
     setSourceName(null);
     setResult(null);
     setError(null);
+    setMessage(null);
   }
 
   return (
@@ -178,6 +185,7 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
       )}
 
       <ApiErrorBox error={error} />
+      <NotifyOnChange value={message} variant="success" />
 
       {result ? (
         <div className="mt-4 rounded-md border border-line bg-white p-4">

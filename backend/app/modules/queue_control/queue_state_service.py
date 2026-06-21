@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import errno
 import json
 import shutil
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -25,6 +27,10 @@ from app.utils.app_paths import app_data_dir
 
 _QUEUE_LOCKS: dict[str, threading.RLock] = {}
 _QUEUE_LOCKS_LOCK = threading.Lock()
+_TRANSIENT_FILE_WINERRORS = {5, 32, 33}
+_TRANSIENT_FILE_ERRNOS = {errno.EACCES, errno.EPERM}
+_ATOMIC_WRITE_ATTEMPTS = 8
+_ATOMIC_WRITE_BASE_DELAY_SECONDS = 0.05
 
 
 class QueueStateService:
@@ -87,9 +93,11 @@ class QueueStateService:
         if not path.exists():
             return None
         try:
-            return QueueState.model_validate(json.loads(path.read_text(encoding="utf-8")))
-        except (OSError, json.JSONDecodeError, ValidationError):
+            return QueueState.model_validate(json.loads(_read_text_with_retry(path)))
+        except (json.JSONDecodeError, ValidationError):
             self._quarantine_corrupt_file(path)
+            return None
+        except OSError:
             return None
 
     def save_queue_state(self, state: QueueState) -> QueueState:
@@ -250,9 +258,44 @@ class QueueStateService:
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
-    temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    temp.replace(path)
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    last_error: OSError | None = None
+    for attempt in range(_ATOMIC_WRITE_ATTEMPTS):
+        temp = path.with_suffix(f"{path.suffix}.{threading.get_ident()}.{attempt}.tmp")
+        try:
+            temp.write_text(text, encoding="utf-8")
+            temp.replace(path)
+            return
+        except OSError as exc:
+            last_error = exc
+            try:
+                temp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            if not _is_transient_file_error(exc) or attempt >= _ATOMIC_WRITE_ATTEMPTS - 1:
+                raise
+            time.sleep(min(_ATOMIC_WRITE_BASE_DELAY_SECONDS * (2**attempt), 0.5))
+    if last_error:
+        raise last_error
+
+
+def _read_text_with_retry(path: Path) -> str:
+    last_error: OSError | None = None
+    for attempt in range(_ATOMIC_WRITE_ATTEMPTS):
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError as exc:
+            last_error = exc
+            if not _is_transient_file_error(exc) or attempt >= _ATOMIC_WRITE_ATTEMPTS - 1:
+                raise
+            time.sleep(min(_ATOMIC_WRITE_BASE_DELAY_SECONDS * (2**attempt), 0.5))
+    if last_error:
+        raise last_error
+    return ""
+
+
+def _is_transient_file_error(exc: OSError) -> bool:
+    return getattr(exc, "winerror", None) in _TRANSIENT_FILE_WINERRORS or exc.errno in _TRANSIENT_FILE_ERRNOS
 
 
 def _queue_lock_for_job(job_id: str) -> threading.RLock:

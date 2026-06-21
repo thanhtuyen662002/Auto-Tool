@@ -3065,12 +3065,22 @@ def run_render_job(job_id: str) -> None:
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
         checkpoint_service.update_job_status(job_id, JobRunStatus.failed, "failed")
+        counts = _failure_counts_from_queue(job_id, job)
+        checkpoint_service.update_counts(
+            job_id,
+            total_items=counts["total"],
+            completed_items=counts["completed"],
+            failed_items=counts["failed"],
+            interrupted_items=counts["interrupted"],
+        )
         database.update_job(
             job_id,
             status="failed",
             current_step="failed",
-            progress=100,
-            failed_outputs=job["total_outputs"],
+            progress=counts["progress"],
+            total_outputs=counts["total"],
+            completed_outputs=counts["completed"],
+            failed_outputs=counts["failed"],
             error=str(exc),
         )
 
@@ -3174,6 +3184,41 @@ def _checkpoint_progress(job_id: str, checkpoint_service: JobCheckpointService, 
     )
 
 
+def _failure_counts_from_queue(job_id: str, job: dict[str, Any]) -> dict[str, int]:
+    total = int(job.get("total_outputs") or 0)
+    completed = int(job.get("completed_outputs") or 0)
+    failed = int(job.get("failed_outputs") or 0)
+    skipped = 0
+    cancelled = 0
+
+    try:
+        state = QueueStateService().load_queue_state(job_id)
+    except Exception:
+        state = None
+
+    if state:
+        total = int(state.total_items or len(state.items) or total)
+        completed = int(state.completed_items or 0)
+        failed = int(state.failed_items or 0)
+        skipped = int(state.skipped_items or 0)
+        cancelled = int(state.cancelled_items or 0)
+    elif total:
+        failed = min(total, max(failed, 1))
+
+    finished = completed + failed + skipped + cancelled
+    progress = int(round((finished / total) * 100)) if total else int(job.get("progress") or 0)
+    if finished and progress == 0:
+        progress = 1
+
+    return {
+        "total": total,
+        "completed": completed,
+        "failed": failed,
+        "progress": min(progress, 100),
+        "interrupted": max(0, total - finished),
+    }
+
+
 def run_douyin_reup_job(job_id: str) -> None:
     database.init_db()
     checkpoint_service = JobCheckpointService()
@@ -3259,12 +3304,22 @@ def run_douyin_reup_job(job_id: str) -> None:
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
         checkpoint_service.update_job_status(job_id, JobRunStatus.failed, "failed")
+        counts = _failure_counts_from_queue(job_id, job)
+        checkpoint_service.update_counts(
+            job_id,
+            total_items=counts["total"],
+            completed_items=counts["completed"],
+            failed_items=counts["failed"],
+            interrupted_items=counts["interrupted"],
+        )
         database.update_job(
             job_id,
             status="failed",
             current_step="failed",
-            progress=100,
-            failed_outputs=job["total_outputs"],
+            progress=counts["progress"],
+            total_outputs=counts["total"],
+            completed_outputs=counts["completed"],
+            failed_outputs=counts["failed"],
             error=str(exc),
         )
 
@@ -3534,12 +3589,22 @@ def run_douyin_reup_retry_job(
     except Exception as exc:
         database.add_job_log(job_id, "error", str(exc))
         checkpoint_service.update_job_status(job_id, JobRunStatus.failed, "failed")
+        counts = _failure_counts_from_queue(job_id, job)
+        checkpoint_service.update_counts(
+            job_id,
+            total_items=counts["total"],
+            completed_items=counts["completed"],
+            failed_items=counts["failed"],
+            interrupted_items=counts["interrupted"],
+        )
         database.update_job(
             job_id,
             status="failed",
             current_step="failed",
-            progress=100,
-            failed_outputs=job["total_outputs"],
+            progress=counts["progress"],
+            total_outputs=counts["total"],
+            completed_outputs=counts["completed"],
+            failed_outputs=counts["failed"],
             error=str(exc),
         )
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import GlassButton from '../glass/GlassButton';
 import GlassInput from '../glass/GlassInput';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import SettingsSection from './SettingsSection';
 import {
   previewCleanup,
@@ -38,6 +39,8 @@ export default function DataCleanupCard() {
       size: items.reduce((sum, item) => sum + item.size_bytes, 0),
     };
   }, [preview]);
+  const previewMessage = preview ? `Đã tạo preview cleanup: ${totals.files} file, ${formatBytes(totals.size)}.` : null;
+  const resultMessage = result ? `Đã xóa ${result.deleted_file_count} file, ${formatBytes(result.deleted_size_bytes)}.` : null;
 
   async function handlePreview() {
     setLoading(true);
@@ -110,6 +113,9 @@ export default function DataCleanupCard() {
             <input className="mt-1 h-4 w-4" type="checkbox" checked={confirmed} disabled={!preview} onChange={(event) => setConfirmed(event.target.checked)} />
             <span>Tôi hiểu thao tác này sẽ xóa các file đã liệt kê trong preview.</span>
           </label>
+          <NotifyOnChange value={error} variant="error" />
+          <NotifyOnChange value={previewMessage} variant="info" />
+          <NotifyOnChange value={resultMessage} variant="success" />
           {error ? <div className="rounded-md border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-100">{error}</div> : null}
         </div>
         <div className="rounded-md border border-white/10 bg-black/15 p-4 text-sm text-slate-300">
@@ -156,4 +162,3 @@ function Metric({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

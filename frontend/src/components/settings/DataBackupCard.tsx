@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import GlassButton from '../glass/GlassButton';
 import GlassInput from '../glass/GlassInput';
+import { emitNotification } from '../notifications/NotificationProvider';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import SettingsSection from './SettingsSection';
 import {
   createBackup,
@@ -30,6 +32,11 @@ export default function DataBackupCard() {
   const [backups, setBackups] = useState<BackupListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const resultMessage = result
+    ? result.success
+      ? 'Đã tạo bản sao lưu.'
+      : 'Tạo bản sao lưu thất bại.'
+    : null;
 
   useEffect(() => {
     void refreshBackups();
@@ -74,6 +81,8 @@ export default function DataBackupCard() {
           <GlassButton variant="primary" loading={loading} onClick={() => void handleCreate()}>
             Tạo bản sao lưu
           </GlassButton>
+          <NotifyOnChange value={error} variant="error" />
+          <NotifyOnChange value={resultMessage} variant={result?.success ? 'success' : 'error'} />
           {error ? <Notice tone="error" text={error} /> : null}
           {result ? (
             <div className="rounded-md border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-100">
@@ -138,4 +147,5 @@ function Notice({ tone, text }: { tone: 'error'; text: string }) {
 
 async function copy(value: string) {
   await navigator.clipboard?.writeText(value);
+  emitNotification({ variant: 'success', message: 'Đã sao chép đường dẫn backup.' });
 }

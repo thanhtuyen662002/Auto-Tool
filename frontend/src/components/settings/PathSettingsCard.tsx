@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import GlassButton from '../glass/GlassButton';
+import { notificationVariantFromText } from '../notifications/NotificationProvider';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import PathInput from '../PathInput';
 import SettingsSection from './SettingsSection';
 import {
@@ -117,6 +119,7 @@ export default function PathSettingsCard({ onSaved }: { onSaved?: () => void }) 
           Xóa danh sách thư mục gần đây
         </GlassButton>
       </div>
+      <NotifyOnChange value={message} variant={notificationVariantFromText(message)} />
       {message ? <div className="mt-3 text-sm text-emerald-200">{message}</div> : null}
       <div className="mt-5 rounded-md border border-white/10 bg-black/15 p-4">
         <div className="text-sm font-semibold text-white">Các thư mục đã mở gần đây</div>

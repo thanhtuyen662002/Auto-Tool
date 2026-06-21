@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createProject, getIndustryPresets, updateProjectProductInfo } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
 import IndustryPresetSelector from '../components/industry/IndustryPresetSelector';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import ProductInfoImporter from '../components/productImport/ProductInfoImporter';
 import ProductInfoForm from '../components/ProductInfoForm';
 import type { ApplyIndustryPresetOptions, IndustryPreset, ProductInfoNormalized, ProjectConfig } from '../types/project';
@@ -21,6 +22,7 @@ export default function CreateProjectPage() {
     DEFAULT_INDUSTRY_APPLY_OPTIONS,
   );
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const isDirty = useMemo(() => {
@@ -71,11 +73,13 @@ export default function CreateProjectPage() {
   async function saveCurrentProject(): Promise<string> {
     setSaving(true);
     setError(null);
+    setMessage(null);
     try {
       const response = await createProject(config);
       saveProjectConfig(response.project_id, config, false);
       setSavedProjectId(response.project_id);
       setLastSavedConfig(config);
+      setMessage('Đã lưu dự án.');
       return response.project_id;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Không thể lưu dự án.';
@@ -175,6 +179,7 @@ export default function CreateProjectPage() {
           </div>
 
           <ApiErrorBox error={error} />
+          <NotifyOnChange value={message} variant="success" />
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <button

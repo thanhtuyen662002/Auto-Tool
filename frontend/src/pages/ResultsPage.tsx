@@ -9,6 +9,7 @@ import GlassBadge from '../components/glass/GlassBadge';
 import GlassButton from '../components/glass/GlassButton';
 import GlassPagination from '../components/glass/GlassPagination';
 import GlassModal from '../components/glass/GlassModal';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 
 
 const ACTIVE_STATUSES = new Set(['queued', 'running', 'paused']);
@@ -19,6 +20,7 @@ export default function ResultsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const pageSize = 10;
 
@@ -28,10 +30,13 @@ export default function ResultsPage() {
   async function handleDeleteJob() {
     if (!jobToDelete) return;
     setDeletingJob(true);
+    setError(null);
+    setMessage(null);
     try {
       const response = await deleteJob(jobToDelete.job_id);
       if (response.success) {
         setJobToDelete(null);
+        setMessage('Đã xóa tác vụ.');
         await load(false, currentPage);
       } else {
         setError('Không thể xóa tác vụ.');
@@ -117,6 +122,8 @@ export default function ResultsPage() {
       }
     >
       <div className="space-y-4">
+        <NotifyOnChange value={error} variant="error" />
+        <NotifyOnChange value={message} variant="success" />
         {error ? (
           <div className="rounded-md border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-200">
             {error}

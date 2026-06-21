@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Pause, Play, RotateCcw, SkipForward, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { QueueActionResult, QueueState } from '../../types/project';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 
 interface QueueControlPanelProps {
   queue: QueueState | null;
@@ -40,6 +41,7 @@ export default function QueueControlPanel({
 
   return (
     <section className="rounded-lg border border-line bg-white p-5 shadow-panel">
+      <NotifyOnChange value={actionMessage} variant="success" />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-ink">Điều khiển hàng đợi</h2>

@@ -6,6 +6,7 @@ from typing import Any
 from app import database
 from app.modules.job_recovery.job_checkpoint_service import JobCheckpointService
 from app.modules.job_recovery.job_recovery_schema import JobRunStatus, RecoveryCandidate
+from app.modules.queue_control.queue_state_service import QueueStateService
 
 
 RECOVERABLE_DB_STATUSES = {"queued", "running", "processing", "interrupted", "recoverable"}
@@ -14,6 +15,7 @@ RECOVERABLE_DB_STATUSES = {"queued", "running", "processing", "interrupted", "re
 class JobRecoveryService:
     def __init__(self, checkpoint_service: JobCheckpointService | None = None) -> None:
         self.checkpoints = checkpoint_service or JobCheckpointService()
+        self.queue_states = QueueStateService()
 
     def find_recovery_candidates(self) -> list[RecoveryCandidate]:
         return [self._candidate_from_job(job) for job in self._list_candidate_jobs()]
@@ -76,7 +78,16 @@ class JobRecoveryService:
         completed = int(job.get("completed_outputs") or 0)
         failed = int(job.get("failed_outputs") or 0)
         total = int(job.get("total_outputs") or 0)
-        interrupted = max(0, total - completed - failed) if job.get("status") not in {"completed", "completed_with_errors"} else 0
+        skipped = 0
+        cancelled = 0
+        queue_state = self.queue_states.load_queue_state(job["job_id"])
+        if queue_state and queue_state.total_items:
+            total = int(queue_state.total_items or len(queue_state.items) or total)
+            completed = int(queue_state.completed_items or 0)
+            failed = int(queue_state.failed_items or 0)
+            skipped = int(queue_state.skipped_items or 0)
+            cancelled = int(queue_state.cancelled_items or 0)
+        interrupted = max(0, total - completed - failed - skipped - cancelled) if job.get("status") not in {"completed", "completed_with_errors"} else 0
         status = _normalize_run_status(job.get("status"))
         mode = str(checkpoint.mode) if checkpoint else _infer_mode(job)
         return RecoveryCandidate(

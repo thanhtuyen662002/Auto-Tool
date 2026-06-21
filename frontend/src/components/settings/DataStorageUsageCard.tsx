@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import GlassButton from '../glass/GlassButton';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import SettingsSection from './SettingsSection';
 import { getStorageUsage, type StorageItem, type StorageUsageReport } from '../../services/dataManagementApi';
 import { openFolder } from '../../services/localAppApi';
@@ -102,9 +103,10 @@ export default function DataStorageUsageCard() {
           {!report ? <div className="text-sm text-slate-400">Chưa có dữ liệu dung lượng.</div> : null}
         </div>
       </div>
+      <NotifyOnChange value={error} variant="error" />
+      <NotifyOnChange value={message} variant="success" />
       {error ? <div className="mt-3 rounded-md border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-100">{error}</div> : null}
       {message ? <div className="mt-3 text-sm text-emerald-200">{message}</div> : null}
     </SettingsSection>
   );
 }
-

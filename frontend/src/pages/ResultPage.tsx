@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import ApiErrorBox from '../components/ApiErrorBox';
 import GlassButton from '../components/glass/GlassButton';
 import GlassPagination from '../components/glass/GlassPagination';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import ExportPackPanel, { type ExportPackOptions, type ExportScope } from '../components/results/ExportPackPanel';
 import ResultQAPanel from '../components/results/ResultQAPanel';
 import ResultRetryPanel from '../components/results/ResultRetryPanel';
@@ -319,6 +320,7 @@ export default function ResultPage() {
     >
       <div className="grid gap-5">
         <ApiErrorBox error={error} />
+        <NotifyOnChange value={actionMessage} variant="success" />
         {actionMessage ? (
           <div className="flex items-start gap-2 rounded-md border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">
             <Sparkles className="mt-0.5 shrink-0" size={16} />

@@ -7,6 +7,8 @@ import {
   videoFileUrl,
 } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
+import { emitNotification } from '../components/notifications/NotificationProvider';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import WarningBox from '../components/WarningBox';
 import type {
   OutputReviewItem,
@@ -37,19 +39,22 @@ export default function OutputReviewPage() {
   const [reuseSettings, setReuseSettings] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
     void loadReview(projectId);
   }, [projectId]);
 
-  async function loadReview(activeProjectId = projectId) {
+  async function loadReview(activeProjectId = projectId, showMessage = false) {
     if (!activeProjectId) return;
     setBusy(true);
     setError(null);
+    setMessage(null);
     try {
       const response = await getOutputReview(activeProjectId);
       setReview(response);
+      if (showMessage) setMessage('Đã làm mới đánh giá video đầu ra.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải đánh giá chất lượng video đầu ra.');
     } finally {
@@ -74,6 +79,7 @@ export default function OutputReviewPage() {
   async function markOutput(outputIndex: number, status: OutputReviewStatus) {
     if (!projectId) return;
     setError(null);
+    setMessage(null);
     try {
       await updateOutputReview(projectId, outputIndex, status);
       setReview((current) =>
@@ -86,6 +92,7 @@ export default function OutputReviewPage() {
             }
           : current,
       );
+      setMessage('Đã cập nhật đánh giá video.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể cập nhật đánh giá video đầu ra.');
     }
@@ -138,7 +145,7 @@ export default function OutputReviewPage() {
             className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
             type="button"
             disabled={busy}
-            onClick={() => loadReview()}
+            onClick={() => loadReview(projectId, true)}
           >
             Làm mới
           </button>
@@ -149,6 +156,7 @@ export default function OutputReviewPage() {
       </div>
 
       <ApiErrorBox error={error} />
+      <NotifyOnChange value={message} variant="success" />
 
       {summary ? <SummaryCards summary={summary} /> : null}
 
@@ -366,7 +374,9 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 function copy(value?: string | null) {
-  if (value) void navigator.clipboard.writeText(value);
+  if (!value) return;
+  void navigator.clipboard.writeText(value);
+  emitNotification({ variant: 'success', message: 'Đã sao chép.' });
 }
 
 function formatId(value: string) {

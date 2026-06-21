@@ -9,6 +9,7 @@ import {
 import ApiErrorBox from '../components/ApiErrorBox';
 import GlassButton from '../components/glass/GlassButton';
 import GlassModal from '../components/glass/GlassModal';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import SubtitleApproveModal from '../components/subtitle/SubtitleApproveModal';
 import SubtitleEditorPanel from '../components/subtitle/SubtitleEditorPanel';
 import SubtitleLineList from '../components/subtitle/SubtitleLineList';
@@ -136,6 +137,7 @@ export default function SubtitleReviewPage() {
   if (loading) return <main className="studio-page"><SubtitleReviewSkeleton editor={Boolean(documentId)} /></main>;
   return <main className="studio-page grid gap-5">
     <ApiErrorBox error={error} />
+    <NotifyOnChange value={toast} variant="success" />
     {!document ? <><div><h1 className="text-2xl font-semibold text-white">Sửa phụ đề</h1><p className="mt-1 text-sm text-slate-400">Chọn tài liệu để sửa, duyệt và render phụ đề.</p></div><SubtitleReviewListPage documents={visibleDocuments} status={statusFilter} saving={saving} onStatus={setStatusFilter} onRenderApproved={() => void renderApproved()} /></> : <SubtitleReviewLayout
       toolbar={<SubtitleReviewToolbar document={document} qualityScore={Math.round((quality?.average_score ?? document.quality_average_score ?? 0) * 100)} needsReview={quality?.needs_review_count ?? document.quality_needs_review_count} critical={quality?.critical_count ?? document.quality_critical_count} unsavedCount={unsaved.size} saving={saving} onSaveAll={() => void saveAll()} onApprove={() => setApproveOpen(true)} onRender={() => void renderCurrent()} onRefreshQuality={() => void refreshQuality()} onOpenLog={() => setLogOpen(true)} onOpenShortcuts={() => setShortcutsOpen(true)} onOpenPath={openLocalPath} />}
       video={<div className="grid gap-4"><SubtitleVideoPanel videoRef={videoRef} videoUrl={videoFileUrl(document.video_path)} activeLine={activeLine} onPrevious={() => selectRelative(-1)} onNext={() => selectRelative(1)} onNextFlagged={() => selectFlagged(1)} hasFlagged={Boolean(flaggedLines.length)} /><SubtitleQualityPanel report={quality} busy={saving} onNextFlagged={() => selectFlagged(1)} onCriticalOnly={() => setLineFilter('critical')} onRefresh={() => void refreshQuality()} /><button className="text-left text-xs font-semibold text-slate-500 hover:text-cyan-200" type="button" onClick={() => setSettingsOpen(true)}>Visual style và output folder</button></div>}

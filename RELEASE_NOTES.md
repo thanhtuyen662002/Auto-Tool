@@ -1,5 +1,21 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.45
+
+### Highlights
+
+- Added global toast notifications so actions across the app show visible feedback instead of quiet in-page messages that are easy to miss.
+- Hardened large Douyin/reup render queues against temporary Windows file locks when saving queue state.
+- Fixed failed queue bookkeeping so a single scheduler/state error no longer marks every pending video as failed.
+- Improved Recovery Center counts by reading the real queue state, allowing interrupted batches to resume the remaining videos.
+- Increased subtitle timing guard write retries to reduce one-off SRT failures caused by temporary file locks.
+
+### QA
+
+- Backend compile check passed for the queue, recovery, API, and subtitle timing modules.
+- Frontend production build passed.
+- Verified the real failed batch is detected as 10 completed, 1 failed, and 1572 resumable items instead of 1583 failed items.
+
 ## v1.0.44
 
 ### Highlights

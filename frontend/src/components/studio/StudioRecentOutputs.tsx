@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import GlassButton from '../glass/GlassButton';
 import GlassCard from '../glass/GlassCard';
 import GlassEmptyState from '../glass/GlassEmptyState';
+import { emitNotification } from '../notifications/NotificationProvider';
 
 type RecentOutput = {
   id: string;
@@ -43,7 +44,7 @@ export default function StudioRecentOutputs() {
                       Xem trước
                     </Link>
                   ) : null}
-                  <button className="inline-flex min-h-9 items-center gap-2 rounded-md border border-white/15 px-3 text-xs font-semibold text-slate-200 hover:bg-white/8" type="button" onClick={() => void navigator.clipboard?.writeText(output.outputFolder)}>
+                  <button className="inline-flex min-h-9 items-center gap-2 rounded-md border border-white/15 px-3 text-xs font-semibold text-slate-200 hover:bg-white/8" type="button" onClick={() => copyOutputFolder(output.outputFolder)}>
                     <Copy size={13} />
                     Sao chép đường dẫn
                   </button>
@@ -70,6 +71,11 @@ export default function StudioRecentOutputs() {
       )}
     </GlassCard>
   );
+}
+
+function copyOutputFolder(value: string) {
+  void navigator.clipboard?.writeText(value);
+  emitNotification({ variant: 'success', message: 'Đã sao chép đường dẫn.' });
 }
 
 function readRecentOutputs(): RecentOutput[] {

@@ -12,6 +12,7 @@ import {
 import { getLocalAppConfig } from '../../services/localAppApi';
 import type { AppSettings, MusicLibraryTrack, TTSVoiceInfo } from '../../types/project';
 import GlassButton from '../glass/GlassButton';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import SettingsSection from './SettingsSection';
 
 const DEFAULT_PREVIEW_TEXT = 'Xin chào, đây là giọng đọc thử của Auto Tool.';
@@ -210,6 +211,8 @@ export default function VoiceMusicLibrarySettingsCard() {
 
   return (
     <div className="grid gap-5">
+      <NotifyOnChange value={message?.text} variant={message?.type ?? 'success'} />
+
       {message ? (
         <div
           className={`rounded-md border px-4 py-3 text-sm ${

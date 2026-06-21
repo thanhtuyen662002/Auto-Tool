@@ -3,6 +3,7 @@ import { DownloadCloud, Info, Loader2 } from 'lucide-react';
 import { checkSystemUpdate, downloadSystemUpdate, type UpdateCheckResponse } from '../api/client';
 import { getHealth } from '../services/healthApi';
 import GlassButton from './glass/GlassButton';
+import NotifyOnChange from './notifications/NotifyOnChange';
 
 interface UpdateBannerProps {
   connected: boolean;
@@ -86,6 +87,7 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
 
   return (
     <div className="mx-4 mt-3 lg:mx-6">
+      <NotifyOnChange value={error} variant="error" />
       <div className="relative overflow-hidden rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-900/20 via-indigo-950/30 to-blue-900/20 p-4 shadow-lg backdrop-blur-md studio-fade-in">
         {/* Decorative background light */}
         <div className="absolute -left-10 -top-10 h-32 w-32 rounded-full bg-purple-500/10 blur-2xl pointer-events-none" />

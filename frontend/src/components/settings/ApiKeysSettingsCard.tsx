@@ -3,6 +3,7 @@ import { BrainCircuit, CloudLightning, FlaskConical, KeyRound, ShieldCheck } fro
 import { getAppSettings, getGoogleCloudTTSVoices, saveAppSettings } from '../../api/client';
 import type { AppSettings } from '../../types/project';
 import GlassButton from '../glass/GlassButton';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import SettingsSection from './SettingsSection';
 
 const EMPTY: AppSettings = {
@@ -77,6 +78,8 @@ export default function ApiKeysSettingsCard() {
 
   return (
     <div className="grid gap-5">
+      <NotifyOnChange value={message?.text} variant={message?.type ?? 'success'} />
+
       {/* Status message */}
       {message && (
         <div className={`rounded-md border px-4 py-3 text-sm ${

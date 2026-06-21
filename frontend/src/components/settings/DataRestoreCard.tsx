@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import GlassButton from '../glass/GlassButton';
 import GlassModal from '../glass/GlassModal';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import PathInput from '../PathInput';
 import SettingsSection from './SettingsSection';
 import {
@@ -32,6 +33,16 @@ export default function DataRestoreCard() {
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inspectMessage = inspect
+    ? inspect.success
+      ? 'Bản sao lưu hợp lệ.'
+      : 'Bản sao lưu có lỗi.'
+    : null;
+  const resultMessage = result
+    ? result.success
+      ? 'Khôi phục hoàn tất.'
+      : 'Khôi phục thất bại.'
+    : null;
 
   async function handleInspect() {
     setLoading(true);
@@ -86,6 +97,8 @@ export default function DataRestoreCard() {
               {inspect.warnings.map((item) => <div key={item} className="text-amber-200">Cảnh báo: {item}</div>)}
             </div>
           ) : null}
+          <NotifyOnChange value={error} variant="error" />
+          <NotifyOnChange value={inspectMessage} variant={inspect?.success ? 'success' : 'error'} />
           {error ? <div className="rounded-md border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-100">{error}</div> : null}
         </div>
         <div className="grid gap-3">
@@ -103,6 +116,7 @@ export default function DataRestoreCard() {
           <GlassButton variant="danger" loading={loading} disabled={!inspect?.success} onClick={() => setRestoreConfirmOpen(true)}>
             Khôi phục bản sao lưu
           </GlassButton>
+          <NotifyOnChange value={resultMessage} variant={result?.success ? 'success' : 'error'} />
           {result ? (
             <div className="rounded-md border border-white/10 bg-black/15 p-3 text-sm text-slate-300">
               <div className={result.success ? 'text-emerald-200' : 'text-rose-200'}>{result.success ? 'Khôi phục hoàn tất' : 'Khôi phục thất bại'}</div>

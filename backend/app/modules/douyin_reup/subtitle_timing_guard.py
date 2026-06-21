@@ -128,10 +128,11 @@ def write_srt_blocks(blocks: list[SubtitleBlock], output_path: str) -> str:
     return str(target)
 
 
-def _atomic_write_text_with_retry(target: Path, payload: str, attempts: int = 5) -> None:
+def _atomic_write_text_with_retry(target: Path, payload: str, attempts: int = 10) -> None:
     ensure_dir(target.parent)
     last_error: OSError | None = None
-    for attempt in range(1, max(1, attempts) + 1):
+    total_attempts = max(1, attempts)
+    for attempt in range(total_attempts):
         temp_path = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
         try:
             temp_path.write_text(payload, encoding="utf-8")
@@ -139,12 +140,15 @@ def _atomic_write_text_with_retry(target: Path, payload: str, attempts: int = 5)
             return
         except OSError as exc:
             last_error = exc
-            temp_path.unlink(missing_ok=True)
-            if attempt >= attempts:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            if attempt >= total_attempts - 1:
                 break
-            time.sleep(0.12 * attempt)
+            time.sleep(min(0.08 * (2**attempt), 0.75))
     raise PermissionError(
-        f"Không thể ghi file subtitle sau {attempts} lần thử: {target}. "
+        f"Không thể ghi file subtitle sau {total_attempts} lần thử: {target}. "
         "File hoặc thư mục có thể đang bị khóa bởi Windows, antivirus hoặc ứng dụng xem video."
     ) from last_error
 

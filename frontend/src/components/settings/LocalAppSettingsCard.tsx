@@ -14,6 +14,8 @@ import { saveLocalUiSettings } from '../../utils/localSettings';
 import { copyText } from '../../utils/resultStatus';
 import GlassButton from '../glass/GlassButton';
 import GlassInput from '../glass/GlassInput';
+import { notificationVariantFromText } from '../notifications/NotificationProvider';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import SettingsSection from './SettingsSection';
 
 export default function LocalAppSettingsCard() {
@@ -110,6 +112,7 @@ export default function LocalAppSettingsCard() {
           <GlassButton variant="secondary" onClick={() => void reset()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><RotateCcw size={16} /> Đặt lại</GlassButton>
           <GlassButton variant="ghost" loading={checking} onClick={() => void checkSystem()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><RefreshCw size={16} /> Kiểm tra hệ thống</GlassButton>
         </div>
+        <NotifyOnChange value={message} variant={notificationVariantFromText(message)} />
         {message ? <p className="mt-3 text-sm text-cyan-100">{message}</p> : null}
       </SettingsSection>
  

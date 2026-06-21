@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { assetFileUrl, previewVisualStyle } from '../../api/client';
 import type { VisualStylePreset } from '../../types/project';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 
 interface VisualStyleSelectorProps {
   presets: VisualStylePreset[];
@@ -91,6 +92,7 @@ export default function VisualStyleSelector({
         })}
       </div>
 
+      <NotifyOnChange value={error} variant="error" />
       {error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
 
       {previewUrl ? (

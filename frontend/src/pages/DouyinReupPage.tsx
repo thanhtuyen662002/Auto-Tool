@@ -33,6 +33,8 @@ import GlassButton from '../components/glass/GlassButton';
 import GlassCard from '../components/glass/GlassCard';
 import GlassModal from '../components/glass/GlassModal';
 import JobProgressPanel from '../components/jobs/JobProgressPanel';
+import { emitNotification } from '../components/notifications/NotificationProvider';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import SegmentTagEditor from '../components/silent/SegmentTagEditor';
 import SilentPlanPreview from '../components/silent/SilentPlanPreview';
 import MusicFolderCard from '../components/start-workflow/MusicFolderCard';
@@ -2429,6 +2431,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           <>
             <div id="start-source-folder" />
             <ApiErrorBox error={error} />
+            <NotifyOnChange value={actionMessage} variant="success" />
             {actionMessage ? <div className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">{actionMessage}</div> : null}
             <WorkflowStepper steps={[
               { label: 'Nguồn', status: sourceFolder ? 'done' : 'active' },
@@ -2814,7 +2817,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   <button
                     className="mt-3 rounded-md border border-line px-3 py-2 text-xs font-semibold text-ink hover:border-brand"
                     type="button"
-                    onClick={() => void navigator.clipboard.writeText(output.path)}
+                    onClick={() => copyToClipboard(output.path)}
                   >
                     Sao chép đường dẫn
                   </button>
@@ -3260,7 +3263,7 @@ function FinalQAPanel({
           <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white disabled:bg-blue-200" type="button" disabled={busy || !jobId || !selectedIndexes.length} onClick={() => void onCreatePack()}>
             Tạo gói xuất file
           </button>
-          {exportPack ? <button className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink" type="button" onClick={() => void navigator.clipboard.writeText(exportPack.output_dir)}>Sao chép đường dẫn</button> : null}
+          {exportPack ? <button className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink" type="button" onClick={() => copyToClipboard(exportPack.output_dir)}>Sao chép đường dẫn</button> : null}
           {exportPack ? <button className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink" type="button" onClick={() => void onOpenPack()}>Mở thư mục</button> : null}
         </div>
         {exportPack ? (
@@ -3273,6 +3276,12 @@ function FinalQAPanel({
       </div>
     </div>
   );
+}
+
+function copyToClipboard(value?: string | null) {
+  if (!value) return;
+  void navigator.clipboard?.writeText(value);
+  emitNotification({ variant: 'success', message: 'Đã sao chép đường dẫn.' });
 }
 
 function toStartPresetViewModel(

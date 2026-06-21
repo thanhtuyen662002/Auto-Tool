@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import GlassButton from '../glass/GlassButton';
 import GlassInput from '../glass/GlassInput';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import SettingsSection from './SettingsSection';
 import { API_BASE_URL } from '../../services/api';
 import { getLocalUiSettings, resetLocalUiSettings, saveLocalUiSettings } from '../../utils/localSettings';
@@ -61,6 +62,7 @@ export default function AdvancedTechnicalSettings() {
             <GlassButton variant="primary" onClick={save}>Lưu cấu hình nâng cao</GlassButton>
             <GlassButton variant="danger" onClick={reset}>Khôi phục cài đặt mặc định UI</GlassButton>
           </div>
+          <NotifyOnChange value={message} variant="success" />
           {message ? <div className="text-sm text-emerald-200">{message}</div> : null}
         </div>
       ) : null}

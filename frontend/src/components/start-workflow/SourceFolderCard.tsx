@@ -3,6 +3,7 @@ import type { DouyinVideoItem } from '../../types/project';
 import type { StartRecentFolder, StartScanSummary, StartWorkflowMode } from '../../types/startWorkflow';
 import GlassButton from '../glass/GlassButton';
 import GlassCard from '../glass/GlassCard';
+import { emitNotification } from '../notifications/NotificationProvider';
 import StartRecentFolders from './StartRecentFolders';
 
 export default function SourceFolderCard({
@@ -127,8 +128,12 @@ function Metric({ label, value }: { label: string; value: number }) {
 async function pastePath(onChange: (value: string) => void) {
   try {
     const text = await navigator.clipboard.readText();
-    if (text.trim()) onChange(text.trim());
+    if (text.trim()) {
+      onChange(text.trim());
+      emitNotification({ variant: 'success', message: 'Đã dán đường dẫn từ clipboard.' });
+    }
   } catch {
+    emitNotification({ variant: 'warning', message: 'Không đọc được clipboard. Bạn có thể nhập đường dẫn thủ công.' });
     // Browser permissions can block clipboard reads; manual typing still works.
   }
 }

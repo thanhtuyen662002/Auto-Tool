@@ -13,6 +13,7 @@ import {
 } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
 import GlassModal from '../components/glass/GlassModal';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import ProductDraftDetail from '../components/productDrafts/ProductDraftDetail';
 import type {
   CreateProjectFromDraftRequest,
@@ -200,6 +201,7 @@ export default function ImportInboxPage() {
       </div>
 
       <ApiErrorBox error={error} />
+      <NotifyOnChange value={message} variant="success" />
       {message ? <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{message}</div> : null}
 
       <section className="mb-5 grid gap-3 sm:grid-cols-5">

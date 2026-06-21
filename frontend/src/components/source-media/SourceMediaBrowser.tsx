@@ -8,6 +8,7 @@ import type {
 import { createSourceMediaSelection, scanSourceMedia } from '../../services/sourceMediaApi';
 import ApiErrorBox from '../ApiErrorBox';
 import GlassCard from '../glass/GlassCard';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import SourceMediaBulkActions from './SourceMediaBulkActions';
 import SourceMediaEmptyState from './SourceMediaEmptyState';
 import SourceMediaFilters from './SourceMediaFilters';
@@ -184,6 +185,7 @@ export default function SourceMediaBrowser({
         {message ? <div className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-sm text-emerald-100">{message}</div> : null}
       </div>
       <ApiErrorBox error={error} />
+      <NotifyOnChange value={message} variant="success" />
       <SourceMediaToolbar
         folderPath={folderPath}
         recursive={recursive}

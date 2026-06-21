@@ -6,6 +6,7 @@ import GlassBadge, { type GlassBadgeVariant } from './glass/GlassBadge';
 import GlassButton from './glass/GlassButton';
 import GlassCard from './glass/GlassCard';
 import GlassEmptyState from './glass/GlassEmptyState';
+import { emitNotification } from './notifications/NotificationProvider';
 
 interface ResultListProps {
   outputs: JobOutput[];
@@ -132,7 +133,9 @@ function matchesFilter(output: JobOutput, filter: Filter) {
 }
 
 function copy(value?: string | null) {
-  if (value) void navigator.clipboard.writeText(value);
+  if (!value) return;
+  void navigator.clipboard.writeText(value);
+  emitNotification({ variant: 'success', message: 'Đã sao chép.' });
 }
 
 function captionWithHashtags(output: JobOutput): string {

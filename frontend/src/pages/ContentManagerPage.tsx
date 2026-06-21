@@ -9,6 +9,7 @@ import {
   updateProjectContentItem,
 } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import type {
   ContentBatchSummary,
   OutputContentItem,
@@ -54,6 +55,7 @@ export default function ContentManagerPage() {
   const [loading, setLoading] = useState(true);
   const [busyIndex, setBusyIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -88,6 +90,8 @@ export default function ContentManagerPage() {
   async function saveItem(item: OutputContentItem, publishStatus?: PublishStatus) {
     if (!projectId) return;
     setBusyIndex(item.output_index);
+    setError(null);
+    setMessage(null);
     try {
       const draft = drafts[item.output_index];
       const response = await updateProjectContentItem(projectId, item.output_index, {
@@ -100,7 +104,7 @@ export default function ContentManagerPage() {
         publish_status: publishStatus,
       });
       applyUpdatedItem(response.item);
-      setError(null);
+      setMessage(publishStatus === 'skipped' ? 'Đã bỏ qua caption.' : 'Đã lưu caption.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể lưu caption.');
     } finally {
@@ -111,6 +115,8 @@ export default function ContentManagerPage() {
   async function copyAndMark(item: OutputContentItem) {
     if (!projectId) return;
     setBusyIndex(item.output_index);
+    setError(null);
+    setMessage(null);
     try {
       const draft = drafts[item.output_index];
       const text = [draft.caption.trim(), draft.hashtags.trim()].filter(Boolean).join('\n\n');
@@ -126,7 +132,7 @@ export default function ContentManagerPage() {
       applyUpdatedItem(saved.item);
       const response = await markContentCopied(projectId, item.output_index);
       applyUpdatedItem(response.item);
-      setError(null);
+      setMessage('Đã copy nội dung.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể sao chép nội dung.');
     } finally {
@@ -137,6 +143,8 @@ export default function ContentManagerPage() {
   async function markPosted(item: OutputContentItem) {
     if (!projectId) return;
     setBusyIndex(item.output_index);
+    setError(null);
+    setMessage(null);
     try {
       const draft = drafts[item.output_index];
       const saved = await updateProjectContentItem(projectId, item.output_index, {
@@ -150,7 +158,7 @@ export default function ContentManagerPage() {
       applyUpdatedItem(saved.item);
       const response = await markContentPosted(projectId, item.output_index, draft.platform);
       applyUpdatedItem(response.item);
-      setError(null);
+      setMessage('Đã đánh dấu đã đăng.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể đánh dấu đã đăng.');
     } finally {
@@ -160,10 +168,12 @@ export default function ContentManagerPage() {
 
   async function exportContent() {
     if (!projectId) return;
+    setError(null);
+    setMessage(null);
     try {
       const response = await exportProjectContent(projectId, formats);
       setExportedFiles(response.files);
-      setError(null);
+      setMessage(`Đã export ${response.files.length} file nội dung.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể export nội dung.');
     }
@@ -211,6 +221,7 @@ export default function ContentManagerPage() {
       </div>
 
       <ApiErrorBox error={error} />
+      <NotifyOnChange value={message} variant="success" />
 
       {loading ? (
         <div className="rounded-lg border border-line bg-white p-5 text-sm text-muted shadow-panel">

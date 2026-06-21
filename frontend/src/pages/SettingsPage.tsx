@@ -9,6 +9,7 @@ import ApiKeysSettingsCard from '../components/settings/ApiKeysSettingsCard';
 import AppearanceSettingsCard from '../components/settings/AppearanceSettingsCard';
 import DataManagementSettings from '../components/settings/DataManagementSettings';
 import LocalAppSettingsCard from '../components/settings/LocalAppSettingsCard';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import PathSettingsCard from '../components/settings/PathSettingsCard';
 import ProviderSettingsCard from '../components/settings/ProviderSettingsCard';
 import SettingsLayout, { type SettingsTab } from '../components/settings/SettingsLayout';
@@ -66,6 +67,7 @@ export default function SettingsPage() {
       <SettingsLayout activeTab={activeTab} onTabChange={setActiveTab}>
         {activeTab === 'general' ? (
           <SettingsSection title="Cấu hình chung" description="Chọn workflow mặc định và ngôn ngữ hiển thị cho trải nghiệm hằng ngày.">
+            <NotifyOnChange value={message} variant="success" />
             <div className="grid gap-4 lg:grid-cols-3">
               <GlassSelect label="Luồng công việc mặc định" value={defaultWorkflow} onChange={(event) => setDefaultWorkflow(event.target.value as DefaultWorkflow)}>
                 <option value="douyin">Video có thoại</option>

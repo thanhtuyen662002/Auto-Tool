@@ -6,6 +6,7 @@ import {
   updateProductAsset,
 } from '../../api/client';
 import type { ProductAsset, ProductAssetRole } from '../../types/project';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 
 const ROLES: Array<{ value: ProductAssetRole; label: string }> = [
   { value: 'main_product', label: 'Ảnh chính' },
@@ -150,6 +151,8 @@ export default function ProductAssetSelector({
         </div>
       </div>
 
+      <NotifyOnChange value={error} variant="error" />
+      <NotifyOnChange value={message} variant="success" />
       {error ? <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
       {message ? <p className="mt-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">{message}</p> : null}
 

@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { browsePath } from '../api/client';
 import type { BrowsePathMode } from '../types/project';
+import NotifyOnChange from './notifications/NotifyOnChange';
 
 interface PathInputProps {
   label: string;
@@ -79,6 +80,7 @@ export default function PathInput({
           ))}
         </div>
       </div>
+      <NotifyOnChange value={error} variant="error" />
       {error ? <span className="mt-1 block text-xs text-red-600">{error}</span> : null}
     </div>
   );

@@ -31,6 +31,7 @@ import {
 import ApiErrorBox from '../components/ApiErrorBox';
 import GlassButton from '../components/glass/GlassButton';
 import GlassCard from '../components/glass/GlassCard';
+import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import { addRecentSourceFolder, getLocalAppConfig, openFolder } from '../services/localAppApi';
 import type {
   DouyinDownloaderHistoryResponse,
@@ -385,6 +386,7 @@ export default function DouyinDownloadPage() {
       </section>
 
       <ApiErrorBox error={error} />
+      <NotifyOnChange value={notice} variant="info" />
       {notice ? <div className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">{notice}</div> : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px] xl:items-start">

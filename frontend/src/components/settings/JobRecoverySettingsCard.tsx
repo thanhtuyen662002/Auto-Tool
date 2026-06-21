@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GlassButton from '../glass/GlassButton';
+import NotifyOnChange from '../notifications/NotifyOnChange';
 import SettingsSection from './SettingsSection';
 import { getRecoveryCandidates, type RecoveryCandidate } from '../../services/jobRecoveryApi';
 
@@ -9,6 +10,7 @@ export default function JobRecoverySettingsCard() {
   const [items, setItems] = useState<RecoveryCandidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     void refresh();
@@ -20,12 +22,14 @@ export default function JobRecoverySettingsCard() {
     failed: items.reduce((sum, item) => sum + item.failed_items, 0),
   }), [items]);
 
-  async function refresh() {
+  async function refresh(showMessage = false) {
     setLoading(true);
     setError(null);
+    setMessage(null);
     try {
       const response = await getRecoveryCandidates();
       setItems(response.data.items);
+      if (showMessage) setMessage('Đã làm mới danh sách job khôi phục.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải danh sách job khôi phục.');
     } finally {
@@ -42,8 +46,10 @@ export default function JobRecoverySettingsCard() {
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <GlassButton variant="primary" onClick={() => navigate('/recovery')}>Mở trung tâm khôi phục</GlassButton>
-        <GlassButton loading={loading} onClick={() => void refresh()}>Làm mới</GlassButton>
+        <GlassButton loading={loading} onClick={() => void refresh(true)}>Làm mới</GlassButton>
       </div>
+      <NotifyOnChange value={error} variant="error" />
+      <NotifyOnChange value={message} variant="success" />
       {error ? <div className="mt-3 rounded-md border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-100">{error}</div> : null}
     </SettingsSection>
   );
@@ -57,4 +63,3 @@ function Metric({ label, value }: { label: string; value: number }) {
     </div>
   );
 }
-
