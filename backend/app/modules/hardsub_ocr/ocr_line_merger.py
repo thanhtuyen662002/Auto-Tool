@@ -21,7 +21,7 @@ DEFAULT_WATERMARK_TERMS = ("\u5c0f\u7c73\u540c\u5b66", "\u5c0f\u7c73\u540c\u5b78
 class OCRLineMerger:
     def __init__(self, cleaner: ChineseTextCleaner | None = None) -> None:
         self.cleaner = cleaner or ChineseTextCleaner()
-        self.last_filter_summary: dict[str, int] = {}
+        self.last_filter_summary: dict[str, Any] = {}
 
     def merge_frames_to_lines(
         self,
@@ -38,10 +38,15 @@ class OCRLineMerger:
         self.last_filter_summary = {
             "watermark_removed_frame_count": 0,
             "watermark_only_frame_count": 0,
+            "auto_watermark_terms_count": 0,
+            "auto_watermark_terms": [],
         }
+        auto_watermark_terms = _detect_auto_watermark_terms(frame_results, settings, self.cleaner)
+        self.last_filter_summary["auto_watermark_terms_count"] = len(auto_watermark_terms)
+        self.last_filter_summary["auto_watermark_terms"] = auto_watermark_terms
         candidates: list[dict] = []
         for frame in sorted(frame_results, key=lambda item: item.timestamp_ms):
-            frame_text = _filtered_frame_text(frame, settings, self.cleaner)
+            frame_text = _filtered_frame_text(frame, settings, self.cleaner, auto_watermark_terms)
             text = frame_text["text"]
             watermark_removed = bool(frame_text["watermark_removed"])
             if watermark_removed:
@@ -159,15 +164,16 @@ def _filtered_frame_text(
     frame: OCRFrameResult,
     settings: DouyinReupSettings,
     cleaner: ChineseTextCleaner,
+    auto_watermark_terms: list[str] | None = None,
 ) -> dict[str, Any]:
     if not bool(getattr(settings, "ocr_filter_watermarks", True)):
         return {"text": cleaner.clean(frame.text), "watermark_removed": False}
 
-    raw_result = _text_from_raw_blocks(frame, settings, cleaner)
+    raw_result = _text_from_raw_blocks(frame, settings, cleaner, auto_watermark_terms or [])
     if raw_result["used_raw_blocks"]:
         return {"text": raw_result["text"], "watermark_removed": raw_result["watermark_removed"]}
 
-    text, watermark_removed = _strip_watermark_terms(cleaner.clean(frame.text), settings)
+    text, watermark_removed = _strip_watermark_terms(cleaner.clean(frame.text), settings, auto_watermark_terms)
     return {"text": cleaner.clean(text), "watermark_removed": watermark_removed}
 
 
@@ -175,6 +181,7 @@ def _text_from_raw_blocks(
     frame: OCRFrameResult,
     settings: DouyinReupSettings,
     cleaner: ChineseTextCleaner,
+    auto_watermark_terms: list[str] | None = None,
 ) -> dict[str, Any]:
     raw_blocks = list(frame.raw_blocks or [])
     if not raw_blocks:
@@ -185,7 +192,7 @@ def _text_from_raw_blocks(
     for raw in raw_blocks:
         if not isinstance(raw, dict):
             continue
-        text, removed = _strip_watermark_terms(cleaner.clean(raw.get("text", "")), settings)
+        text, removed = _strip_watermark_terms(cleaner.clean(raw.get("text", "")), settings, auto_watermark_terms)
         watermark_removed = watermark_removed or removed
         text = cleaner.clean(text)
         if not text:
@@ -210,10 +217,14 @@ def _text_from_raw_blocks(
     return {"text": text, "watermark_removed": watermark_removed, "used_raw_blocks": True}
 
 
-def _strip_watermark_terms(text: str, settings: DouyinReupSettings) -> tuple[str, bool]:
+def _strip_watermark_terms(
+    text: str,
+    settings: DouyinReupSettings,
+    auto_watermark_terms: list[str] | None = None,
+) -> tuple[str, bool]:
     output = str(text or "")
     removed = False
-    for term in _watermark_terms(settings):
+    for term in _watermark_terms(settings, auto_watermark_terms):
         pattern = _watermark_pattern(term)
         if not pattern:
             continue
@@ -224,9 +235,9 @@ def _strip_watermark_terms(text: str, settings: DouyinReupSettings) -> tuple[str
     return re.sub(r"\s+", " ", output).strip(), removed
 
 
-def _watermark_terms(settings: DouyinReupSettings) -> list[str]:
+def _watermark_terms(settings: DouyinReupSettings, auto_watermark_terms: list[str] | None = None) -> list[str]:
     raw_terms = getattr(settings, "ocr_watermark_terms", None)
-    terms = raw_terms if raw_terms is not None else list(DEFAULT_WATERMARK_TERMS)
+    terms = [*DEFAULT_WATERMARK_TERMS, *(raw_terms or []), *(auto_watermark_terms or [])]
     cleaned: list[str] = []
     seen: set[str] = set()
     for term in terms:
@@ -247,6 +258,116 @@ def _watermark_pattern(term: str) -> str:
         return ""
     separator = r"[\s\-_.:：·•|/\\]*"
     return separator.join(re.escape(char) for char in compact)
+
+
+def _detect_auto_watermark_terms(
+    frame_results: list[OCRFrameResult],
+    settings: DouyinReupSettings,
+    cleaner: ChineseTextCleaner,
+) -> list[str]:
+    if not bool(getattr(settings, "ocr_filter_watermarks", True)):
+        return []
+
+    stats: dict[str, dict[str, Any]] = {}
+    text_frame_count = 0
+
+    for frame in frame_results:
+        frame_terms: set[str] = set()
+        raw_compacts: list[str] = []
+        raw_terms: set[str] = set()
+
+        for raw in frame.raw_blocks or []:
+            if not isinstance(raw, dict):
+                continue
+            raw_text = cleaner.clean(raw.get("text", ""))
+            compact = _normalize_for_similarity(raw_text)
+            if not compact:
+                continue
+            raw_compacts.append(compact)
+            if _is_plausible_auto_watermark_term(compact):
+                raw_terms.add(compact)
+
+        for term in raw_terms:
+            context = " ".join(sorted(item for item in raw_compacts if item != term))
+            _remember_auto_term(stats, term, frame.timestamp_ms, context=context, raw_block=True)
+            frame_terms.add(term)
+
+        compact_text = _normalize_for_similarity(cleaner.clean(frame.text))
+        if compact_text:
+            text_frame_count += 1
+            for term in _edge_auto_watermark_candidates(compact_text):
+                context = compact_text.replace(term, "", 1).strip()
+                _remember_auto_term(stats, term, frame.timestamp_ms, context=context, raw_block=False)
+                frame_terms.add(term)
+
+        for term in frame_terms:
+            stats[term]["frame_hits"].add(int(frame.timestamp_ms))
+
+    frame_floor = max(3, int(max(1, text_frame_count) * 0.35 + 0.999))
+    selected: list[str] = []
+    for term, item in stats.items():
+        frame_hits = len(item.get("frame_hits") or set())
+        contexts = {context for context in item.get("contexts", set()) if context}
+        raw_hits = int(item.get("raw_hits", 0) or 0)
+        if frame_hits < frame_floor and raw_hits < frame_floor:
+            continue
+        if len(contexts) < 2:
+            continue
+        selected.append(term)
+
+    selected = sorted(selected, key=lambda value: (-len(value), value))
+    filtered: list[str] = []
+    for term in selected:
+        if any(term in existing for existing in filtered):
+            continue
+        filtered.append(term)
+    return filtered[:12]
+
+
+def _remember_auto_term(
+    stats: dict[str, dict[str, Any]],
+    term: str,
+    timestamp_ms: int,
+    *,
+    context: str,
+    raw_block: bool,
+) -> None:
+    if not _is_plausible_auto_watermark_term(term):
+        return
+    item = stats.setdefault(term, {"frame_hits": set(), "contexts": set(), "raw_hits": 0})
+    item["frame_hits"].add(int(timestamp_ms))
+    if context and context != term:
+        item["contexts"].add(context)
+    if raw_block:
+        item["raw_hits"] = int(item.get("raw_hits", 0) or 0) + 1
+
+
+def _edge_auto_watermark_candidates(compact_text: str) -> set[str]:
+    compact = _normalize_for_similarity(compact_text)
+    if len(compact) < 7:
+        return set()
+    candidates: set[str] = set()
+    max_len = min(12, max(3, len(compact) - 3))
+    for length in range(3, max_len + 1):
+        prefix = compact[:length]
+        suffix = compact[-length:]
+        if _is_plausible_auto_watermark_term(prefix):
+            candidates.add(prefix)
+        if _is_plausible_auto_watermark_term(suffix):
+            candidates.add(suffix)
+    return candidates
+
+
+def _is_plausible_auto_watermark_term(text: str) -> bool:
+    compact = _normalize_for_similarity(text)
+    length = len(compact)
+    if length < 3 or length > 16:
+        return False
+    cjk_count = len(CJK_RE.findall(compact))
+    ascii_count = sum(1 for char in compact if char.isascii() and char.isalnum())
+    if cjk_count >= 2:
+        return True
+    return ascii_count >= 4
 
 
 def _raw_block_bounds(raw: dict[str, Any]) -> tuple[float, float, float, float] | None:

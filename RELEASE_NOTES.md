@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.41
+
+### Highlights
+
+- Added automatic OCR watermark/channel-name detection across repeated frames, so users no longer need to type watermark text for large batches.
+- Kept common watermark terms built into the backend while allowing optional manual terms only for rare edge cases.
+- Simplified the OCR settings UI: watermark filtering is automatic by default, and the manual keyword box is tucked into an advanced detail section.
+- Improved OCR debug summaries with auto-detected watermark term counts.
+
+### QA
+
+- Focused OCR/Douyin backend tests passed for watermark filtering, OCR fallback, one-click batch, and service flow.
+- Frontend production build passed.
+
 ## v1.0.40
 
 ### Highlights

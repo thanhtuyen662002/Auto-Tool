@@ -643,7 +643,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   ocr_min_duration_ms: 500,
   ocr_max_duration_ms: 6000,
   ocr_filter_watermarks: true,
-  ocr_watermark_terms: ['小米同学', '小米同學'],
+  ocr_watermark_terms: [],
   prefer_ocr_over_asr_when_text_visible: false,
   visual_style_preset_id: 'clean_review_light',
   burn_subtitle: true,
@@ -2314,16 +2314,24 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           <div className="grid gap-3 sm:grid-cols-2">
             <SliderInput label={`Độ chắc chắn tối thiểu khi đọc chữ`} min={0} max={1} step={0.05} value={settings.ocr_min_confidence} onChange={(value) => updateAdvancedSettings({ ocr_min_confidence: value })} />
             <Toggle label="Ưu tiên chữ trên màn hình" checked={settings.prefer_ocr_over_asr_when_text_visible} onChange={(value) => updateAdvancedSettings({ prefer_ocr_over_asr_when_text_visible: value })} />
-            <Toggle label="Lọc watermark khi đọc chữ" checked={settings.ocr_filter_watermarks} onChange={(value) => updateAdvancedSettings({ ocr_filter_watermarks: value })} />
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-200">Watermark bỏ qua</span>
-              <input
-                className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
-                value={settings.ocr_watermark_terms.join(', ')}
-                onChange={(event) => updateAdvancedSettings({ ocr_watermark_terms: splitWatermarkTerms(event.target.value) })}
-                placeholder="小米同学, tên kênh..."
-              />
-            </label>
+            <div className="rounded-md border border-white/10 bg-slate-950/60 p-3">
+              <Toggle label="Tự lọc watermark / tên kênh" checked={settings.ocr_filter_watermarks} onChange={(value) => updateAdvancedSettings({ ocr_filter_watermarks: value })} />
+              <p className="mt-2 text-xs leading-5 text-slate-400">
+                Tool tự nhận diện chữ lặp ở nhiều frame, logo chữ chạy quanh màn hình và các watermark phổ biến. Không cần nhập tay cho từng video.
+              </p>
+            </div>
+            <details className="rounded-md border border-white/10 bg-slate-950/40 p-3 text-sm text-slate-300">
+              <summary className="cursor-pointer font-medium text-slate-200">Thêm từ khóa bỏ qua thủ công (hiếm khi cần)</summary>
+              <label className="mt-3 block">
+                <span className="mb-1.5 block text-xs text-slate-400">Chỉ dùng khi watermark quá đặc biệt và tool chưa tự lọc được</span>
+                <input
+                  className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                  value={settings.ocr_watermark_terms.join(', ')}
+                  onChange={(event) => updateAdvancedSettings({ ocr_watermark_terms: splitWatermarkTerms(event.target.value) })}
+                  placeholder="Ví dụ: tên kênh, tên shop..."
+                />
+              </label>
+            </details>
           </div>
           {settings.ocr_region_mode === 'manual' ? (
             <div className="grid gap-3">

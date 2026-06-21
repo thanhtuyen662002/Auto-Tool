@@ -11,7 +11,7 @@ export const DEFAULT_REVIEW_RENDER_SETTINGS: DouyinReupSettings = {
   ocr_subprocess_isolation: true, ocr_timeout_seconds: 1200, ocr_region_mode: 'bottom_auto',
   ocr_manual_region: null, ocr_min_confidence: 0.35, ocr_dedupe_similarity: 0.86,
   ocr_min_text_length: 2, ocr_merge_gap_ms: 600, ocr_min_duration_ms: 500, ocr_max_duration_ms: 6000,
-  ocr_filter_watermarks: true, ocr_watermark_terms: ['小米同学', '小米同學'],
+  ocr_filter_watermarks: true, ocr_watermark_terms: [],
   prefer_ocr_over_asr_when_text_visible: false, visual_style_preset_id: 'clean_review_light', burn_subtitle: true,
   add_overlay: false, overlay_mode: 'none', custom_overlay_path: 'examples/overlay',
   custom_overlay_height_percent: 100, custom_overlay_fit_mode: 'cover',
