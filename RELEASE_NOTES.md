@@ -1,5 +1,16 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.42
+
+### Highlights
+
+- Fixed the Douyin download page so the scanned link list fills the available space instead of leaving a large blank area below the rows.
+- Let the manual link input expand in the same panel layout for a cleaner desktop experience.
+
+### QA
+
+- Frontend production build passed.
+
 ## v1.0.41
 
 ### Highlights

@@ -349,7 +349,7 @@ export default function DouyinDownloadPage() {
       {notice ? <div className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">{notice}</div> : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <GlassCard className="min-w-0 p-5">
+        <GlassCard className="flex min-h-0 min-w-0 flex-col p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-white">Quét đường dẫn video</h2>
             <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-300">
@@ -418,10 +418,10 @@ export default function DouyinDownloadPage() {
             </div>
           </div>
 
-          <div className="mt-5">
+          <div className="mt-5 flex min-h-0 flex-1 flex-col">
             <h3 className="mb-2 text-sm font-semibold text-slate-100">Danh sách đường dẫn</h3>
             {scannedLinks.length ? (
-              <div className="max-h-72 overflow-y-auto rounded-md border border-white/10 bg-slate-950/55">
+              <div className="min-h-72 flex-1 overflow-y-auto rounded-md border border-white/10 bg-slate-950/55">
                 {scannedLinks.map((link) => (
                   <label key={link} className="flex min-w-0 cursor-pointer items-start gap-3 border-b border-white/5 px-3 py-2 text-sm text-slate-300 last:border-b-0">
                     <input className="mt-1 shrink-0" type="checkbox" checked={selectedLinks.includes(link)} onChange={() => toggleLink(link)} />
@@ -434,7 +434,7 @@ export default function DouyinDownloadPage() {
               </div>
             ) : (
               <textarea
-                className="min-h-40 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300"
+                className="min-h-40 w-full flex-1 rounded-md border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300"
                 value={manualLinks}
                 onChange={(event) => setManualLinks(event.target.value)}
                 placeholder="Có thể dán mỗi dòng một đường dẫn video Douyin nếu không cần quét kênh."
