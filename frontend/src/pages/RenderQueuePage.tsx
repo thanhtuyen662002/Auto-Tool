@@ -22,6 +22,7 @@ import type { JobStatus, QueueActionResult, QueueState } from '../types/project'
 import { loadProjectConfig } from '../utils/projectState';
 
 const DONE_STATUSES = new Set(['completed', 'completed_with_errors', 'completed_with_warnings', 'failed', 'cancelled']);
+const ADJUSTABLE_STATUSES = new Set(['paused', 'cancelled', 'failed', 'completed_with_errors', 'completed_with_warnings']);
 
 export default function RenderQueuePage() {
   const { projectId, jobId } = useParams<{ projectId: string; jobId: string }>();
@@ -80,6 +81,7 @@ export default function RenderQueuePage() {
   }, [queue]);
 
   const canViewResults = Boolean(job?.status && DONE_STATUSES.has(job.status));
+  const canAdjustAndContinue = Boolean(jobId && ADJUSTABLE_STATUSES.has(String(queue?.status || job?.status || '')));
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
 
   async function runAction(name: string, action: () => Promise<QueueActionResult>) {
@@ -124,14 +126,24 @@ export default function RenderQueuePage() {
           <h1 className="text-2xl font-semibold text-ink">Hàng đợi render</h1>
           <p className="mt-1 text-sm text-muted">{projectName}</p>
         </div>
-        {canViewResults ? (
+        <div className="flex flex-wrap gap-2">
+          {canAdjustAndContinue ? (
+            <Link
+              className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
+              to={`/douyin-reup?job_id=${encodeURIComponent(jobId || '')}&resume=1`}
+            >
+              Chỉnh cài đặt rồi chạy tiếp
+            </Link>
+          ) : null}
+          {canViewResults ? (
           <Link
             className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             to={projectId ? `/results/${projectId}/${jobId}` : `/results/${jobId}`}
           >
             Xem kết quả
           </Link>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       <div className="space-y-5">

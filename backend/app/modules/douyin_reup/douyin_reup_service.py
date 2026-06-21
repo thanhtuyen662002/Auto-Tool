@@ -99,14 +99,14 @@ class DouyinReupService:
             result = None
         if not result or not result.debug_json_path:
             warnings.append(
-                "subtitle_cover_probe_fallback: Không quét được tọa độ phụ đề Trung, "
-                "đã dùng vùng che đáy mặc định cho video này."
+                "subtitle_cover_probe_skipped: Không quét được tọa độ phụ đề Trung; "
+                "không vẽ nền che cho video này."
             )
             return None
         if result.detected_line_count <= 0:
             warnings.append(
-                "subtitle_cover_probe_empty: Quét nhanh không thấy phụ đề Trung rõ ràng, "
-                "đã dùng vùng che đáy mặc định cho video này."
+                "subtitle_cover_probe_empty: Quét nhanh không thấy phụ đề Trung rõ ràng; "
+                "không vẽ nền che cho video này."
             )
             return result.debug_json_path
         warnings.append(
@@ -392,17 +392,24 @@ class DouyinReupService:
         render_payload: dict[str, Any] | None = None
         retry_steps = retry_steps or {"asr", "translation", "render"}
         cached_output = cached_output or {}
+        source_retry_requested = bool(retry_steps.intersection({"subtitle_source", "source", "asr", "ocr"}))
+        translation_retry_requested = "translation" in retry_steps or source_retry_requested
         retry_history = _retry_history(cached_output, settings, started_at.isoformat())
         skip_final_log = False
 
         try:
-            cached_source_srt = _existing_cached_path(cached_output.get("source_srt_file"))
+            cached_source_srt = None if source_retry_requested else _existing_cached_path(cached_output.get("source_srt_file"))
             if cached_source_srt:
                 source_result = SubtitleSourceResult(
                     video_path=video.path,
                     source_type=cached_output.get("subtitle_source") or "sidecar_srt",
                     source_srt_path=cached_source_srt,
                     language=settings.source_language,
+                    ocr_debug_json_path=cached_output.get("ocr_debug_json_path"),
+                    ocr_frame_count=int(cached_output.get("ocr_frame_count") or 0),
+                    ocr_detected_line_count=int(cached_output.get("ocr_detected_line_count") or 0),
+                    ocr_average_confidence=float(cached_output.get("ocr_average_confidence") or 0.0),
+                    ocr_region_mode=cached_output.get("ocr_region_mode"),
                     warnings=["Dùng lại source SRT đã có từ lần chạy trước."],
                 )
                 warnings.extend(source_result.warnings)
@@ -444,9 +451,8 @@ class DouyinReupService:
                 raise RuntimeError(_friendly_error("; ".join(errors) or f"Không tìm thấy subtitle nguồn cho video {video.filename}."))
 
             translated_path = video_dir / f"video_{index:03d}_{settings.target_language}.srt"
-            cached_translated_srt = _existing_cached_path(cached_output.get("translated_srt_file"))
-            should_retranslate = cached_output.get("failed_step") in {"translation", "translate_subtitle"} and "translation" in retry_steps
-            if cached_translated_srt and not should_retranslate:
+            cached_translated_srt = None if translation_retry_requested else _existing_cached_path(cached_output.get("translated_srt_file"))
+            if cached_translated_srt:
                 translation = TranslationResult(
                     source_srt_path=source_result.source_srt_path,
                     translated_srt_path=cached_translated_srt,

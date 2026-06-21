@@ -221,6 +221,49 @@ def test_subtitle_cover_options_use_ocr_debug_position(tmp_path):
     assert any("subtitle_cover_auto_position" in warning for warning in warnings)
 
 
+def test_subtitle_cover_options_keep_mid_screen_ocr_position(tmp_path):
+    debug_path = tmp_path / "ocr_debug_mid_screen.json"
+    debug_path.write_text(
+        json.dumps(
+            {
+                "frame_width": 1080,
+                "frame_height": 1920,
+                "region": {"x": 0, "y": 0, "width": 1080, "height": 1920},
+                "average_confidence": 0.8,
+                "frames": [
+                    {
+                        "timestamp_ms": 0,
+                        "region": {"x": 0, "y": 0, "width": 1080, "height": 1920},
+                        "raw_blocks": [
+                            {
+                                "box": [[160, 720], [920, 720], [920, 800], [160, 800]],
+                                "text": "\u8fd9\u4e2a\u6536\u7eb3\u771f\u7684\u5f88\u65b9\u4fbf",
+                                "confidence": 0.8,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    warnings: list[str] = []
+    settings = DouyinReupSettings(enabled=True, subtitle_cover_height_ratio=0.12)
+    video = DouyinVideoItem(path="input.mp4", filename="input.mp4", duration=5, width=1080, height=1920, fps=30, has_audio=True)
+
+    options = DouyinRenderPipeline()._subtitle_cover_options(
+        settings=settings,
+        video=video,
+        source_ocr_debug_path=str(debug_path),
+        warnings=warnings,
+    )
+
+    assert options is not None
+    assert options["cover_background_bottom_ratio"] > 0.5
+    assert len(options["cover_background_segments"]) == 1
+    assert options["cover_background_segments"][0]["top_ratio"] < 0.42
+
+
 def test_subtitle_cover_options_fallback_to_thin_bottom_band_for_noisy_ocr(tmp_path):
     debug_path = tmp_path / "ocr_debug_noisy.json"
     debug_path.write_text(
@@ -266,3 +309,55 @@ def test_subtitle_cover_options_fallback_to_thin_bottom_band_for_noisy_ocr(tmp_p
     assert options["cover_background_bottom_ratio"] == 0
     assert options["cover_background_segments"] == []
     assert any("subtitle_cover_auto_position_bottom_fallback" in warning for warning in warnings)
+
+
+def test_subtitle_cover_options_skip_cover_when_no_chinese_subtitle_detected(tmp_path):
+    debug_path = tmp_path / "ocr_debug_empty.json"
+    debug_path.write_text(
+        json.dumps(
+            {
+                "frame_width": 720,
+                "frame_height": 1280,
+                "region": {"x": 0, "y": 704, "width": 720, "height": 448},
+                "frames": [{"timestamp_ms": 0, "raw_blocks": []}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    warnings: list[str] = []
+    settings = DouyinReupSettings(enabled=True, subtitle_cover_enabled=True, subtitle_cover_auto_position=True)
+    video = DouyinVideoItem(path="input.mp4", filename="input.mp4", duration=5, width=720, height=1280, fps=30, has_audio=True)
+
+    options = DouyinRenderPipeline()._subtitle_cover_options(
+        settings=settings,
+        video=video,
+        source_ocr_debug_path=str(debug_path),
+        warnings=warnings,
+    )
+
+    assert options is None
+    assert any("subtitle_cover_auto_position_skipped" in warning for warning in warnings)
+
+
+def test_subtitle_cover_options_keep_manual_cover_when_auto_position_disabled():
+    warnings: list[str] = []
+    settings = DouyinReupSettings(
+        enabled=True,
+        subtitle_cover_enabled=True,
+        subtitle_cover_auto_position=False,
+        subtitle_cover_height_ratio=0.18,
+        subtitle_cover_bottom_ratio=0.08,
+    )
+    video = DouyinVideoItem(path="input.mp4", filename="input.mp4", duration=5, width=720, height=1280, fps=30, has_audio=True)
+
+    options = DouyinRenderPipeline()._subtitle_cover_options(
+        settings=settings,
+        video=video,
+        source_ocr_debug_path=None,
+        warnings=warnings,
+    )
+
+    assert options is not None
+    assert options["cover_background_enabled"] is True
+    assert options["cover_background_height_ratio"] == 0.18
+    assert options["cover_background_bottom_ratio"] == 0.08

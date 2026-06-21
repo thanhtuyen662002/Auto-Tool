@@ -14,6 +14,23 @@ class FailingASR:
         raise RuntimeError("ASR failed")
 
 
+class SuccessfulASR:
+    warnings: list[str] = []
+
+    def __init__(self) -> None:
+        self.called = False
+
+    def transcribe_to_srt(self, _video_path, output_path, **_kwargs):
+        self.called = True
+        path = Path(output_path)
+        path.write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\nASR line 1\n\n"
+            "2\n00:00:01,000 --> 00:00:02,000\nASR line 2\n",
+            encoding="utf-8",
+        )
+        return str(path)
+
+
 class FakeOCR:
     def extract_hardsub_to_srt(self, video_path, output_dir, settings):
         srt = Path(output_dir) / "video_source_zh_ocr.srt"
@@ -56,3 +73,31 @@ def test_asr_fail_falls_back_to_ocr(tmp_path: Path):
     assert result.source_type == "ocr_hardsub"
     assert result.source_srt_path
     assert result.ocr_detected_line_count == 1
+
+
+def test_full_frame_ocr_is_tried_before_asr(tmp_path: Path):
+    video = DouyinVideoItem(
+        path=str(tmp_path / "clip.mp4"),
+        filename="clip.mp4",
+        duration=8,
+        width=1080,
+        height=1920,
+        fps=30,
+        has_audio=True,
+        embedded_subtitle_found=False,
+    )
+    asr = SuccessfulASR()
+    settings = DouyinReupSettings(
+        enabled=True,
+        ocr_region_mode="full_frame",
+        prefer_ocr_over_asr_when_text_visible=False,
+        ocr_provider="mock_ocr",
+        asr_subprocess_isolation=False,
+        ocr_subprocess_isolation=False,
+    )
+
+    result = SubtitleSourceDetector(asr_service=asr, ocr_service=FakeOCR()).detect_source(video, settings, str(tmp_path / "work"))
+
+    assert result.source_type == "ocr_hardsub"
+    assert result.ocr_detected_line_count == 1
+    assert asr.called is False

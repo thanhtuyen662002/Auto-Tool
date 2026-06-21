@@ -489,11 +489,15 @@ class DouyinRenderPipeline:
         video: DouyinVideoItem,
         source_ocr_debug_path: str | None,
         warnings: list[str],
-    ) -> dict:
+    ) -> dict | None:
         height_ratio = settings.subtitle_cover_height_ratio
         bottom_ratio = settings.subtitle_cover_bottom_ratio
         cover_segments: list[dict] = []
-        if settings.subtitle_cover_enabled and settings.subtitle_cover_auto_position and source_ocr_debug_path:
+        if not settings.subtitle_cover_enabled:
+            return None
+        if settings.subtitle_cover_auto_position:
+            if not source_ocr_debug_path:
+                return None
             placement = detect_subtitle_cover_from_ocr_debug(
                 source_ocr_debug_path,
                 fallback_height_ratio=settings.subtitle_cover_height_ratio,
@@ -517,9 +521,10 @@ class DouyinRenderPipeline:
                     )
             else:
                 warnings.append(
-                    "subtitle_cover_auto_position_fallback: Không đủ tọa độ OCR để tự đặt nền che sub Trung; "
-                    "đã dùng vùng che đáy mặc định cho video này."
+                    "subtitle_cover_auto_position_skipped: Không phát hiện phụ đề Trung đủ tin cậy; "
+                    "không vẽ nền che và giữ phụ đề Việt theo vị trí cài đặt."
                 )
+                return None
         return {
             "cover_background_enabled": settings.subtitle_cover_enabled,
             "cover_background_color": settings.subtitle_cover_color,
@@ -789,7 +794,7 @@ def _build_static_subtitle_cover_blur_filter(
     if width <= 0 or height <= 0:
         return None
     height_ratio = _clamp_float(float(cover_options.get("cover_background_height_ratio") or 0.12), 0.05, 0.45)
-    bottom_ratio = _clamp_float(float(cover_options.get("cover_background_bottom_ratio") or 0.0), 0.0, 0.35)
+    bottom_ratio = _clamp_float(float(cover_options.get("cover_background_bottom_ratio") or 0.0), 0.0, 0.9)
     cover_h = max(2, min(height, int(round(height * height_ratio))))
     cover_bottom = max(cover_h, min(height, height - int(round(height * bottom_ratio))))
     cover_y = max(0, min(height - cover_h, cover_bottom - cover_h))

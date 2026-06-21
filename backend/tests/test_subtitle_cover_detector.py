@@ -60,6 +60,59 @@ def test_detect_subtitle_cover_from_ocr_debug_uses_text_block_position(tmp_path:
     assert placement.segments[0].end == 0.25
 
 
+def test_detect_subtitle_cover_from_full_frame_mid_screen_subtitle(tmp_path: Path) -> None:
+    debug_path = tmp_path / "ocr_debug_mid_screen.json"
+    debug_path.write_text(
+        json.dumps(
+            {
+                "frame_width": 1080,
+                "frame_height": 1920,
+                "region": {"x": 0, "y": 0, "width": 1080, "height": 1920},
+                "average_confidence": 0.78,
+                "frames": [
+                    {
+                        "timestamp_ms": 0,
+                        "region": {"x": 0, "y": 0, "width": 1080, "height": 1920},
+                        "raw_blocks": [
+                            {
+                                "box": [[170, 720], [910, 720], [910, 790], [170, 790]],
+                                "text": "\u8fd9\u4e2a\u6536\u7eb3\u771f\u7684\u5f88\u65b9\u4fbf",
+                                "confidence": 0.78,
+                            }
+                        ],
+                    },
+                    {
+                        "timestamp_ms": 1000,
+                        "region": {"x": 0, "y": 0, "width": 1080, "height": 1920},
+                        "raw_blocks": [
+                            {
+                                "box": [[160, 735], [920, 735], [920, 805], [160, 805]],
+                                "text": "\u653e\u5728\u5ba2\u5385\u4e5f\u4e0d\u5360\u5730\u65b9",
+                                "confidence": 0.8,
+                            }
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    placement = detect_subtitle_cover_from_ocr_debug(
+        str(debug_path),
+        fallback_height_ratio=0.12,
+        fallback_bottom_ratio=0.0,
+        padding_ratio=0.03,
+    )
+
+    assert placement is not None
+    assert placement.source == "ocr_debug_timed_blocks"
+    assert placement.bottom_ratio > 0.5
+    assert len(placement.segments) == 2
+    assert all(0.34 <= segment.top_ratio <= 0.42 for segment in placement.segments)
+    assert all(0.40 <= segment.bottom_edge_ratio <= 0.46 for segment in placement.segments)
+
+
 def test_detect_subtitle_cover_from_ocr_debug_keeps_per_timestamp_positions(tmp_path: Path) -> None:
     debug_path = tmp_path / "ocr_debug.json"
     debug_path.write_text(

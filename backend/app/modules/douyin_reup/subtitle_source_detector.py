@@ -52,6 +52,11 @@ class SubtitleSourceDetector:
                     warnings.append(f"Không thể trích xuất subtitle nhúng từ {video.filename}: {_compact_worker_error(exc)}")
 
             if source_type == "asr" and settings.use_asr_if_no_subtitle:
+                ocr_priority_reason = _ocr_priority_reason(settings)
+                if ocr_priority_reason:
+                    ocr_result = self._try_ocr(video, settings, target_dir, ocr_priority_reason, errors)
+                    if ocr_result:
+                        return ocr_result
                 try:
                     asr_payload = self._run_asr(video, settings, target_dir, progress_callback)
                     path = asr_payload["path"]
@@ -244,6 +249,16 @@ def _srt_line_count(path: str) -> int:
         return len(parse_srt_blocks(path))
     except Exception:
         return 0
+
+
+def _ocr_priority_reason(settings: DouyinReupSettings) -> str | None:
+    if not (settings.use_ocr_if_no_subtitle or settings.use_ocr_if_asr_failed):
+        return None
+    if settings.prefer_ocr_over_asr_when_text_visible:
+        return "OCR được ưu tiên hơn ASR theo cấu hình vì video có chữ trên màn hình."
+    if (settings.ocr_region_mode or "").strip().lower() == "full_frame":
+        return "Đã chọn OCR toàn bộ video nên ưu tiên đọc chữ trên màn hình trước khi nghe thoại."
+    return None
 
 
 def _compact_worker_error(exc: Exception) -> str:

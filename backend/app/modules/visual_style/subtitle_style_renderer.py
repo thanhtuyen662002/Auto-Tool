@@ -65,7 +65,7 @@ def generate_ass_subtitle(
             0.08,
             0.45,
         )
-        cover_bottom_ratio = _clamp_float(cover_background_bottom_ratio, 0.0, 0.35)
+        cover_bottom_ratio = _clamp_float(cover_background_bottom_ratio, 0.0, 0.9)
         cover_bottom = max(1, video_height - int(video_height * cover_bottom_ratio))
         cover_height = max(1, int(video_height * cover_height_ratio))
         cover_top = max(0, cover_bottom - cover_height)

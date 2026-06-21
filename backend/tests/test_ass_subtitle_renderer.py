@@ -250,3 +250,24 @@ def test_generate_ass_subtitle_can_offset_text_inside_cover(tmp_path) -> None:
     content = output_path.read_text(encoding="utf-8")
 
     assert r"\pos(540,1767)" in content
+
+
+def test_generate_ass_subtitle_can_place_static_cover_in_middle(tmp_path) -> None:
+    preset = get_visual_style_preset("clean_review_light")
+    output_path = tmp_path / "video_001_mid_cover.ass"
+
+    generate_ass_subtitle(
+        [{"start_hint": 0.0, "end_hint": 2.0, "text": "Sub Viet nam ngay vung chu Trung o giua"}],
+        preset,
+        1080,
+        1920,
+        str(output_path),
+        cover_background_enabled=True,
+        cover_background_height_ratio=0.12,
+        cover_background_bottom_ratio=0.55,
+    )
+
+    content = output_path.read_text(encoding="utf-8")
+
+    assert r"m 0 634 l 1080 634 l 1080 864 l 0 864" in content
+    assert r"\pos(540,749)" in content

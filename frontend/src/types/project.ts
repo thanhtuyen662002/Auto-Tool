@@ -802,6 +802,15 @@ export interface DouyinRetryWithPresetRequest {
   advanced_overrides?: Record<string, unknown>;
 }
 
+export type DouyinRetryCustomMode = 'render_only' | 'read_screen_text' | 'rebuild_subtitle';
+
+export interface DouyinRetryCustomRequest {
+  retry_mode: DouyinRetryCustomMode;
+  video_ids?: string[];
+  settings?: Partial<DouyinReupSettings>;
+  include_unfinished?: boolean;
+}
+
 export interface DouyinRetryFailedResponse {
   job_id: string;
   status: string;

@@ -118,6 +118,7 @@ from app.modules.queue_control import (
     QueueActionResult,
     QueueControlAction,
     QueueControlService,
+    QueueItemStatus,
     QueueItemPriority,
     QueuePriorityService,
     QueueRetryService,
@@ -242,6 +243,7 @@ from app.schemas.api_schema import (
     DouyinReupProcessResponse,
     DouyinReupScanRequest,
     DouyinReupScanResponse,
+    DouyinRetryCustomRequest,
     DouyinRetryFailedRequest,
     DouyinRetryFailedResponse,
     DouyinRetryWithPresetRequest,
@@ -2868,6 +2870,34 @@ def create_app() -> FastAPI:
         )
         return DouyinRetryFailedResponse(job_id=retry_job_id, status="queued", retry_outputs=len(retry_outputs))
 
+    @app.post("/api/douyin-reup/jobs/{job_id}/retry-custom", response_model=DouyinRetryFailedResponse)
+    def retry_douyin_reup_outputs_with_custom_settings(
+        job_id: str,
+        request: DouyinRetryCustomRequest,
+    ) -> DouyinRetryFailedResponse:
+        original_job = _get_job_or_404(job_id)
+        retry_outputs = _collect_douyin_retry_outputs(
+            job_id,
+            original_job,
+            video_ids=request.video_ids,
+            include_unfinished=request.include_unfinished,
+        )
+        if not retry_outputs:
+            raise HTTPException(status_code=400, detail="Không tìm thấy video phù hợp để chạy lại hoặc chạy tiếp.")
+
+        try:
+            settings_override = _settings_override_for_custom_retry(request)
+        except ValidationError as exc:
+            raise HTTPException(status_code=400, detail=exc.errors()) from exc
+
+        retry_job_id = _queue_douyin_retry_failed_job(
+            original_job_id=job_id,
+            failed_outputs=retry_outputs,
+            retry_steps=_retry_steps_for_custom_mode(request.retry_mode),
+            settings_override=settings_override,
+        )
+        return DouyinRetryFailedResponse(job_id=retry_job_id, status="queued", retry_outputs=len(retry_outputs))
+
     @app.get("/api/files/video", response_model=None)
     def get_video_file(path: str = Query(...)) -> FileResponse:
         video_path = Path(path).expanduser().resolve()
@@ -4681,6 +4711,158 @@ def _filter_douyin_outputs_by_ids(outputs: list[dict[str, Any]], video_ids: list
         if requested.intersection(keys):
             filtered.append(output)
     return filtered
+
+
+def _collect_douyin_retry_outputs(
+    job_id: str,
+    original_job: dict[str, Any],
+    *,
+    video_ids: list[str],
+    include_unfinished: bool,
+) -> list[dict[str, Any]]:
+    outputs = [
+        output
+        for output in (original_job.get("results") or {}).get("outputs", [])
+        if isinstance(output, dict) and output.get("source_video")
+    ]
+    requested = {str(item).strip().lower() for item in video_ids if str(item).strip()}
+    selected: list[dict[str, Any]] = _filter_douyin_outputs_by_ids(outputs, video_ids) if requested else []
+    if not requested and include_unfinished:
+        selected.extend(
+            output
+            for output in outputs
+            if output.get("status") == "failed"
+            or (isinstance(output.get("final_output_qa"), dict) and output["final_output_qa"].get("status") == "failed")
+        )
+
+    try:
+        queue_state = QueueStateService().load_queue_state(job_id)
+    except Exception:
+        queue_state = None
+    if queue_state:
+        for item in queue_state.items:
+            item_keys = _queue_item_retry_keys(item)
+            if requested:
+                if not requested.intersection(item_keys):
+                    continue
+            elif not include_unfinished or item.status not in _UNFINISHED_DOUYIN_QUEUE_STATUSES:
+                continue
+            selected.append(_retry_output_from_queue_item(item))
+
+    return _dedupe_retry_outputs(selected)
+
+
+_UNFINISHED_DOUYIN_QUEUE_STATUSES = {
+    QueueItemStatus.queued,
+    QueueItemStatus.running,
+    QueueItemStatus.paused,
+    QueueItemStatus.failed,
+    QueueItemStatus.skipped,
+    QueueItemStatus.cancelled,
+}
+
+
+def _queue_item_retry_keys(item: Any) -> set[str]:
+    video_path = str(getattr(item, "video_path", "") or "")
+    filename = str(getattr(item, "filename", "") or "")
+    video_id = str(getattr(item, "video_id", "") or "")
+    item_id = str(getattr(item, "id", "") or "")
+    return {
+        item_id.lower(),
+        video_id.lower(),
+        str(getattr(item, "order_index", "") or "").lower(),
+        video_path.lower(),
+        Path(video_path).name.lower() if video_path else "",
+        filename.lower(),
+    }
+
+
+def _retry_output_from_queue_item(item: Any) -> dict[str, Any]:
+    return {
+        "index": _index_from_queue_item(item),
+        "status": getattr(getattr(item, "status", None), "value", str(getattr(item, "status", "queued"))),
+        "path": getattr(item, "output_video_path", None) or "",
+        "source_video": str(getattr(item, "video_path", "") or ""),
+        "failed_step": getattr(item, "failed_step", None),
+        "error_message": getattr(item, "error_message", None),
+        "warnings": list(getattr(item, "warnings", []) or []),
+    }
+
+
+def _index_from_queue_item(item: Any) -> int:
+    video_id = str(getattr(item, "video_id", "") or "")
+    if video_id.startswith("video_"):
+        try:
+            return max(1, int(video_id.split("_", 1)[1]))
+        except (TypeError, ValueError, IndexError):
+            pass
+    try:
+        return max(1, int(getattr(item, "order_index", 1) or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _dedupe_retry_outputs(outputs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_key: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for output in outputs:
+        source_video = str(output.get("source_video") or "").strip()
+        if not source_video:
+            continue
+        try:
+            key = str(Path(source_video).expanduser().resolve()).lower()
+        except OSError:
+            key = source_video.lower()
+        if key not in by_key:
+            order.append(key)
+            by_key[key] = output
+            continue
+        current = by_key[key]
+        if _retry_output_has_cache(output) and not _retry_output_has_cache(current):
+            by_key[key] = output
+    return [by_key[key] for key in order]
+
+
+def _retry_output_has_cache(output: dict[str, Any]) -> bool:
+    return bool(output.get("source_srt_file") or output.get("translated_srt_file") or output.get("ocr_debug_json_path"))
+
+
+def _retry_steps_for_custom_mode(mode: str) -> set[str]:
+    normalized = (mode or "render_only").strip().lower()
+    if normalized == "render_only":
+        return {"render"}
+    if normalized == "read_screen_text":
+        return {"subtitle_source", "ocr", "translation", "render"}
+    return {"subtitle_source", "asr", "ocr", "translation", "render"}
+
+
+def _settings_override_for_custom_retry(request: DouyinRetryCustomRequest) -> dict[str, Any]:
+    settings = dict(request.settings or {})
+    if request.retry_mode == "read_screen_text":
+        priority = [str(item) for item in settings.get("subtitle_source_priority") or []]
+        if not priority:
+            priority = DouyinReupSettings(enabled=True).subtitle_source_priority
+        settings.update(
+            {
+                "use_ocr_if_no_subtitle": True,
+                "use_ocr_if_asr_failed": True,
+                "prefer_ocr_over_asr_when_text_visible": True,
+                "ocr_region_mode": settings.get("ocr_region_mode") or "full_frame",
+                "subtitle_source_priority": _prioritize_ocr_before_asr(priority),
+            }
+        )
+    return settings
+
+
+def _prioritize_ocr_before_asr(priority: list[str]) -> list[str]:
+    cleaned = [item for item in priority if item != "ocr_hardsub"]
+    try:
+        asr_index = cleaned.index("asr")
+    except ValueError:
+        cleaned.append("ocr_hardsub")
+    else:
+        cleaned.insert(asr_index, "ocr_hardsub")
+    return cleaned
 
 
 def _apply_app_settings(config: ProjectConfig) -> ProjectConfig:

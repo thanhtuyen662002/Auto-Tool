@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type PointerEvent, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Info, Play, RefreshCw, Route, Settings2 } from 'lucide-react';
 import {
   applyDouyinReupPreset,
@@ -12,6 +12,7 @@ import {
   getDouyinReupJobResults,
   getAppSettings,
   getJobStatus,
+  getProject,
   getSilentVisualTagVocabulary,
   getVisualStyles,
   listSilentCaptionIndustries,
@@ -21,6 +22,7 @@ import {
   updateSilentSegmentVisualTags,
   renderApprovedSubtitleReviewDocuments,
   retryDouyinReupJobWithPreset,
+  retryDouyinReupJobCustom,
   retryFailedDouyinReupJob,
   runFinalOutputQAForJob,
   sourceVideoFileUrl,
@@ -69,6 +71,7 @@ import type {
   DouyinReupPreset,
   DouyinReupSummary,
   DouyinReupSettings,
+  DouyinRetryCustomMode,
   DouyinVideoItem,
   JobStatus,
   PlatformExportPack,
@@ -97,6 +100,28 @@ type ExportOptions = {
   include_captions: boolean;
   include_posting_checklist: boolean;
 };
+
+const CUSTOM_RETRY_MODE_OPTIONS: Array<{
+  value: DouyinRetryCustomMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'render_only',
+    label: 'Chỉ dựng lại video',
+    description: 'Dùng lại phụ đề/dịch cũ. Phù hợp khi bạn chỉ đổi font, vị trí sub, nền che, nhạc hoặc âm lượng.',
+  },
+  {
+    value: 'read_screen_text',
+    label: 'Đọc lại chữ trên video rồi dựng',
+    description: 'Ưu tiên đọc chữ đang hiện trên video trước khi dịch và dựng lại. Phù hợp khi sub Trung nằm giữa màn hình hoặc nền che chưa đúng.',
+  },
+  {
+    value: 'rebuild_subtitle',
+    label: 'Làm lại phụ đề/thoại rồi dựng',
+    description: 'Chạy lại bước lấy phụ đề/thoại, dịch lại rồi dựng. Dùng khi lời thoại hoặc bản dịch cũ không ổn.',
+  },
+];
 
 type SilentProductContext = {
   product_name: string;
@@ -786,6 +811,16 @@ function splitWatermarkTerms(value: string): string[] {
   return value.split(/[,;，\n]+/).map((item) => item.trim()).filter(Boolean);
 }
 
+function prioritizeOcrBeforeAsr(priority: string[]): string[] {
+  const cleaned = priority.filter((source) => source !== 'ocr_hardsub');
+  const asrIndex = cleaned.indexOf('asr');
+  if (asrIndex >= 0) {
+    cleaned.splice(asrIndex, 0, 'ocr_hardsub');
+    return cleaned;
+  }
+  return [...cleaned, 'ocr_hardsub'];
+}
+
 function readSavedDouyinSettings(): Partial<DouyinReupSettings> {
   try {
     const raw = localStorage.getItem(SAVED_REUP_SETTINGS_KEY);
@@ -853,7 +888,9 @@ function toRecentFolders(paths: string[]): StartRecentFolder[] {
 
 export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initialWorkflow?: 'douyin' | 'silent' }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const workflowMode: StartWorkflowMode = initialWorkflow === 'silent' ? 'silent_immersive' : 'douyin_voice';
+  const resumeJobId = searchParams.get('job_id') || searchParams.get('resume_job_id');
   const [mode, setMode] = useState<'simple' | 'advanced'>('simple');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [riskyConfirmOpen, setRiskyConfirmOpen] = useState(false);
@@ -903,6 +940,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   const [dependencyStatus, setDependencyStatus] = useState<SystemDependencyStatusResponse | null>(null);
   const [backendHealth, setBackendHealth] = useState<HealthResponse | null>(null);
   const [retryPresetByOutput, setRetryPresetByOutput] = useState<Record<number, string>>({});
+  const [retryMode, setRetryMode] = useState<DouyinRetryCustomMode>('render_only');
+  const [selectedResultIndexes, setSelectedResultIndexes] = useState<number[]>([]);
+  const [loadedJobFromQuery, setLoadedJobFromQuery] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -915,9 +955,13 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   const [recentMusicFolders, setRecentMusicFolders] = useState(() => readRecentFolders(RECENT_MUSIC_KEY));
   const [subtitlePreviewVideoError, setSubtitlePreviewVideoError] = useState(false);
 
-  const done = jobStatus?.status === 'completed' || jobStatus?.status === 'completed_with_errors' || jobStatus?.status === 'failed';
+  const done = Boolean(jobStatus?.status && ['completed', 'completed_with_errors', 'completed_with_warnings', 'failed', 'cancelled', 'paused'].includes(jobStatus.status));
   const canStart = sourceFolder.trim() && outputFolder.trim() && !busy && (!jobStatus || done);
   const selectedSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+  const selectedResultVideoIds = useMemo(
+    () => selectedResultIndexes.map((index) => `video_${index.toString().padStart(3, '0')}`),
+    [selectedResultIndexes],
+  );
   const subtitlePreviewVideo = useMemo(
     () => videos.find((video) => selectedSet.has(video.path)) || videos.find((video) => video.status === 'valid') || videos[0] || null,
     [selectedSet, videos],
@@ -941,6 +985,15 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   useEffect(() => {
     setSubtitlePreviewVideoError(false);
   }, [subtitlePreviewVideo?.path]);
+
+  useEffect(() => {
+    setSelectedResultIndexes((current) => {
+      const available = new Set(results.map((output) => output.index));
+      const next = current.filter((index) => available.has(index));
+      return next.length === current.length ? current : next;
+    });
+  }, [results]);
+
   const reviewBeforeRender = workflowMode === 'silent_immersive' ? settings.silent_review_before_render : settings.review_subtitles_before_render;
   const usesManualSubtitleReview = reviewBeforeRender && !settings.auto_render_after_translation;
   const currentAutoRender = !usesManualSubtitleReview;
@@ -1045,7 +1098,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         const selectedPreset = savedPreset ?? defaultPreset;
         if (selectedPreset) {
           setSelectedPresetId(selectedPreset.id);
-          if (!hasSavedSettings) {
+          if (!hasSavedSettings && !resumeJobId) {
             const next = normalizeDouyinSettings({
               ...selectedPreset.settings,
               music_folder: localStorage.getItem('auto-tool.default-bgm-folder') || DEFAULT_SETTINGS.music_folder,
@@ -1072,7 +1125,62 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     getSilentVisualTagVocabulary()
       .then(setVisualTagVocabulary)
       .catch(() => setVisualTagVocabulary(DEFAULT_VISUAL_TAG_VOCABULARY));
-  }, [initialWorkflow]);
+  }, [initialWorkflow, resumeJobId]);
+
+  useEffect(() => {
+    if (!resumeJobId || loadedJobFromQuery === resumeJobId) return;
+    const targetJobId = resumeJobId;
+    let cancelled = false;
+
+    async function loadResumeJob() {
+      setBusy(true);
+      setError(null);
+      try {
+        const status = await getJobStatus(targetJobId);
+        if (cancelled) return;
+        setLoadedJobFromQuery(targetJobId);
+        setJobId(targetJobId);
+        setJobStatus(status);
+        setMode('advanced');
+        setAdvancedOpen(true);
+        setResultsTab('results');
+
+        if (status.project_id) {
+          const project = await getProject(status.project_id).catch(() => null);
+          if (project && !cancelled) {
+            setProjectName(project.config.project_name || projectName);
+            setSourceFolder(project.config.source_folder || '');
+            setOutputFolder(project.config.output_folder || outputFolder);
+            if (project.config.douyin_reup) {
+              const restoredSettings = normalizeDouyinSettings({
+                ...project.config.douyin_reup,
+                selected_video_paths: [],
+                process_mode: 'all',
+              });
+              setSettings(restoredSettings);
+              saveDouyinSettings(restoredSettings);
+            }
+          }
+        }
+
+        await loadResults(targetJobId);
+        if (!cancelled) {
+          setActionMessage('Đã mở lại lô cũ. Bạn có thể chỉnh cài đặt nâng cao, chọn video cần xử lý lại rồi bấm chạy tiếp.');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Không thể mở lại lô cũ để chỉnh cài đặt.');
+        }
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    }
+
+    void loadResumeJob();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadedJobFromQuery, outputFolder, projectName, resumeJobId]);
 
   function applyBackendRecentPaths(recent: LocalRecentPaths) {
     const source = toRecentFolders(recent.source_folders);
@@ -1656,6 +1764,77 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     });
   }
 
+  function toggleResultIndex(index: number) {
+    setSelectedResultIndexes((current) => (current.includes(index) ? current.filter((item) => item !== index) : [...current, index]));
+  }
+
+  function selectFailedOrQaResults() {
+    const indexes = [
+      ...new Set(
+        results
+          .filter((output) => output.status === 'failed' || output.final_output_qa?.status === 'failed')
+          .map((output) => output.index),
+      ),
+    ];
+    setSelectedResultIndexes(indexes);
+  }
+
+  function prioritizeOcrBeforeAsrForRetry(priority: string[]) {
+    const cleaned = priority.filter((item) => item !== 'ocr_hardsub');
+    const asrIndex = cleaned.indexOf('asr');
+    if (asrIndex >= 0) cleaned.splice(asrIndex, 0, 'ocr_hardsub');
+    else cleaned.push('ocr_hardsub');
+    return cleaned;
+  }
+
+  function buildCustomRetrySettings(mode: DouyinRetryCustomMode): Partial<DouyinReupSettings> {
+    const next: Partial<DouyinReupSettings> = {
+      ...settings,
+      enabled: true,
+      review_subtitles_before_render: false,
+      silent_review_before_render: false,
+      auto_render_after_translation: true,
+      music_folder: settings.music_folder?.trim() || null,
+    };
+    if (mode === 'read_screen_text') {
+      next.use_ocr_if_no_subtitle = true;
+      next.use_ocr_if_asr_failed = true;
+      next.prefer_ocr_over_asr_when_text_visible = true;
+      next.ocr_region_mode = settings.ocr_region_mode || 'full_frame';
+      next.subtitle_source_priority = prioritizeOcrBeforeAsrForRetry(settings.subtitle_source_priority || []);
+    }
+    return next;
+  }
+
+  async function handleCustomRetry(mode: DouyinRetryCustomMode, videoIds: string[], includeUnfinished: boolean) {
+    if (!jobId) return;
+    if (!includeUnfinished && !videoIds.length) {
+      setError('Hãy chọn ít nhất một video trong danh sách kết quả để render lại.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await retryDouyinReupJobCustom(jobId, {
+        retry_mode: mode,
+        video_ids: videoIds,
+        include_unfinished: includeUnfinished,
+        settings: buildCustomRetrySettings(mode),
+      });
+      const modeLabel = CUSTOM_RETRY_MODE_OPTIONS.find((option) => option.value === mode)?.label || 'Chạy lại';
+      emitNotification({
+        variant: 'success',
+        title: 'Đã đưa vào hàng đợi',
+        message: `${modeLabel}: ${response.retry_outputs} video.`,
+      });
+      navigate(`/queue/douyin-reup/${response.job_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể tạo lô chạy lại với cài đặt hiện tại.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleRetryFailed() {
     if (!jobId || !failedResults.length) return;
     setBusy(true);
@@ -1750,13 +1929,23 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     );
     const selectedSubtitleFontIsPreset = VIETNAMESE_SUBTITLE_FONT_OPTIONS.includes(settings.subtitle_font_family);
     const subtitlePreviewVideoPath = subtitlePreviewVideo?.path || '';
+    const coverAutoPosition = settings.subtitle_cover_auto_position;
+    const coverPreviewCanDrag = settings.subtitle_cover_enabled && !coverAutoPosition;
+    function enableManualCoverPosition() {
+      updateAdvancedSettings({ subtitle_cover_auto_position: false });
+      setActionMessage('Đã chuyển sang chỉnh vùng che thủ công. Vùng này sẽ áp dụng cố định cho video có bật che sub.');
+    }
+    function restoreAutoCoverPosition() {
+      updateAdvancedSettings({ subtitle_cover_auto_position: true, subtitle_cover_probe_if_no_ocr: true });
+      setActionMessage('Đã bật lại tự tìm phụ đề Trung. Video không có sub Trung sẽ không bị vẽ nền che.');
+    }
     function updateCoverPositionFromPreview(event: PointerEvent<HTMLDivElement>) {
+      if (!coverPreviewCanDrag) return;
       const rect = event.currentTarget.getBoundingClientRect();
       if (!rect.height) return;
       const yRatio = clampNumber((event.clientY - rect.top) / rect.height, 0, 1);
       const nextBottomRatio = clampNumber(1 - yRatio - settings.subtitle_cover_height_ratio / 2, 0, 0.35);
       updateAdvancedSettings({
-        subtitle_cover_auto_position: false,
         subtitle_cover_bottom_ratio: Number(nextBottomRatio.toFixed(3)),
       });
     }
@@ -1800,7 +1989,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             <Toggle label="Xuất MP4 ngay sau khi dịch" checked={currentAutoRender} onChange={(value) => updateRenderFlow(value ? 'auto' : 'review', true)} />
             <Toggle label="Gắn phụ đề vào video" checked={settings.burn_subtitle} onChange={(value) => updateAdvancedSettings({ burn_subtitle: value })} />
             <Toggle
-              label="Che phụ đề Trung bằng nền phụ đề Việt"
+              label="Che phụ đề Trung nếu phát hiện"
               checked={settings.subtitle_cover_enabled}
               onChange={(value) => updateAdvancedSettings({ subtitle_cover_enabled: value })}
             />
@@ -1808,6 +1997,16 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
           </div>
           {settings.subtitle_cover_enabled ? (
             <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border border-cyan-300/20 bg-cyan-300/8 p-3 text-sm leading-6 text-cyan-50 sm:col-span-3">
+                <div className="font-semibold">
+                  {coverAutoPosition ? 'Đang dùng tự động theo từng video' : 'Đang dùng vùng che thủ công cố định'}
+                </div>
+                <p className="mt-1 text-xs leading-5 text-cyan-100/85">
+                  {coverAutoPosition
+                    ? 'Có phụ đề Trung thì tool che đúng vùng đó và đặt sub Việt lên vùng che. Không thấy phụ đề Trung thì không vẽ nền che, sub Việt giữ vị trí hiển thị bình thường.'
+                    : 'Vùng che thủ công sẽ luôn dùng vị trí bạn chỉnh. Chỉ dùng khi auto không bắt đúng vị trí sub Trung.'}
+                </p>
+              </div>
               <div className="grid gap-2 rounded-md border border-white/10 bg-slate-950/45 p-3 sm:col-span-3 md:grid-cols-2">
                 {[
                   { value: 'solid', label: 'Nền màu', detail: 'Che chữ Trung bằng nền màu rõ, dễ đọc nhất.' },
@@ -1829,35 +2028,41 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 ))}
               </div>
               <Toggle
-                label="Tự tìm vị trí phụ đề Trung"
-                checked={settings.subtitle_cover_auto_position}
-                onChange={(value) => updateAdvancedSettings({ subtitle_cover_auto_position: value })}
+                label="Tự động tìm sub Trung"
+                checked={coverAutoPosition}
+                onChange={(value) => updateAdvancedSettings({ subtitle_cover_auto_position: value, subtitle_cover_probe_if_no_ocr: value ? true : settings.subtitle_cover_probe_if_no_ocr })}
               />
-              {settings.subtitle_cover_auto_position ? (
+              {coverAutoPosition ? (
                 <Toggle
-                  label="Tự quét chữ nếu chưa có dữ liệu"
+                  label="Quét nhanh khi chưa có OCR"
                   checked={settings.subtitle_cover_probe_if_no_ocr}
                   onChange={(value) => updateAdvancedSettings({ subtitle_cover_probe_if_no_ocr: value })}
                 />
               ) : null}
               <SliderInput
-                label={`${settings.subtitle_cover_auto_position ? 'Chiều cao dự phòng' : 'Chiều cao nền che phụ đề'}: ${Math.round(settings.subtitle_cover_height_ratio * 100)}%`}
+                label={`${coverAutoPosition ? 'Độ cao nền khi thấy sub Trung' : 'Chiều cao nền che thủ công'}: ${Math.round(settings.subtitle_cover_height_ratio * 100)}%`}
                 min={0.05}
                 max={0.36}
                 step={0.01}
                 value={settings.subtitle_cover_height_ratio}
                 onChange={(value) => updateAdvancedSettings({ subtitle_cover_height_ratio: value })}
               />
+              {coverAutoPosition ? (
+                <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs leading-5 text-slate-300">
+                  Vị trí nền che sẽ lấy từ OCR từng video. Kéo preview chỉ bật khi bạn chuyển sang chỉnh thủ công.
+                </div>
+              ) : (
+                <SliderInput
+                  label={`Vị trí nền che thủ công: cách đáy ${Math.round(settings.subtitle_cover_bottom_ratio * 100)}%`}
+                  min={0}
+                  max={0.35}
+                  step={0.005}
+                  value={settings.subtitle_cover_bottom_ratio}
+                  onChange={(value) => updateAdvancedSettings({ subtitle_cover_bottom_ratio: value })}
+                />
+              )}
               <SliderInput
-                label={`Vị trí nền che: cách đáy ${Math.round(settings.subtitle_cover_bottom_ratio * 100)}%`}
-                min={0}
-                max={0.35}
-                step={0.005}
-                value={settings.subtitle_cover_bottom_ratio}
-                onChange={(value) => updateAdvancedSettings({ subtitle_cover_auto_position: false, subtitle_cover_bottom_ratio: value })}
-              />
-              <SliderInput
-                label={`Dịch chữ Việt trong nền: ${Math.round(settings.subtitle_cover_text_y_offset_ratio * 100)}%`}
+                label={`Dịch chữ Việt trong vùng che: ${Math.round(settings.subtitle_cover_text_y_offset_ratio * 100)}%`}
                 min={-0.12}
                 max={0.12}
                 step={0.005}
@@ -1883,7 +2088,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   onChange={(value) => updateAdvancedSettings({ subtitle_cover_opacity: value })}
                 />
               )}
-              {settings.subtitle_cover_auto_position ? (
+              {coverAutoPosition ? (
                 <SliderInput
                   label={`Nới rộng vùng che quanh chữ Trung: ${Math.round(settings.subtitle_cover_padding_ratio * 100)}%`}
                   min={0.01}
@@ -1917,7 +2122,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 value={settings.subtitle_cover_radius_ratio}
                 onChange={(value) => updateAdvancedSettings({ subtitle_cover_radius_ratio: value })}
               />
-              {settings.subtitle_cover_auto_position && settings.subtitle_cover_probe_if_no_ocr ? (
+              {coverAutoPosition && settings.subtitle_cover_probe_if_no_ocr ? (
                 <SliderInput
                   label={`Số lần quét vị trí mỗi giây: ${settings.subtitle_cover_probe_sample_fps.toFixed(1)}`}
                   min={0.5}
@@ -1940,21 +2145,34 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               ) : null}
               <div className="grid gap-3 rounded-md border border-white/10 bg-slate-950/45 p-3 sm:col-span-3 lg:grid-cols-[220px_1fr]">
                 <div>
-                  <div className="text-sm font-semibold text-white">Xem thử vị trí che phụ đề gốc</div>
+                  <div className="text-sm font-semibold text-white">{coverAutoPosition ? 'Xem thử cách che tự động' : 'Xem thử vùng che thủ công'}</div>
                   <p className="mt-1 text-xs leading-5 text-slate-400">
-                    Kéo vùng nền trong khung để chỉnh vị trí thủ công cho cả lô video. Sau khi scan, khung này ưu tiên video bạn đang chọn, nếu chưa chọn thì dùng video đầu tiên.
+                    {coverAutoPosition
+                      ? 'Khung này chỉ minh họa. Khi render, tool tự tìm sub Trung trong từng video; nếu không có sub Trung thì bỏ qua nền che.'
+                      : 'Kéo vùng nền trong khung để chỉnh vị trí thủ công cho cả lô video. Dùng khi auto không bắt đúng vùng sub Trung.'}
                   </p>
                   <div className="mt-3 grid gap-1 text-xs text-slate-400">
                     <span>Nền: {Math.round(settings.subtitle_cover_height_ratio * 100)}% chiều cao video</span>
-                    <span>Cách đáy: {Math.round(settings.subtitle_cover_bottom_ratio * 100)}%</span>
+                    <span>{coverAutoPosition ? 'Vị trí: tự lấy theo OCR từng video' : `Cách đáy: ${Math.round(settings.subtitle_cover_bottom_ratio * 100)}%`}</span>
                     <span>Chữ Việt: {Math.round(settings.subtitle_cover_text_y_offset_ratio * 100)}%</span>
                     {subtitlePreviewVideo ? <span className="truncate text-cyan-100">Video mẫu: {subtitlePreviewVideo.filename || subtitlePreviewVideo.path}</span> : <span>Scan video để xem mẫu thật.</span>}
                   </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {coverAutoPosition ? (
+                      <button className="rounded-md border border-white/15 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-cyan-300/50 hover:text-cyan-100" type="button" onClick={enableManualCoverPosition}>
+                        Chỉnh vùng che thủ công
+                      </button>
+                    ) : (
+                      <button className="rounded-md border border-cyan-300/50 bg-cyan-300/12 px-3 py-2 text-xs font-semibold text-cyan-50 hover:bg-cyan-300/18" type="button" onClick={restoreAutoCoverPosition}>
+                        Dùng tự động theo sub Trung
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div
-                  className="relative mx-auto aspect-[9/16] h-[320px] cursor-ns-resize overflow-hidden rounded-lg border border-white/15 bg-gradient-to-b from-slate-700 via-slate-900 to-slate-950"
+                  className={`relative mx-auto aspect-[9/16] h-[320px] overflow-hidden rounded-lg border border-white/15 bg-gradient-to-b from-slate-700 via-slate-900 to-slate-950 ${coverPreviewCanDrag ? 'cursor-ns-resize' : 'cursor-default'}`}
                   onPointerDown={(event) => {
-                    event.currentTarget.setPointerCapture(event.pointerId);
+                    if (coverPreviewCanDrag) event.currentTarget.setPointerCapture(event.pointerId);
                     updateCoverPositionFromPreview(event);
                   }}
                   onPointerMove={(event) => {
@@ -2312,7 +2530,24 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             </label>
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-slate-200">{friendlyTermLabel('region')} đọc chữ</span>
-              <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.ocr_region_mode} onChange={(event) => updateAdvancedSettings({ ocr_region_mode: event.target.value })}>
+              <select
+                className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white"
+                value={settings.ocr_region_mode}
+                onChange={(event) => {
+                  const regionMode = event.target.value;
+                  updateAdvancedSettings({
+                    ocr_region_mode: regionMode,
+                    ...(regionMode === 'full_frame'
+                      ? {
+                          use_ocr_if_no_subtitle: true,
+                          use_ocr_if_asr_failed: true,
+                          prefer_ocr_over_asr_when_text_visible: true,
+                          subtitle_source_priority: prioritizeOcrBeforeAsr(settings.subtitle_source_priority),
+                        }
+                      : {}),
+                  });
+                }}
+              >
                 <option value="bottom_auto">Tự tìm vùng dưới</option>
                 <option value="middle_lower">Vùng giữa thấp</option>
                 <option value="full_frame">Toàn bộ video</option>
@@ -2652,7 +2887,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         </div>
       </section>
 
-      {results.length ? (
+      {jobId && (results.length || jobStatus) ? (
         <section className="rounded-md border border-line bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -2694,6 +2929,18 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               ) : null}
             </div>
           </div>
+          <CustomRetryPanel
+            busy={busy}
+            retryMode={retryMode}
+            selectedCount={selectedResultIndexes.length}
+            totalResults={results.length}
+            onModeChange={setRetryMode}
+            onContinueUnfinished={() => void handleCustomRetry(retryMode, [], true)}
+            onRetrySelected={() => void handleCustomRetry(retryMode, selectedResultVideoIds, false)}
+            onSelectProblemResults={selectFailedOrQaResults}
+            onClearSelection={() => setSelectedResultIndexes([])}
+            onOpenAdvanced={() => setAdvancedOpen(true)}
+          />
           {resultsTab === 'results' && summary ? (
             <div className="mt-4 grid gap-2 text-sm sm:grid-cols-5">
               <Stat label="Cần duyệt" value={summary.needs_review ?? reviewDocuments.length} />
@@ -2704,6 +2951,11 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             </div>
           ) : null}
           {resultsTab === 'results' ? <div className="mt-4 grid gap-5">
+            {!results.length ? (
+              <div className="rounded-md border border-dashed border-line p-4 text-sm text-muted">
+                Chưa có video hoàn tất trong kết quả. Nếu lô bị dừng giữa chừng, hãy chỉnh cài đặt rồi bấm “Chạy tiếp phần còn lại”.
+              </div>
+            ) : null}
             {resultGroups.map((group) => group.items.length ? (
               <div key={group.title} className="grid gap-3">
                 <div className="text-sm font-semibold text-ink">{group.title} ({group.items.length})</div>
@@ -2711,7 +2963,14 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             {group.items.map((output) => (
               <article key={output.index} className="rounded-md border border-line p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-semibold text-ink">Video {output.index.toString().padStart(3, '0')}</div>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                    <input
+                      type="checkbox"
+                      checked={selectedResultIndexes.includes(output.index)}
+                      onChange={() => toggleResultIndex(output.index)}
+                    />
+                    Video {output.index.toString().padStart(3, '0')}
+                  </label>
                   <span className={statusClass(output.status)}>
                     {output.status}
                   </span>
@@ -2855,6 +3114,106 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         </section>
       ) : null}
     </>
+  );
+}
+
+function CustomRetryPanel({
+  busy,
+  retryMode,
+  selectedCount,
+  totalResults,
+  onModeChange,
+  onContinueUnfinished,
+  onRetrySelected,
+  onSelectProblemResults,
+  onClearSelection,
+  onOpenAdvanced,
+}: {
+  busy: boolean;
+  retryMode: DouyinRetryCustomMode;
+  selectedCount: number;
+  totalResults: number;
+  onModeChange: (mode: DouyinRetryCustomMode) => void;
+  onContinueUnfinished: () => void;
+  onRetrySelected: () => void;
+  onSelectProblemResults: () => void;
+  onClearSelection: () => void;
+  onOpenAdvanced: () => void;
+}) {
+  const currentMode = CUSTOM_RETRY_MODE_OPTIONS.find((option) => option.value === retryMode) ?? CUSTOM_RETRY_MODE_OPTIONS[0];
+
+  return (
+    <div className="mt-4 rounded-md border border-cyan-200 bg-cyan-50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-ink">Chạy tiếp hoặc render lại với cài đặt mới</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">
+            Dùng khi lô đã dừng, hoặc khi video đã render nhưng cần chỉnh lại nền che sub, vị trí sub, font, nhạc hay cách đọc chữ trên màn hình.
+          </p>
+        </div>
+        <button
+          className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-ink hover:border-brand"
+          type="button"
+          onClick={onOpenAdvanced}
+        >
+          Mở cài đặt để chỉnh
+        </button>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(240px,360px)_1fr]">
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-ink">Muốn làm lại phần nào?</span>
+          <select
+            className="h-11 w-full rounded-md border border-line bg-white px-3 text-sm"
+            value={retryMode}
+            onChange={(event) => onModeChange(event.target.value as DouyinRetryCustomMode)}
+          >
+            {CUSTOM_RETRY_MODE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="rounded-md border border-cyan-200 bg-white p-3 text-sm leading-6 text-cyan-950">
+          <div className="font-semibold">{currentMode.label}</div>
+          <div className="mt-1 text-cyan-900">{currentMode.description}</div>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button
+          className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+          type="button"
+          disabled={busy}
+          onClick={onContinueUnfinished}
+        >
+          Chạy tiếp phần còn lại
+        </button>
+        <button
+          className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand disabled:text-muted"
+          type="button"
+          disabled={busy || selectedCount === 0}
+          onClick={onRetrySelected}
+        >
+          Render lại đã chọn ({selectedCount})
+        </button>
+        <button
+          className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-ink hover:border-brand disabled:text-muted"
+          type="button"
+          disabled={busy || totalResults === 0}
+          onClick={onSelectProblemResults}
+        >
+          Chọn lỗi/QA fail
+        </button>
+        <button
+          className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-muted hover:border-brand disabled:opacity-60"
+          type="button"
+          disabled={busy || selectedCount === 0}
+          onClick={onClearSelection}
+        >
+          Bỏ chọn
+        </button>
+      </div>
+    </div>
   );
 }
 

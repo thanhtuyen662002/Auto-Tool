@@ -86,6 +86,7 @@ import type {
   DouyinReupProcessRequest,
   DouyinReupProcessResponse,
   DouyinReupScanResponse,
+  DouyinRetryCustomRequest,
   DouyinRetryFailedRequest,
   DouyinRetryFailedResponse,
   DouyinRetryWithPresetRequest,
@@ -518,6 +519,16 @@ export function retryDouyinReupJobWithPreset(
   payload: DouyinRetryWithPresetRequest,
 ): Promise<DouyinRetryFailedResponse> {
   return request<DouyinRetryFailedResponse>(`/api/douyin-reup/jobs/${jobId}/retry-with-preset`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function retryDouyinReupJobCustom(
+  jobId: string,
+  payload: DouyinRetryCustomRequest,
+): Promise<DouyinRetryFailedResponse> {
+  return request<DouyinRetryFailedResponse>(`/api/douyin-reup/jobs/${jobId}/retry-custom`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });

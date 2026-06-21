@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.46
+
+### Highlights
+
+- Added a stopped-batch recovery flow from the render queue back into Douyin Reup so users can adjust settings, then continue the unfinished videos or render selected outputs again.
+- Added clear retry modes: "Chỉ dựng lại video", "Đọc lại chữ trên video rồi dựng", and "Làm lại phụ đề/thoại rồi dựng" instead of exposing OCR-step wording.
+- Fixed retry cache behavior so render-only reuses existing subtitles, while the read-screen-text mode reruns subtitle detection/OCR and translation before rendering.
+- Kept the mid-screen Chinese subtitle cover/OCR improvements in the release, including automatic cover probing for videos with visible hard-sub text.
+
+### QA
+
+- Focused backend retry/OCR-cover tests passed.
+- Frontend production build passed.
+
 ## v1.0.45
 
 ### Highlights

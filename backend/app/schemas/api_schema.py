@@ -268,6 +268,13 @@ class DouyinRetryWithPresetRequest(BaseModel):
     advanced_overrides: dict[str, Any] = Field(default_factory=dict)
 
 
+class DouyinRetryCustomRequest(BaseModel):
+    retry_mode: Literal["render_only", "read_screen_text", "rebuild_subtitle"] = "render_only"
+    video_ids: list[str] = Field(default_factory=list)
+    settings: dict[str, Any] = Field(default_factory=dict)
+    include_unfinished: bool = True
+
+
 class DouyinRetryFailedResponse(BaseModel):
     job_id: str
     status: str
