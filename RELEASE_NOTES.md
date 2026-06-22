@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.49
+
+### Highlights
+
+- Added Light, Dark, and Custom theme modes in Settings > Giao diện & Theme.
+- Added custom colors for background, primary text, muted text, cards, borders, and accent/buttons.
+- Added custom app background images from either a local image picker or an image URL.
+- Added background controls for image visibility, blur, and readability overlay, with preview/save behavior persisted locally.
+
+### QA
+
+- Frontend production build passed.
+- Verified the Settings route responds successfully from the Vite dev server.
+
 ## v1.0.48
 
 ### Highlights
