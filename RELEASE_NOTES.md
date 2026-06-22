@@ -1,5 +1,18 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.48
+
+### Highlights
+
+- Restyled the Douyin Reup result retry panel to match the dark desktop UI instead of showing a bright, confusing block.
+- Made "Render lại đã chọn" the primary action, with the selected video count shown clearly before rerendering.
+- Split retry loading from the main page loading state so selected rendered videos are not blocked from being queued again.
+- Kept "Chạy tiếp phần còn lại", "Chọn lỗi/QA fail", and "Bỏ chọn" as secondary actions for a simpler recovery flow.
+
+### QA
+
+- Frontend production build passed.
+
 ## v1.0.47
 
 ### Highlights

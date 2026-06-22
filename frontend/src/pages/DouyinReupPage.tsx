@@ -961,6 +961,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   const [retryMode, setRetryMode] = useState<DouyinRetryCustomMode>('render_only');
   const [selectedResultIndexes, setSelectedResultIndexes] = useState<number[]>([]);
   const [loadedJobFromQuery, setLoadedJobFromQuery] = useState<string | null>(null);
+  const [retryBusy, setRetryBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -1834,11 +1835,12 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
 
   async function handleCustomRetry(mode: DouyinRetryCustomMode, videoIds: string[], includeUnfinished: boolean) {
     if (!jobId) return;
+    if (retryBusy) return;
     if (!includeUnfinished && !videoIds.length) {
       setError('Hãy chọn ít nhất một video trong danh sách kết quả để render lại.');
       return;
     }
-    setBusy(true);
+    setRetryBusy(true);
     setError(null);
     try {
       const response = await retryDouyinReupJobCustom(jobId, {
@@ -1857,7 +1859,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tạo lô chạy lại với cài đặt hiện tại.');
     } finally {
-      setBusy(false);
+      setRetryBusy(false);
     }
   }
 
@@ -2956,7 +2958,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             </div>
           </div>
           <CustomRetryPanel
-            busy={busy}
+            busy={retryBusy}
             retryMode={retryMode}
             selectedCount={selectedResultIndexes.length}
             totalResults={results.length}
@@ -3169,45 +3171,72 @@ function CustomRetryPanel({
   const currentMode = CUSTOM_RETRY_MODE_OPTIONS.find((option) => option.value === retryMode) ?? CUSTOM_RETRY_MODE_OPTIONS[0];
 
   return (
-    <div className="mt-4 rounded-md border border-cyan-200 bg-cyan-50 p-4">
+    <div className="mt-4 rounded-md border border-cyan-300/20 bg-slate-950/65 p-4 shadow-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-ink">Chạy tiếp hoặc render lại với cài đặt mới</h3>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">
-            Dùng khi lô đã dừng, hoặc khi video đã render nhưng cần chỉnh lại nền che sub, vị trí sub, font, nhạc hay cách đọc chữ trên màn hình.
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">Chỉnh lại kết quả</div>
+          <h3 className="mt-1 text-lg font-semibold text-white">Render lại video đã chọn</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            Chọn video chưa ưng ý trong danh sách bên dưới, chỉnh cài đặt nếu cần rồi render lại ngay trong cùng lô.
           </p>
         </div>
         <button
-          className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-ink hover:border-brand"
+          className="rounded-md border border-white/15 bg-white/8 px-3 py-2 text-sm font-semibold text-white hover:border-cyan-300/35 hover:bg-white/12"
           type="button"
           onClick={onOpenAdvanced}
         >
-          Mở cài đặt để chỉnh
+          Chỉnh vị trí sub
         </button>
       </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(240px,360px)_1fr]">
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-ink">Muốn làm lại phần nào?</span>
-          <select
-            className="h-11 w-full rounded-md border border-line bg-white px-3 text-sm"
-            value={retryMode}
-            onChange={(event) => onModeChange(event.target.value as DouyinRetryCustomMode)}
+
+      <div className="mt-4 grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="grid gap-2 sm:grid-cols-3">
+          {CUSTOM_RETRY_MODE_OPTIONS.map((option) => {
+            const active = option.value === retryMode;
+            return (
+              <button
+                key={option.value}
+                aria-pressed={active}
+                className={`min-h-28 rounded-md border p-3 text-left transition ${
+                  active
+                    ? 'border-cyan-300/70 bg-cyan-300/12 text-white shadow-[0_0_0_1px_rgba(103,232,249,0.16)]'
+                    : 'border-white/10 bg-white/5 text-slate-300 hover:border-cyan-300/35 hover:bg-white/8'
+                }`}
+                type="button"
+                onClick={() => onModeChange(option.value)}
+              >
+                <span className="block text-sm font-semibold">{option.label}</span>
+                <span className="mt-2 block text-xs leading-5 text-slate-400">{option.description}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="rounded-md border border-white/10 bg-white/5 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Đang áp dụng</div>
+              <div className="mt-1 text-sm font-semibold text-white">{currentMode.label}</div>
+            </div>
+            <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-semibold text-cyan-100">
+              {selectedCount}/{totalResults} đã chọn
+            </span>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-400">{currentMode.description}</p>
+          <button
+            className="mt-4 min-h-11 w-full rounded-md bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+            type="button"
+            disabled={busy || selectedCount === 0}
+            onClick={onRetrySelected}
           >
-            {CUSTOM_RETRY_MODE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="rounded-md border border-cyan-200 bg-white p-3 text-sm leading-6 text-cyan-950">
-          <div className="font-semibold">{currentMode.label}</div>
-          <div className="mt-1 text-cyan-900">{currentMode.description}</div>
+            {busy ? 'Đang tạo lô render lại...' : `Render lại đã chọn (${selectedCount})`}
+          </button>
         </div>
       </div>
+
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button
-          className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300"
+          className="rounded-md border border-white/15 bg-white/8 px-3 py-2 text-sm font-semibold text-white hover:border-cyan-300/35 hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-50"
           type="button"
           disabled={busy}
           onClick={onContinueUnfinished}
@@ -3215,15 +3244,7 @@ function CustomRetryPanel({
           Chạy tiếp phần còn lại
         </button>
         <button
-          className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand disabled:text-muted"
-          type="button"
-          disabled={busy || selectedCount === 0}
-          onClick={onRetrySelected}
-        >
-          Render lại đã chọn ({selectedCount})
-        </button>
-        <button
-          className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-ink hover:border-brand disabled:text-muted"
+          className="rounded-md border border-white/15 bg-white/8 px-3 py-2 text-sm font-semibold text-white hover:border-cyan-300/35 hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-50"
           type="button"
           disabled={busy || totalResults === 0}
           onClick={onSelectProblemResults}
@@ -3231,7 +3252,7 @@ function CustomRetryPanel({
           Chọn lỗi/QA fail
         </button>
         <button
-          className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-muted hover:border-brand disabled:opacity-60"
+          className="rounded-md border border-white/15 bg-transparent px-3 py-2 text-sm font-semibold text-slate-300 hover:border-cyan-300/35 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           type="button"
           disabled={busy || selectedCount === 0}
           onClick={onClearSelection}
