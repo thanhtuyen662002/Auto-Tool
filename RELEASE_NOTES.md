@@ -1,5 +1,18 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.50
+
+### Highlights
+
+- Refined Light theme colors so tab bars, cards, active states, and action buttons no longer reuse the heavy dark-theme cyan treatment.
+- Added theme-aware accent tokens for primary buttons, soft active backgrounds, accent text, and readable button foreground text.
+- Restyled shared tabs to use a soft active chip in Light/Custom themes instead of a solid dark-blue block.
+- Improved Light theme success, warning, and error colors so status badges remain readable on bright backgrounds.
+
+### QA
+
+- Frontend production build passed.
+
 ## v1.0.49
 
 ### Highlights

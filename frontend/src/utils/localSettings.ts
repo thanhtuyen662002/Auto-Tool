@@ -213,6 +213,10 @@ function applyThemeVariables(root: HTMLElement, settings: LocalUiSettings) {
     '--studio-input-placeholder',
     '--studio-select-bg',
     '--studio-shadow',
+    '--studio-accent-bg',
+    '--studio-accent-soft',
+    '--studio-accent-text',
+    '--studio-accent-foreground',
     '--studio-background-gradient',
   ];
 
@@ -240,6 +244,10 @@ function applyThemeVariables(root: HTMLElement, settings: LocalUiSettings) {
     root.style.setProperty('--studio-input-placeholder', rgbaFromHex(muted, 0.7));
     root.style.setProperty('--studio-select-bg', panel);
     root.style.setProperty('--studio-shadow', `0 22px 64px ${rgbaFromHex(bg, 0.32)}`);
+    root.style.setProperty('--studio-accent-bg', accent);
+    root.style.setProperty('--studio-accent-soft', rgbaFromHex(accent, 0.12));
+    root.style.setProperty('--studio-accent-text', accent);
+    root.style.setProperty('--studio-accent-foreground', readableTextOnHex(accent));
     root.style.setProperty(
       '--studio-background-gradient',
       `radial-gradient(circle at 12% 10%, ${rgbaFromHex(accent, 0.14)}, transparent 32%), linear-gradient(145deg, ${bg} 0%, ${mixHex(bg, panelSoft, 0.32)} 52%, ${mixHex(bg, accent, 0.18)} 100%)`,
@@ -329,6 +337,12 @@ function backgroundOverlayColor(settings: LocalUiSettings): string {
   if (settings.themeMode === 'light') return '#FFFFFF';
   if (settings.themeMode === 'custom') return settings.customBackgroundColor;
   return '#070A13';
+}
+
+function readableTextOnHex(hex: string): string {
+  const { r, g, b } = hexToRgb(normalizeHexColor(hex, '#22D3EE'));
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.62 ? '#071018' : '#FFFFFF';
 }
 
 function escapeCssUrl(value: string): string {

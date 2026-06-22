@@ -12,6 +12,10 @@
   --studio-input-placeholder: #6f7c94;
   --studio-select-bg: #0b1020;
   --studio-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  --studio-accent-bg: #22d3ee;
+  --studio-accent-soft: rgba(34, 211, 238, 0.12);
+  --studio-accent-text: #a5f3fc;
+  --studio-accent-foreground: #071018;
   --studio-background-gradient:
     radial-gradient(circle at 12% 10%, rgba(34, 211, 238, 0.12), transparent 32%),
     radial-gradient(circle at 88% 18%, rgba(244, 114, 182, 0.08), transparent 30%),
@@ -42,11 +46,15 @@ html.theme-light {
   --studio-input-placeholder: #718096;
   --studio-select-bg: #ffffff;
   --studio-shadow: 0 20px 56px rgba(15, 23, 42, 0.12);
+  --studio-accent-bg: #2f7fd1;
+  --studio-accent-soft: rgba(47, 127, 209, 0.10);
+  --studio-accent-text: #1f5fa8;
+  --studio-accent-foreground: #ffffff;
   --studio-background-gradient:
     radial-gradient(circle at 12% 10%, rgba(14, 165, 233, 0.16), transparent 32%),
     radial-gradient(circle at 86% 14%, rgba(99, 102, 241, 0.10), transparent 30%),
     linear-gradient(145deg, #f8fbff 0%, #eef5ff 48%, #f7f4ff 100%);
-  --studio-cyan: #0284c7;
+  --studio-cyan: #2f7fd1;
   --studio-green: #059669;
   --studio-warning: #b45309;
   --studio-danger: #dc2626;
@@ -174,6 +182,51 @@ html.theme-light.glass-strong {
   box-shadow: 0 0 32px rgba(34, 211, 238, 0.18);
 }
 
+.glass-tabs {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.glass-tab-active {
+  background: var(--studio-accent-bg);
+  color: var(--studio-accent-foreground);
+  box-shadow: 0 10px 28px rgba(34, 211, 238, 0.16);
+}
+
+.glass-tab-idle {
+  color: var(--studio-muted);
+}
+
+.glass-tab-idle:hover {
+  color: var(--studio-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.theme-light .studio-theme .glass-tabs {
+  background: rgba(255, 255, 255, 0.72) !important;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+.theme-light .studio-theme .glass-tab-active {
+  background: var(--studio-accent-soft) !important;
+  color: var(--studio-accent-text) !important;
+  box-shadow: inset 0 0 0 1px var(--studio-border-strong);
+}
+
+.theme-light .studio-theme .glass-tab-idle:hover {
+  background: rgba(47, 127, 209, 0.07) !important;
+  color: var(--studio-accent-text) !important;
+}
+
+.theme-custom .studio-theme .glass-tabs {
+  background: var(--studio-panel-soft) !important;
+}
+
+.theme-custom .studio-theme .glass-tab-active {
+  background: var(--studio-accent-soft) !important;
+  color: var(--studio-accent-text) !important;
+  box-shadow: inset 0 0 0 1px var(--studio-border-strong);
+}
+
 .studio-theme main {
   color: var(--studio-text);
 }
@@ -281,8 +334,8 @@ html.theme-light.glass-strong {
   border-color: var(--studio-border) !important;
 }
 
-.theme-light .studio-theme :is(.bg-white, .bg-white\/5, .bg-white\/8, .bg-white\/10, .bg-white\/12, .bg-black\/15),
-.theme-custom .studio-theme :is(.bg-white, .bg-white\/5, .bg-white\/8, .bg-white\/10, .bg-white\/12, .bg-black\/15) {
+.theme-light .studio-theme :is(.bg-white, .bg-white\/5, .bg-white\/8, .bg-white\/10, .bg-white\/12, .bg-black\/15, .bg-black\/20, .bg-black\/25),
+.theme-custom .studio-theme :is(.bg-white, .bg-white\/5, .bg-white\/8, .bg-white\/10, .bg-white\/12, .bg-black\/15, .bg-black\/20, .bg-black\/25) {
   background-color: var(--studio-panel-soft) !important;
 }
 
@@ -298,12 +351,51 @@ html.theme-light.glass-strong {
 
 .theme-light .studio-theme :is(.text-cyan-100, .text-cyan-200, .text-cyan-300),
 .theme-custom .studio-theme :is(.text-cyan-100, .text-cyan-200, .text-cyan-300) {
-  color: var(--studio-cyan) !important;
+  color: var(--studio-accent-text) !important;
 }
 
 .theme-light .studio-theme :is(.bg-cyan-300, .bg-brand),
 .theme-custom .studio-theme :is(.bg-cyan-300, .bg-brand) {
-  background-color: var(--studio-cyan) !important;
+  background-color: var(--studio-accent-bg) !important;
+  color: var(--studio-accent-foreground) !important;
+}
+
+.theme-light .studio-theme :is(.bg-cyan-300\/10, .bg-cyan-300\/12, .bg-cyan-300\/15, .bg-cyan-300\/20, .bg-blue-50),
+.theme-custom .studio-theme :is(.bg-cyan-300\/10, .bg-cyan-300\/12, .bg-cyan-300\/15, .bg-cyan-300\/20, .bg-blue-50) {
+  background-color: var(--studio-accent-soft) !important;
+}
+
+.theme-light .studio-theme :is(.bg-cyan-300\/10, .bg-cyan-300\/12, .bg-cyan-300\/15, .bg-cyan-300\/20) :is(.text-slate-950, .text-white, .text-slate-100, .text-slate-200),
+.theme-custom .studio-theme :is(.bg-cyan-300\/10, .bg-cyan-300\/12, .bg-cyan-300\/15, .bg-cyan-300\/20) :is(.text-slate-950, .text-white, .text-slate-100, .text-slate-200) {
+  color: var(--studio-accent-text) !important;
+}
+
+.theme-light .studio-theme :is(.bg-emerald-300\/10, .bg-green-50, .bg-emerald-50) {
+  background-color: rgba(5, 150, 105, 0.10) !important;
+}
+
+.theme-light .studio-theme :is(.text-emerald-100, .text-emerald-200, .text-emerald-300, .text-green-700, .text-green-800, .text-green-900) {
+  color: #047857 !important;
+}
+
+.theme-light .studio-theme :is(.border-emerald-300\/20, .border-emerald-300\/25, .border-emerald-300\/30, .border-emerald-300\/35) {
+  border-color: rgba(5, 150, 105, 0.24) !important;
+}
+
+.theme-light .studio-theme :is(.bg-amber-300\/10, .bg-amber-50) {
+  background-color: rgba(217, 119, 6, 0.10) !important;
+}
+
+.theme-light .studio-theme :is(.text-amber-100, .text-amber-200, .text-amber-700, .text-amber-800, .text-amber-900) {
+  color: #b45309 !important;
+}
+
+.theme-light .studio-theme :is(.bg-red-50, .bg-rose-400\/12) {
+  background-color: rgba(225, 29, 72, 0.10) !important;
+}
+
+.theme-light .studio-theme :is(.text-red-600, .text-red-700, .text-red-800, .text-rose-200) {
+  color: #be123c !important;
 }
 
 .theme-light .studio-theme :is(.border-cyan-300\/25, .border-cyan-300\/30, .border-cyan-300\/35, .border-cyan-300\/40, .border-cyan-300\/45, .border-cyan-300\/50, .border-cyan-300\/60, .border-cyan-300\/70),

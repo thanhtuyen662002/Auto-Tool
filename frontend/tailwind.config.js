@@ -8,7 +8,7 @@ export default {
         muted: 'var(--studio-muted)',
         line: 'var(--studio-border)',
         surface: 'var(--studio-panel-strong)',
-        brand: 'var(--studio-cyan)',
+        brand: 'var(--studio-accent-bg)',
       },
       boxShadow: {
         panel: 'var(--studio-shadow)',
