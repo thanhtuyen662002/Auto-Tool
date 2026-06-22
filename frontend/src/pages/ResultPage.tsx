@@ -1,4 +1,4 @@
-import { Clapperboard, RefreshCw, Sparkles } from 'lucide-react';
+import { Clapperboard, RefreshCw, SlidersHorizontal, Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -119,6 +119,17 @@ export default function ResultPage() {
   const selectedCount = useMemo(() => items.filter((item) => selectedIds.has(item.id)).length, [items, selectedIds]);
   const summary = useMemo(() => summarizeResults(items, selectedCount), [items, selectedCount]);
   const failedItems = useMemo(() => items.filter((item) => item.health === 'failed' || item.qaStatus === 'failed'), [items]);
+  const isDouyinResult = Boolean(douyinSummary || (jobStatus?.project_id || projectId || '').toLowerCase().includes('douyin'));
+  const selectedRetryVideoIds = useMemo(
+    () => items.filter((item) => selectedIds.has(item.id)).map((item) => `video_${String(item.index).padStart(3, '0')}`),
+    [items, selectedIds],
+  );
+  const reupAdjustUrl = useMemo(() => {
+    if (!jobId) return '/douyin-reup';
+    const params = new URLSearchParams({ job_id: jobId, resume: '1' });
+    if (selectedRetryVideoIds.length) params.set('video_ids', selectedRetryVideoIds.join(','));
+    return `/douyin-reup?${params.toString()}`;
+  }, [jobId, selectedRetryVideoIds]);
   const exportOutputIndexes = useMemo(
     () => getExportOutputIndexes(items, selectedIds, exportScope),
     [exportScope, items, selectedIds],
@@ -273,6 +284,7 @@ export default function ResultPage() {
       statusLabel={jobRunning ? 'Đang cập nhật' : jobStatus ? formatStatus(jobStatus.status) : ''}
       actions={
         <>
+          {isDouyinResult ? <LinkButton to={reupAdjustUrl} label="Chỉnh/render lại" icon={<SlidersHorizontal size={16} />} /> : null}
           {projectId ? <LinkButton to={`/projects/${projectId}/content`} label="Caption" /> : null}
           {projectId ? <LinkButton to={`/projects/${projectId}/review`} label="Đánh giá" /> : null}
           <LinkButton to="/douyin-reup" label="Batch mới" icon={<Clapperboard size={16} />} />
@@ -298,6 +310,13 @@ export default function ResultPage() {
             onPlatformTargetChange={setPlatformTarget}
             onRunQA={() => void handleRunQA()}
           />
+          {isDouyinResult ? (
+            <ResultReupAdjustPanel
+              selectedCount={selectedRetryVideoIds.length}
+              targetUrl={reupAdjustUrl}
+              onEnableSelection={() => setSelectionMode(true)}
+            />
+          ) : null}
           <ResultRetryPanel failedItems={failedItems} busy={busyAction === 'retry'} onRetryFailed={() => void handleRetryFailed()} />
           <ExportPackPanel
             busy={busyAction === 'export'}
@@ -398,6 +417,50 @@ export default function ResultPage() {
         }}
       />
     </ResultsLayout>
+  );
+}
+
+function ResultReupAdjustPanel({
+  selectedCount,
+  targetUrl,
+  onEnableSelection,
+}: {
+  selectedCount: number;
+  targetUrl: string;
+  onEnableSelection: () => void;
+}) {
+  return (
+    <div className="glass-card-strong grid gap-4 p-5">
+      <div className="flex items-start gap-3">
+        <SlidersHorizontal className="mt-0.5 shrink-0 text-cyan-200" size={20} />
+        <div className="min-w-0">
+          <h2 className="font-semibold text-white">Chỉnh vị trí sub / render lại</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Nếu video bị sai vị trí sub hoặc nền che sub Trung, hãy chọn video ở danh sách rồi mở lại màn Reup Douyin để chỉnh cài đặt.
+          </p>
+        </div>
+      </div>
+      <div className="rounded-md border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm leading-6 text-cyan-50">
+        {selectedCount > 0
+          ? `Đã chọn ${selectedCount} video. Khi mở màn chỉnh, các video này sẽ được tick sẵn để render lại.`
+          : 'Chưa chọn video nào. Bạn vẫn có thể mở màn chỉnh, hoặc bấm Chọn video trước để render lại đúng video lỗi.'}
+      </div>
+      <div className="grid gap-2">
+        <button
+          className="min-h-10 rounded-md border border-white/15 bg-white/8 px-4 py-2 text-sm font-semibold text-white transition hover:border-cyan-300/45 hover:bg-white/12"
+          type="button"
+          onClick={onEnableSelection}
+        >
+          Chọn video cần render lại
+        </button>
+        <Link
+          className="inline-flex min-h-10 items-center justify-center rounded-md bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200"
+          to={targetUrl}
+        >
+          {selectedCount > 0 ? `Chỉnh cài đặt cho ${selectedCount} video đã chọn` : 'Mở cài đặt để chỉnh'}
+        </Link>
+      </div>
+    </div>
   );
 }
 

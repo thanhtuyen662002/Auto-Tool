@@ -886,11 +886,29 @@ function toRecentFolders(paths: string[]): StartRecentFolder[] {
   return paths.filter(Boolean).map((path) => ({ id: path, path }));
 }
 
+function parseRetryVideoIndexes(value: string | null): number[] {
+  if (!value) return [];
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .map((item) => {
+          const match = item.match(/(?:video_)?(\d+)/);
+          return match ? Number.parseInt(match[1], 10) : 0;
+        })
+        .filter((index) => Number.isFinite(index) && index > 0),
+    ),
+  ];
+}
+
 export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initialWorkflow?: 'douyin' | 'silent' }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const workflowMode: StartWorkflowMode = initialWorkflow === 'silent' ? 'silent_immersive' : 'douyin_voice';
   const resumeJobId = searchParams.get('job_id') || searchParams.get('resume_job_id');
+  const resumeVideoIdsParam = searchParams.get('video_ids');
+  const resumeVideoIndexes = useMemo(() => parseRetryVideoIndexes(resumeVideoIdsParam), [resumeVideoIdsParam]);
   const [mode, setMode] = useState<'simple' | 'advanced'>('simple');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [riskyConfirmOpen, setRiskyConfirmOpen] = useState(false);
@@ -1164,8 +1182,16 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         }
 
         await loadResults(targetJobId);
+        if (resumeVideoIndexes.length) {
+          setSelectedResultIndexes(resumeVideoIndexes);
+          setResultsTab('results');
+        }
         if (!cancelled) {
-          setActionMessage('Đã mở lại lô cũ. Bạn có thể chỉnh cài đặt nâng cao, chọn video cần xử lý lại rồi bấm chạy tiếp.');
+          setActionMessage(
+            resumeVideoIndexes.length
+              ? `Đã mở lại lô cũ và chọn sẵn ${resumeVideoIndexes.length} video. Chỉnh cài đặt xong hãy bấm “Render lại đã chọn”.`
+              : 'Đã mở lại lô cũ. Bạn có thể chỉnh cài đặt nâng cao, chọn video cần xử lý lại rồi bấm chạy tiếp.',
+          );
         }
       } catch (err) {
         if (!cancelled) {
@@ -1180,7 +1206,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
     return () => {
       cancelled = true;
     };
-  }, [loadedJobFromQuery, outputFolder, projectName, resumeJobId]);
+  }, [loadedJobFromQuery, outputFolder, projectName, resumeJobId, resumeVideoIndexes]);
 
   function applyBackendRecentPaths(recent: LocalRecentPaths) {
     const source = toRecentFolders(recent.source_folders);

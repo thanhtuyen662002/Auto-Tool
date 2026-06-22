@@ -1,5 +1,17 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.47
+
+### Highlights
+
+- Added a visible "Chỉnh/render lại" action directly on the `/results/...` page for Douyin Reup jobs.
+- Added a side-panel guide on result pages so users can select bad-position subtitle videos, reopen the old batch settings, and render only the selected videos.
+- Preserves selected result videos through the reopen flow, so the Douyin Reup page preselects them and shows the "Render lại đã chọn" action immediately.
+
+### QA
+
+- Frontend production build passed.
+
 ## v1.0.46
 
 ### Highlights
