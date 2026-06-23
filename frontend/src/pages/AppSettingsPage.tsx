@@ -22,6 +22,7 @@ const EMPTY_SETTINGS: AppSettings = {
 
 export default function AppSettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(EMPTY_SETTINGS);
+  const [geminiKeysText, setGeminiKeysText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,7 +35,9 @@ export default function AppSettingsPage() {
   useEffect(() => {
     getAppSettings()
       .then((response) => {
-        setSettings(normalizeSettings(response));
+        const normalized = normalizeSettings(response);
+        setSettings(normalized);
+        setGeminiKeysText((normalized.gemini_api_keys ?? []).join('\n'));
         setError(null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Không thể tải cài đặt chung.'))
@@ -52,10 +55,12 @@ export default function AppSettingsPage() {
     setError(null);
     setMessage(null);
     try {
-      const saved = await saveAppSettings(cleanSettings(settings));
+      const saved = await saveAppSettings(cleanSettings({ ...settings, gemini_api_keys: parseGeminiKeys(geminiKeysText) }));
       localStorage.setItem('auto-tool.default-output-folder', defaultOutputFolder.trim());
       localStorage.setItem('auto-tool.default-bgm-folder', defaultBgmFolder.trim());
-      setSettings(normalizeSettings(saved));
+      const normalized = normalizeSettings(saved);
+      setSettings(normalized);
+      setGeminiKeysText((normalized.gemini_api_keys ?? []).join('\n'));
       setMessage('Đã lưu cài đặt chung.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể lưu cài đặt chung.');
@@ -122,20 +127,16 @@ export default function AppSettingsPage() {
           <h2 className="mb-3 text-base font-semibold text-ink">Gemini</h2>
           <TextArea
             label="Danh sách khóa Gemini (mỗi dòng một khóa)"
-            value={(settings.gemini_api_keys ?? []).join('\n')}
+            value={geminiKeysText}
             rows={6}
             placeholder={'AIzaSy... (khóa 1)\nAIzaSy... (khóa 2)'}
             className="font-mono text-xs"
             spellCheck={false}
             autoComplete="off"
-            onChange={(value) =>
-              update({
-                gemini_api_keys: value
-                  .split('\n')
-                  .map((item) => item.trim())
-                  .filter(Boolean),
-              })
-            }
+            onChange={(value) => {
+              setGeminiKeysText(value);
+              setMessage(null);
+            }}
           />
           <p className="mt-2 text-xs text-muted">
             Mỗi dòng là một khóa. Khi một khóa lỗi hoặc hết hạn mức, hệ thống sẽ tự dùng khóa tiếp theo.
@@ -214,9 +215,7 @@ function normalizeSettings(settings: AppSettings): AppSettings {
 
 function cleanSettings(settings: AppSettings): AppSettings {
   return {
-    gemini_api_keys: (settings.gemini_api_keys ?? [])
-      .map((item) => item.trim())
-      .filter(Boolean),
+    gemini_api_keys: parseGeminiKeys((settings.gemini_api_keys ?? []).join('\n')),
     google_tts_credentials_json_path: settings.google_tts_credentials_json_path?.trim() || null,
     google_tts_api_key: settings.google_tts_api_key?.trim() || null,
     google_tts_access_token: settings.google_tts_access_token?.trim() || null,
@@ -228,4 +227,11 @@ function cleanSettings(settings: AppSettings): AppSettings {
       .map((item) => item.trim())
       .filter(Boolean),
   };
+}
+
+function parseGeminiKeys(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

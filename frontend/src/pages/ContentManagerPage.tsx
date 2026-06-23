@@ -9,6 +9,7 @@ import {
   updateProjectContentItem,
 } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
+import GlassPagination from '../components/glass/GlassPagination';
 import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import type {
   ContentBatchSummary,
@@ -56,6 +57,8 @@ export default function ContentManagerPage() {
   const [busyIndex, setBusyIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 12;
 
   useEffect(() => {
     if (!projectId) return;
@@ -76,6 +79,23 @@ export default function ContentManagerPage() {
     if (filter === 'all') return items;
     return items.filter((item) => item.publish_status === filter);
   }, [filter, items]);
+  const totalPages = Math.ceil(visibleItems.length / pageSize);
+  const pageStart = visibleItems.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(currentPage * pageSize, visibleItems.length);
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return visibleItems.slice(start, start + pageSize);
+  }, [currentPage, visibleItems]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   function updateDraft(outputIndex: number, patch: Partial<EditableContent>) {
     setDrafts((current) => ({
@@ -248,19 +268,27 @@ export default function ContentManagerPage() {
             </div>
 
             {visibleItems.length ? (
-              visibleItems.map((item) => (
-                <ContentCard
-                  key={item.id}
-                  item={item}
-                  draft={drafts[item.output_index] ?? toDraft(item)}
-                  busy={busyIndex === item.output_index}
-                  onChange={(patch) => updateDraft(item.output_index, patch)}
-                  onSave={() => saveItem(item)}
-                  onCopy={() => copyAndMark(item)}
-                  onPosted={() => markPosted(item)}
-                  onSkip={() => saveItem(item, 'skipped')}
-                />
-              ))
+              <>
+                {paginatedItems.map((item) => (
+                  <ContentCard
+                    key={item.id}
+                    item={item}
+                    draft={drafts[item.output_index] ?? toDraft(item)}
+                    busy={busyIndex === item.output_index}
+                    onChange={(patch) => updateDraft(item.output_index, patch)}
+                    onSave={() => saveItem(item)}
+                    onCopy={() => copyAndMark(item)}
+                    onPosted={() => markPosted(item)}
+                    onSkip={() => saveItem(item, 'skipped')}
+                  />
+                ))}
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm text-muted shadow-panel">
+                  <span>
+                    Đang xem <span className="font-semibold text-ink">{pageStart}-{pageEnd}</span> / {visibleItems.length} dòng lời bình
+                  </span>
+                  <GlassPagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} className="mt-0" />
+                </div>
+              </>
             ) : (
               <div className="rounded-lg border border-line bg-white p-5 text-sm text-muted shadow-panel">
                 Chưa có nội dung phù hợp với bộ lọc hiện tại.

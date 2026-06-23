@@ -131,18 +131,19 @@ type SilentProductContext = {
 };
 
 const DEFAULT_SILENT_INDUSTRIES = [
-  { id: 'general_product', name: 'General Product' },
-  { id: 'home_goods', name: 'Home Goods' },
-  { id: 'kitchen_goods', name: 'Kitchen Goods' },
-  { id: 'storage_organization', name: 'Storage / Organization' },
-  { id: 'desk_setup', name: 'Desk Setup' },
-  { id: 'dorm_goods', name: 'Dorm Goods' },
-  { id: 'beauty_goods', name: 'Beauty Goods' },
-  { id: 'cleaning_goods', name: 'Cleaning Goods' },
+  { id: 'auto', name: 'Tự nhận diện từ video' },
+  { id: 'general_product', name: 'Sản phẩm chung' },
+  { id: 'home_goods', name: 'Đồ gia dụng' },
+  { id: 'kitchen_goods', name: 'Đồ nhà bếp' },
+  { id: 'storage_organization', name: 'Đồ sắp xếp/lưu trữ' },
+  { id: 'desk_setup', name: 'Góc bàn/làm việc' },
+  { id: 'dorm_goods', name: 'Phòng nhỏ/ký túc xá' },
+  { id: 'beauty_goods', name: 'Mỹ phẩm/làm đẹp' },
+  { id: 'cleaning_goods', name: 'Đồ vệ sinh/lau dọn' },
 ];
 
 const DEFAULT_VISUAL_TAG_VOCABULARY: SilentVisualTagVocabulary = {
-  industry: DEFAULT_SILENT_INDUSTRIES.map((item) => item.id),
+  industry: DEFAULT_SILENT_INDUSTRIES.map((item) => item.id).filter((id) => id !== 'auto'),
   scene: ['home_scene', 'kitchen_scene', 'bathroom_scene', 'bedroom_scene', 'desk_scene', 'dorm_scene', 'vanity_scene', 'storage_scene', 'cleaning_scene'],
   action: ['unboxing', 'opening_package', 'hands_operation', 'placing_product', 'assembling', 'testing', 'pouring', 'wiping', 'cleaning', 'organizing', 'folding', 'comparison', 'before_after', 'closeup', 'product_reveal', 'usage_demo', 'result_showcase'],
   product_stage: ['packaging', 'first_look', 'detail_closeup', 'demo_step', 'benefit_scene', 'final_result', 'cta_scene'],
@@ -928,7 +929,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   });
   const [silentProductContext, setSilentProductContext] = useState<SilentProductContext>({
     product_name: '',
-    industry: localStorage.getItem(LAST_INDUSTRY_KEY) || 'general_product',
+    industry: localStorage.getItem(LAST_INDUSTRY_KEY) || 'auto',
     features: '',
     cta: '',
   });
@@ -1392,6 +1393,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
         source_folder: sourceFolder,
         output_folder: outputFolder,
         settings: processSettings,
+        selected_video_paths: selectedPaths,
+        source_selection_id: settings.source_selection_id,
+        product_context: buildSilentProductContext(silentProductContext),
       });
       setJobId(response.job_id);
       setJobStatus({
@@ -2748,7 +2752,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             >
               <ProductContextCard
                 value={silentProductContext}
-                industries={silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES}
+                industries={withAutoIndustry(silentIndustries.length ? silentIndustries : DEFAULT_SILENT_INDUSTRIES)}
                 tone={settings.silent_caption_tone}
                 busy={busy || videos.length === 0}
                 hasPreview={Boolean(captionPreview)}
@@ -4424,18 +4428,44 @@ function buildSilentProductContext(context: SilentProductContext): Record<string
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
+  const selectedIndustry = context.industry && !['auto', 'general_product'].includes(context.industry)
+    ? context.industry
+    : null;
+  const hasManualContext = Boolean(context.product_name.trim() || features.length || selectedIndustry);
+  const lockContext = Boolean(selectedIndustry);
   return {
     product_name: context.product_name.trim(),
-    category: context.industry,
-    industry: context.industry,
+    category: selectedIndustry,
+    industry: selectedIndustry,
     features,
     cta: context.cta.trim(),
-    product_context_lock_enabled: true,
+    product_context_lock_enabled: lockContext,
+    auto_detect_product_context: !hasManualContext,
     locked_product_name: context.product_name.trim() || null,
-    locked_industry: context.industry || null,
+    locked_industry: selectedIndustry,
     locked_product_keywords: features,
   };
 }
+
+function withAutoIndustry(items: Array<{ id: string; name: string }>): Array<{ id: string; name: string }> {
+  const auto = { id: 'auto', name: 'Tự nhận diện từ video' };
+  const cleaned = items.filter((item) => item.id !== 'auto');
+  return [auto, ...cleaned.map((item) => ({
+    ...item,
+    name: VIETNAMESE_INDUSTRY_LABELS[item.id] || item.name,
+  }))];
+}
+
+const VIETNAMESE_INDUSTRY_LABELS: Record<string, string> = {
+  general_product: 'Sản phẩm chung',
+  home_goods: 'Đồ gia dụng',
+  kitchen_goods: 'Đồ nhà bếp',
+  storage_organization: 'Đồ sắp xếp/lưu trữ',
+  desk_setup: 'Góc bàn/làm việc',
+  dorm_goods: 'Phòng nhỏ/ký túc xá',
+  beauty_goods: 'Mỹ phẩm/làm đẹp',
+  cleaning_goods: 'Đồ vệ sinh/lau dọn',
+};
 
 function formatCaptionTime(seconds: number): string {
   const safe = Math.max(0, Math.round(seconds));

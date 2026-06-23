@@ -18,6 +18,7 @@ const EMPTY: AppSettings = {
 
 export default function ApiKeysSettingsCard() {
   const [settings, setSettings] = useState<AppSettings>(EMPTY);
+  const [geminiKeysText, setGeminiKeysText] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -25,7 +26,11 @@ export default function ApiKeysSettingsCard() {
 
   useEffect(() => {
     getAppSettings()
-      .then((res) => setSettings(normalize(res)))
+      .then((res) => {
+        const normalized = normalize(res);
+        setSettings(normalized);
+        setGeminiKeysText((normalized.gemini_api_keys ?? []).join('\n'));
+      })
       .catch(() => setMessage({ type: 'error', text: 'Không thể tải cài đặt khóa API.' }))
       .finally(() => setLoading(false));
   }, []);
@@ -39,8 +44,10 @@ export default function ApiKeysSettingsCard() {
     setSaving(true);
     setMessage(null);
     try {
-      const saved = await saveAppSettings(clean(settings));
-      setSettings(normalize(saved));
+      const saved = await saveAppSettings(clean({ ...settings, gemini_api_keys: parseGeminiKeys(geminiKeysText) }));
+      const normalized = normalize(saved);
+      setSettings(normalized);
+      setGeminiKeysText((normalized.gemini_api_keys ?? []).join('\n'));
       setMessage({ type: 'success', text: 'Đã lưu cài đặt khóa API.' });
     } catch {
       setMessage({ type: 'error', text: 'Không thể lưu. Kiểm tra lại kết nối bộ xử lý.' });
@@ -74,7 +81,7 @@ export default function ApiKeysSettingsCard() {
     );
   }
 
-  const geminiKeyCount = (settings.gemini_api_keys ?? []).length;
+  const geminiKeyCount = parseGeminiKeys(geminiKeysText).length;
 
   return (
     <div className="grid gap-5">
@@ -123,15 +130,11 @@ export default function ApiKeysSettingsCard() {
               autoCapitalize="off"
               autoComplete="off"
               spellCheck={false}
-              value={(settings.gemini_api_keys ?? []).join('\n')}
-              onChange={(e) =>
-                patch({
-                  gemini_api_keys: e.target.value
-                    .split('\n')
-                    .map((k) => k.trim())
-                    .filter(Boolean),
-                })
-              }
+              value={geminiKeysText}
+              onChange={(e) => {
+                setGeminiKeysText(e.target.value);
+                setMessage(null);
+              }}
             />
             <p className="mt-1.5 text-xs text-slate-500">
               Lấy key tại{' '}
@@ -247,7 +250,7 @@ function normalize(s: AppSettings): AppSettings {
 
 function clean(s: AppSettings): AppSettings {
   return {
-    gemini_api_keys: (s.gemini_api_keys ?? []).map((k) => k.trim()).filter(Boolean),
+    gemini_api_keys: parseGeminiKeys((s.gemini_api_keys ?? []).join('\n')),
     google_tts_credentials_json_path: s.google_tts_credentials_json_path?.trim() || null,
     google_tts_api_key: s.google_tts_api_key?.trim() || null,
     google_tts_access_token: s.google_tts_access_token?.trim() || null,
@@ -255,4 +258,11 @@ function clean(s: AppSettings): AppSettings {
     google_tts_preview_text: s.google_tts_preview_text?.trim() || 'Xin chào, đây là giọng đọc thử của Auto Tool.',
     favorite_music_paths: (s.favorite_music_paths ?? []).map((path) => path.trim()).filter(Boolean),
   };
+}
+
+function parseGeminiKeys(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((key) => key.trim())
+    .filter(Boolean);
 }

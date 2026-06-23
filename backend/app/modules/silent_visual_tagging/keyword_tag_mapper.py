@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from app.modules.silent_visual_tagging.visual_tag_schema import TAG_CATEGORY_BY_NAME, VisualTag
 
 
@@ -26,10 +28,31 @@ KEYWORD_GROUPS: list[tuple[list[str], list[str]]] = [
     (["测评", "试用", "使用", "效果", "对比", "推荐", "review", "test", "demo", "dùng thử", "trải nghiệm", "hiệu quả", "so sánh"], ["usage_demo", "testing", "result_showcase", "comparison"]),
 ]
 
+NOISE_PHRASES = (
+    "小米同学",
+    "小米同學",
+    "抖音",
+    "douyin",
+    "tiktok",
+    "小红书",
+    "小紅書",
+    "关注",
+    "關注",
+    "点赞",
+    "點贊",
+    "评论",
+    "評論",
+    "收藏",
+    "直播",
+    "同款",
+    "链接",
+    "連結",
+)
+
 
 class KeywordTagMapper:
     def tags_from_text(self, text: str, source: str) -> list[VisualTag]:
-        normalized = " ".join(str(text or "").casefold().replace("_", " ").replace("-", " ").split())
+        normalized = _normalize_signal_text(text)
         if not normalized:
             return []
         confidence = SOURCE_CONFIDENCE.get(source, 0.5)
@@ -48,3 +71,13 @@ class KeywordTagMapper:
                     reason=reason,
                 )
         return list(found.values())
+
+
+def _normalize_signal_text(text: str) -> str:
+    normalized = str(text or "").casefold().replace("_", " ").replace("-", " ")
+    normalized = re.sub(r"https?://\S+|www\.\S+", " ", normalized)
+    normalized = re.sub(r"@[a-z0-9_.-]+", " ", normalized)
+    normalized = normalized.replace("#", " ")
+    for phrase in NOISE_PHRASES:
+        normalized = normalized.replace(phrase.casefold(), " ")
+    return " ".join(normalized.split())

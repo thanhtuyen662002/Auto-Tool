@@ -1182,20 +1182,77 @@ def _product_context(config: ProjectConfig) -> dict[str, Any]:
     locked_product_name = settings.locked_product_name if settings and settings.locked_product_name else None
     locked_industry = settings.locked_industry if settings and settings.locked_industry else None
     industry = locked_industry or (config.industry.preset_id if config.industry else None)
+    product_name = locked_product_name or (_clean_product_name(product.name) if _is_useful_product_name(product.name) else "")
+    features = list(settings.locked_product_keywords) if settings and settings.locked_product_keywords else _useful_features(product.features)
+    specific_industry = industry if industry and industry not in {"auto", "general_product"} else None
+    lock_enabled = bool(
+        settings
+        and settings.product_context_lock_enabled
+        and (
+            locked_product_name
+            or locked_industry
+            or settings.locked_product_keywords
+            or product_name
+            or features
+            or specific_industry
+        )
+    )
     return {
-        "product_name": locked_product_name or product.name,
-        "name": locked_product_name or product.name,
+        "product_name": product_name,
+        "name": product_name,
         "brand": product.brand,
-        "description": product.description,
-        "features": list(product.features),
-        "cta": product.cta,
-        "category": industry,
-        "industry": industry,
-        "product_context_lock_enabled": bool(settings.product_context_lock_enabled) if settings else True,
+        "description": product.description if product_name or features else "",
+        "features": features,
+        "cta": product.cta if product_name or features else "",
+        "category": specific_industry or "general_product",
+        "industry": specific_industry or "general_product",
+        "product_context_lock_enabled": lock_enabled,
+        "auto_detect_product_context": not lock_enabled,
         "locked_product_name": locked_product_name,
         "locked_industry": locked_industry,
         "locked_product_keywords": list(settings.locked_product_keywords) if settings else [],
     }
+
+
+_GENERIC_PRODUCT_NAMES = {
+    "",
+    "douyin",
+    "douyin reup",
+    "silent reup",
+    "silent-reup",
+    "video reup",
+    "video sản phẩm",
+    "video san pham",
+}
+
+_GENERIC_FEATURES = {
+    "dịch subtitle",
+    "dich subtitle",
+    "thêm overlay",
+    "them overlay",
+    "trộn nhạc nền",
+    "tron nhac nen",
+}
+
+
+def _clean_product_name(value: str | None) -> str:
+    return " ".join(str(value or "").strip().split())
+
+
+def _is_useful_product_name(value: str | None) -> bool:
+    cleaned = _clean_product_name(value)
+    return cleaned.casefold() not in _GENERIC_PRODUCT_NAMES
+
+
+def _useful_features(values: list[str]) -> list[str]:
+    result: list[str] = []
+    for item in values or []:
+        text = " ".join(str(item or "").strip().split())
+        if not text or text.casefold() in _GENERIC_FEATURES:
+            continue
+        if text not in result:
+            result.append(text)
+    return result
 
 
 def _make_douyin_output_root(config: ProjectConfig, created_at: datetime) -> Path:

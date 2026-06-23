@@ -48,6 +48,7 @@ export default function ResultPage() {
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [douyinSummary, setDouyinSummary] = useState<DouyinReupSummary | null>(null);
   const [exportPack, setExportPack] = useState<PlatformExportPack | null>(null);
+  const [isDouyinReup, setIsDouyinReup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,6 +82,7 @@ export default function ResultPage() {
         setJobStatus(view.jobStatus);
         setDouyinSummary(view.douyinSummary);
         setExportPack(view.exportPack);
+        setIsDouyinReup(view.isDouyinReup);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Không thể tải kết quả tác vụ.');
@@ -121,7 +123,7 @@ export default function ResultPage() {
   const selectedCount = useMemo(() => items.filter((item) => selectedIds.has(item.id)).length, [items, selectedIds]);
   const summary = useMemo(() => summarizeResults(items, selectedCount), [items, selectedCount]);
   const failedItems = useMemo(() => items.filter((item) => item.health === 'failed' || item.qaStatus === 'failed'), [items]);
-  const isDouyinResult = Boolean(douyinSummary || (jobStatus?.project_id || projectId || '').toLowerCase().includes('douyin'));
+  const isDouyinResult = isDouyinReup || Boolean(douyinSummary || (jobStatus?.project_id || projectId || '').toLowerCase().includes('douyin'));
   const selectedRetryVideoIds = useMemo(
     () => items.filter((item) => selectedIds.has(item.id)).map((item) => `video_${String(item.index).padStart(3, '0')}`),
     [items, selectedIds],
@@ -293,8 +295,8 @@ export default function ResultPage() {
       actions={
         <>
           {isDouyinResult ? <LinkButton to={reupAdjustUrl} label="Chỉnh/render lại" icon={<SlidersHorizontal size={16} />} /> : null}
-          {projectId ? <LinkButton to={`/projects/${projectId}/content`} label="Lời bình" /> : null}
-          {projectId ? <LinkButton to={`/projects/${projectId}/review`} label="Đánh giá" /> : null}
+          {projectId && !isDouyinResult ? <LinkButton to={`/projects/${projectId}/content`} label="Lời bình" /> : null}
+          {projectId && !isDouyinResult ? <LinkButton to={`/projects/${projectId}/review`} label="Đánh giá" /> : null}
           <LinkButton to="/douyin-reup" label="Lô mới" icon={<Clapperboard size={16} />} />
           <GlassButton variant="secondary" loading={loading} onClick={() => void loadResults()}>
             <RefreshCw size={16} />

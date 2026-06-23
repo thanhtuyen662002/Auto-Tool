@@ -4487,6 +4487,7 @@ def _build_douyin_project_config(request: DouyinReupProcessRequest) -> ProjectCo
         source_folder=request.source_folder,
         output_folder=request.output_folder,
         settings=settings,
+        product_context=request.product_context,
     )
 
 
@@ -4499,7 +4500,10 @@ def _build_douyin_project_config_from_settings(
     product_context: dict[str, Any] | None = None,
 ) -> ProjectConfig:
     base_dir = Path.cwd()
-    settings = _normalize_douyin_settings(settings.model_copy(update={"enabled": True}), base_dir)
+    settings = _normalize_douyin_settings(
+        settings.model_copy(update={"enabled": True, **_settings_updates_from_product_context(product_context)}),
+        base_dir,
+    )
     source_folder = str(resolve_path(source_folder, base_dir, must_exist=True))
     output_folder = str(resolve_path(output_folder, base_dir))
     return ProjectConfig.model_validate(
@@ -4775,6 +4779,21 @@ def _queue_item_retry_keys(item: Any) -> set[str]:
         Path(video_path).name.lower() if video_path else "",
         filename.lower(),
     }
+
+
+def _settings_updates_from_product_context(product_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    context = product_context or {}
+    updates: dict[str, Any] = {}
+    if "product_context_lock_enabled" in context:
+        updates["product_context_lock_enabled"] = bool(context.get("product_context_lock_enabled"))
+    for source_key, settings_key in (
+        ("locked_product_name", "locked_product_name"),
+        ("locked_industry", "locked_industry"),
+        ("locked_product_keywords", "locked_product_keywords"),
+    ):
+        if source_key in context:
+            updates[settings_key] = context.get(source_key)
+    return updates
 
 
 def _retry_output_from_queue_item(item: Any) -> dict[str, Any]:

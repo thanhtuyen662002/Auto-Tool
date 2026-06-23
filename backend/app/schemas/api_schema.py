@@ -193,6 +193,7 @@ class DouyinReupProcessRequest(BaseModel):
     settings: DouyinReupSettings = Field(default_factory=lambda: DouyinReupSettings(enabled=True))
     selected_video_paths: list[str] = Field(default_factory=list)
     source_selection_id: str | None = None
+    product_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class DouyinReupProcessResponse(BaseModel):

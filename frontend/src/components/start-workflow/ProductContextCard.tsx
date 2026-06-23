@@ -32,8 +32,12 @@ export default function ProductContextCard({
   hasPreview: boolean;
   busy: boolean;
 }) {
-  const [open, setOpen] = useState(true);
-  const hasUsefulContext = Boolean(value.product_name.trim() || value.features.trim());
+  const hasUsefulContext = Boolean(
+    value.product_name.trim()
+      || value.features.trim()
+      || (value.industry && !['auto', 'general_product'].includes(value.industry)),
+  );
+  const [open, setOpen] = useState(() => hasUsefulContext);
 
   return (
     <GlassCard className="grid gap-4 p-5" strong>
@@ -41,9 +45,9 @@ export default function ProductContextCard({
         <div className="flex min-w-0 items-start gap-3">
           <PackageSearch className="mt-1 shrink-0 text-amber-200" size={22} />
           <div className="min-w-0">
-            <h2 className="font-semibold text-white">Ngữ cảnh sản phẩm</h2>
+            <h2 className="font-semibold text-white">Nhận diện sản phẩm</h2>
             <p className="mt-1 text-sm leading-6 text-slate-400">
-              Nên nhập khi có video không thoại hoặc cần tạo voiceover. Tool sẽ bám theo thông tin này thay vì đoán sai sản phẩm từ hình ảnh.
+              Mặc định tool tự đọc tín hiệu sạch từ video. Chỉ nhập thêm khi bạn muốn khóa ngành hàng, tên sản phẩm hoặc điểm bán chính.
             </p>
           </div>
         </div>
@@ -51,10 +55,10 @@ export default function ProductContextCard({
           className={`rounded-full border px-3 py-1 text-xs font-semibold ${
             hasUsefulContext
               ? 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100'
-              : 'border-amber-300/35 bg-amber-300/10 text-amber-100'
+              : 'border-cyan-300/35 bg-cyan-300/10 text-cyan-100'
           }`}
         >
-          {hasUsefulContext ? 'Đã có dữ liệu' : 'Nên bổ sung'}
+          {hasUsefulContext ? 'Có ngữ cảnh thêm' : 'Tự nhận diện'}
         </span>
       </div>
 
@@ -79,7 +83,7 @@ export default function ProductContextCard({
 
       <button className="inline-flex items-center gap-2 text-left text-sm font-semibold text-cyan-200 hover:text-cyan-100" type="button" onClick={() => setOpen((current) => !current)}>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        {open ? 'Thu gọn thông tin sản phẩm' : 'Mở thông tin sản phẩm'}
+        {open ? 'Thu gọn tùy chỉnh nhận diện' : 'Tùy chỉnh nếu tool nhận diện chưa đúng'}
       </button>
 
       {open ? (

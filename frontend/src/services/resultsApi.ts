@@ -25,6 +25,7 @@ export interface ResultsViewData {
   jobStatus: JobStatus | null;
   douyinSummary: DouyinReupSummary | null;
   exportPack: PlatformExportPack | null;
+  isDouyinReup: boolean;
 }
 
 export async function fetchResultsView(jobId: string): Promise<ResultsViewData> {
@@ -45,12 +46,24 @@ export async function fetchResultsView(jobId: string): Promise<ResultsViewData> 
   const exportPayload = exportPack.status === 'fulfilled' ? unwrapApiResponse(exportPack.value) ?? exportPack.value : null;
   const genericOutputs = arrayField<JobOutput>(genericPayload && 'outputs' in genericPayload ? genericPayload.outputs : []);
   const douyinOutputs = arrayField<JobOutput>(douyinPayload && 'outputs' in douyinPayload ? douyinPayload.outputs : []);
+  const douyinSummary = objectField<DouyinReupSummary>(douyinPayload && 'summary' in douyinPayload ? douyinPayload.summary : null);
+  const hasDouyinOutputShape = douyinOutputs.some((output) => {
+    const item = output as unknown as Record<string, unknown>;
+    return Boolean(
+      item.source_video
+        || item.reup_mode
+        || item.silent_strategy
+        || item.subtitle_source
+        || item.ocr_frame_count,
+    );
+  });
 
   return {
     outputs: douyinOutputs.length ? douyinOutputs : genericOutputs,
     jobStatus: objectField<JobStatus>(statusPayload),
-    douyinSummary: objectField<DouyinReupSummary>(douyinPayload && 'summary' in douyinPayload ? douyinPayload.summary : null),
+    douyinSummary,
     exportPack: objectField<PlatformExportPack>(exportPayload && 'export_pack' in exportPayload ? exportPayload.export_pack : null),
+    isDouyinReup: Boolean(douyinSummary || hasDouyinOutputShape),
   };
 }
 

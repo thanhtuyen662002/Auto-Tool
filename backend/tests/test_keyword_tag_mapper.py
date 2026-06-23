@@ -15,3 +15,9 @@ def test_chinese_storage_keyword_maps_to_storage_tags():
 
 def test_chinese_desk_keyword_maps_to_desk_tags():
     assert {"desk_setup", "desk_scene"} <= _names("桌面学习 setup")
+
+
+def test_platform_noise_is_ignored_but_product_keyword_remains():
+    names = _names("#厨房好物 小米同学 抖音 @shop")
+
+    assert {"kitchen_goods", "kitchen_scene"} <= names

@@ -291,6 +291,7 @@ export interface ProjectConfig {
   project_name: string;
   source_folder: string;
   output_folder: string;
+  mode?: 'product_render' | 'douyin_reup' | 'silent_reup' | 'subtitle_render' | string;
   product: ProductInfo;
   render: RenderSettings;
   effects: EffectSettings;
@@ -507,6 +508,9 @@ export interface DouyinReupProcessRequest {
   source_folder: string;
   output_folder: string;
   settings: DouyinReupSettings;
+  selected_video_paths?: string[];
+  source_selection_id?: string | null;
+  product_context?: Record<string, unknown>;
 }
 
 export interface DouyinReupProcessResponse {

@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
+  getProject,
   getOutputReview,
   startRerender,
   updateOutputReview,
   videoFileUrl,
 } from '../api/client';
 import ApiErrorBox from '../components/ApiErrorBox';
+import GlassPagination from '../components/glass/GlassPagination';
 import { emitNotification } from '../components/notifications/NotificationProvider';
 import NotifyOnChange from '../components/notifications/NotifyOnChange';
 import WarningBox from '../components/WarningBox';
@@ -14,6 +16,7 @@ import type {
   OutputReviewItem,
   OutputReviewResponse,
   OutputReviewStatus,
+  ProjectDetail,
   RerenderRequest,
 } from '../types/project';
 
@@ -31,6 +34,7 @@ const FILTERS: Array<{ id: FilterMode; label: string }> = [
 export default function OutputReviewPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const [project, setProject] = useState<ProjectDetail | null>(null);
   const [review, setReview] = useState<OutputReviewResponse | null>(null);
   const [filter, setFilter] = useState<FilterMode>('all');
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
@@ -40,6 +44,8 @@ export default function OutputReviewPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 6;
 
   useEffect(() => {
     if (!projectId) return;
@@ -52,7 +58,11 @@ export default function OutputReviewPage() {
     setError(null);
     setMessage(null);
     try {
-      const response = await getOutputReview(activeProjectId);
+      const [projectResult, response] = await Promise.all([
+        getProject(activeProjectId),
+        getOutputReview(activeProjectId),
+      ]);
+      setProject(projectResult);
       setReview(response);
       if (showMessage) setMessage('Đã làm mới đánh giá video đầu ra.');
     } catch (err) {
@@ -75,6 +85,28 @@ export default function OutputReviewPage() {
       return output.recommended_action === filter || output.review_status === filter;
     });
   }, [filter, review?.outputs]);
+  const totalPages = Math.ceil(filteredOutputs.length / pageSize);
+  const pageStart = filteredOutputs.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(currentPage * pageSize, filteredOutputs.length);
+  const paginatedOutputs = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredOutputs.slice(start, start + pageSize);
+  }, [currentPage, filteredOutputs]);
+  const isDouyinProject = Boolean(
+    project?.config.mode === 'douyin_reup'
+      || project?.config.mode === 'silent_reup'
+      || project?.config.douyin_reup,
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   async function markOutput(outputIndex: number, status: OutputReviewStatus) {
     if (!projectId) return;
@@ -181,6 +213,14 @@ export default function OutputReviewPage() {
               ))}
             </div>
           </div>
+          {isDouyinProject ? (
+          <div className="max-w-md rounded-md border border-cyan-200 bg-cyan-50 p-3 text-sm leading-6 text-cyan-900">
+            Trang này chỉ dùng để xem điểm và đánh dấu thủ công. Với video Douyin Reup, hãy render lại từ trang kết quả bằng nút <span className="font-semibold">Chỉnh/render lại</span> để tool chạy đúng quy trình OCR, phụ đề, che sub và dựng video.
+            <Link className="mt-2 inline-flex font-semibold text-cyan-700 hover:text-cyan-900" to="/results">
+              Mở Tác vụ & Kết quả
+            </Link>
+          </div>
+          ) : (
           <div className="grid gap-3 rounded-md bg-surface p-3 text-sm">
             <label className="flex items-center gap-2">
               <input className="h-4 w-4 accent-brand" type="checkbox" checked={reuseScript} onChange={(event) => setReuseScript(event.target.checked)} />
@@ -221,6 +261,7 @@ export default function OutputReviewPage() {
               </button>
             </div>
           </div>
+          )}
         </div>
       </section>
 
@@ -230,15 +271,24 @@ export default function OutputReviewPage() {
             Đang tải đánh giá...
           </div>
         ) : null}
-        {filteredOutputs.map((output) => (
+        {paginatedOutputs.map((output) => (
           <OutputReviewCard
             key={output.output_index}
             output={output}
             selected={selected.has(output.output_index)}
+            allowSelection={!isDouyinProject}
             onToggleSelected={() => toggleSelected(output.output_index)}
             onMark={markOutput}
           />
         ))}
+        {filteredOutputs.length ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm text-muted shadow-panel">
+            <span>
+              Đang xem <span className="font-semibold text-ink">{pageStart}-{pageEnd}</span> / {filteredOutputs.length} video
+            </span>
+            <GlassPagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} className="mt-0" />
+          </div>
+        ) : null}
         {review && filteredOutputs.length === 0 ? (
           <div className="rounded-lg border border-line bg-white p-5 text-sm text-muted shadow-panel">
             Không có video đầu ra nào khớp với bộ lọc này.
@@ -265,11 +315,13 @@ function SummaryCards({ summary }: { summary: OutputReviewResponse['summary'] })
 function OutputReviewCard({
   output,
   selected,
+  allowSelection,
   onToggleSelected,
   onMark,
 }: {
   output: OutputReviewItem;
   selected: boolean;
+  allowSelection: boolean;
   onToggleSelected: () => void;
   onMark: (outputIndex: number, status: OutputReviewStatus) => void;
 }) {
@@ -291,12 +343,16 @@ function OutputReviewCard({
         <div>
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <label className="flex items-center gap-3">
-                <input className="h-4 w-4 accent-brand" type="checkbox" checked={selected} onChange={onToggleSelected} />
-                <span className="text-lg font-semibold text-ink">
-                  Video {String(output.output_index).padStart(3, '0')}
-                </span>
-              </label>
+              {allowSelection ? (
+                <label className="flex items-center gap-3">
+                  <input className="h-4 w-4 accent-brand" type="checkbox" checked={selected} onChange={onToggleSelected} />
+                  <span className="text-lg font-semibold text-ink">
+                    Video {String(output.output_index).padStart(3, '0')}
+                  </span>
+                </label>
+              ) : (
+                <h2 className="text-lg font-semibold text-ink">Video {String(output.output_index).padStart(3, '0')}</h2>
+              )}
               <div className="mt-2 flex flex-wrap gap-2">
                 <StatusBadge value={output.status} />
                 <StatusBadge value={output.recommended_action} />

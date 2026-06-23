@@ -4,7 +4,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from app.modules.douyin_reup.douyin_reup_service import DouyinReupService, _douyin_run_folder_name
+from app.modules.douyin_reup.douyin_reup_service import DouyinReupService, _douyin_run_folder_name, _product_context
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem, SubtitleSourceResult, TranslationResult
 from app.modules.job_recovery import JobCheckpointService, JobStepStatus, RecoverableStep
 from app.modules.silent_immersive_reup.silent_schema import (
@@ -53,6 +53,37 @@ def test_douyin_run_folder_name_does_not_repeat_default_project_slug():
 
     assert _douyin_run_folder_name("douyin_reup_2026_06_20", created_at) == "douyin_reup_2026_06_20-231222"
     assert _douyin_run_folder_name("my-shop", created_at) == "my-shop-2026-06-20-231222"
+
+
+def test_default_silent_product_context_uses_auto_detection(tmp_path):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "outputs"
+    source_dir.mkdir()
+    output_dir.mkdir()
+    payload = _project_config(tmp_path, source_dir, output_dir).model_dump(mode="json")
+    payload.update(
+        {
+            "product": {
+                "name": "Douyin Reup",
+                "brand": "",
+                "description": "Xử lý video Douyin local với subtitle/caption tiếng Việt.",
+                "features": ["Dịch subtitle", "Thêm overlay", "Trộn nhạc nền"],
+                "cta": "Xem video",
+            },
+            "douyin_reup": DouyinReupSettings(
+                enabled=True,
+                preset_id="silent_chill_immersive",
+                product_context_lock_enabled=True,
+            ).model_dump(mode="json"),
+        }
+    )
+
+    context = _product_context(ProjectConfig.model_validate(payload))
+
+    assert context["product_context_lock_enabled"] is False
+    assert context["auto_detect_product_context"] is True
+    assert context["product_name"] == ""
+    assert context["features"] == []
 
 
 def test_douyin_reup_service_processes_each_video_without_crashing_batch(tmp_path, monkeypatch):

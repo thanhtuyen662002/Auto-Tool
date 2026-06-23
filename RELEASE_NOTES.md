@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.53
+
+### Highlights
+
+- Fixed Gemini API key multi-line input so pressing Enter keeps the new line while adding keys.
+- Improved Silent Mode defaults so Douyin Reup can auto-detect product context instead of locking every batch to a generic product label.
+- Reduced watermark/platform noise in silent keyword tagging while preserving useful product hashtags.
+- Simplified Douyin Reup result pages by hiding duplicated content/QA review actions and keeping rerender actions in the result flow.
+
+### QA
+
+- Frontend production build passed.
+- Silent/reup backend regression tests passed.
+
 ## v1.0.52
 
 ### Highlights
