@@ -1,5 +1,17 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.52
+
+### Highlights
+
+- Hardened the Windows release build against temporary FFmpeg/Piper download failures by retrying incomplete downloads.
+- Updated the release workflow actions to current Node-runtime-compatible major versions.
+
+### QA
+
+- Frontend production build passed.
+- PowerShell release script syntax check passed.
+
 ## v1.0.51
 
 ### Highlights

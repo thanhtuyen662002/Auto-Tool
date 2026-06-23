@@ -48,22 +48,68 @@ function Invoke-BuildPython {
 }
 
 # â”€â”€â”€ Helper: download with progress â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function Download-File($Url, $OutFile, $Label) {
+function Download-File {
+  param(
+    [Parameter(Mandatory=$true)][string]$Url,
+    [Parameter(Mandatory=$true)][string]$OutFile,
+    [Parameter(Mandatory=$true)][string]$Label,
+    [int]$Retries = 5,
+    [int]$DelaySeconds = 8,
+    [int64]$MinBytes = 1
+  )
+
   if (Test-Path $OutFile) {
-    Write-Host "  [skip] $Label already downloaded." -ForegroundColor DarkGray
-    return
+    $existing = Get-Item -LiteralPath $OutFile
+    if ($existing.Length -ge $MinBytes) {
+      Write-Host "  [skip] $Label already downloaded." -ForegroundColor DarkGray
+      return
+    }
+    Write-Host "  Removing incomplete $Label download ($($existing.Length) bytes)." -ForegroundColor Yellow
+    Remove-Item -LiteralPath $OutFile -Force
   }
-  Write-Host "  Downloading $Label ..." -ForegroundColor Yellow
-  $tmp = "$OutFile.download"
-  Remove-Item $tmp -ErrorAction SilentlyContinue
+
   try {
-    Invoke-WebRequest -Uri $Url -OutFile $tmp -UseBasicParsing
-    Move-Item $tmp $OutFile
-    Write-Host "  [ok] $Label" -ForegroundColor Green
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   } catch {
-    Remove-Item $tmp -ErrorAction SilentlyContinue
-    throw "Failed to download $Label`: $_"
+    # Older/newer PowerShell hosts may handle TLS differently; continue with defaults.
   }
+
+  $tmp = "$OutFile.download"
+  $lastError = $null
+  for ($attempt = 1; $attempt -le $Retries; $attempt++) {
+    Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
+    try {
+      Write-Host "  Downloading $Label (attempt $attempt/$Retries) ..." -ForegroundColor Yellow
+      Invoke-WebRequest `
+        -Uri $Url `
+        -OutFile $tmp `
+        -UseBasicParsing `
+        -TimeoutSec 300 `
+        -Headers @{ "User-Agent" = "AutoToolReleaseBuilder/1.0" }
+
+      if (-not (Test-Path $tmp)) {
+        throw "Download did not create a file."
+      }
+      $downloaded = Get-Item -LiteralPath $tmp
+      if ($downloaded.Length -lt $MinBytes) {
+        throw "Downloaded file is too small ($($downloaded.Length) bytes)."
+      }
+
+      Move-Item -LiteralPath $tmp -Destination $OutFile -Force
+      Write-Host "  [ok] $Label" -ForegroundColor Green
+      return
+    } catch {
+      $lastError = $_
+      Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
+      if ($attempt -lt $Retries) {
+        Write-Host "  Download failed for $Label`: $lastError" -ForegroundColor Yellow
+        Write-Host "  Retrying in $DelaySeconds seconds..." -ForegroundColor DarkGray
+        Start-Sleep -Seconds $DelaySeconds
+      }
+    }
+  }
+
+  throw "Failed to download $Label after $Retries attempts: $lastError"
 }
 
 # â”€â”€â”€ 1. Build frontend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
