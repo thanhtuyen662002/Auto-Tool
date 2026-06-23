@@ -35,7 +35,7 @@ export default function ResultVideoGrid({
   }
 
   return (
-    <div className={viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4 md:grid-cols-2 2xl:grid-cols-3'}>
+    <div className={viewMode === 'compact' ? 'grid gap-3' : 'grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'}>
       {items.map((item) => (
         <ResultVideoCard
           item={item}

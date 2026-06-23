@@ -135,11 +135,11 @@ function NotificationToast({ item, onDismiss }: { item: NotificationItem; onDism
       <div className="flex items-start gap-3">
         <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${style.icon}`} />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-white">{item.title}</div>
-          <div className="mt-1 break-words text-sm leading-5 text-slate-200">{item.message}</div>
+          <div className="notification-toast-title text-sm font-semibold">{item.title}</div>
+          <div className="notification-toast-message mt-1 break-words text-sm leading-5">{item.message}</div>
         </div>
         <button
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-300 hover:bg-white/10 hover:text-white"
+          className="notification-toast-close grid h-7 w-7 shrink-0 place-items-center rounded-md"
           type="button"
           onClick={onDismiss}
           aria-label="Đóng thông báo"
@@ -148,7 +148,7 @@ function NotificationToast({ item, onDismiss }: { item: NotificationItem; onDism
         </button>
       </div>
       {item.durationMs > 0 ? (
-        <div className="mt-3 h-0.5 overflow-hidden rounded-full bg-white/10">
+        <div className="notification-toast-track mt-3 h-0.5 overflow-hidden rounded-full">
           <div
             className={`h-full rounded-full ${style.bar}`}
             style={{
@@ -163,15 +163,31 @@ function NotificationToast({ item, onDismiss }: { item: NotificationItem; onDism
 
 function toastStyle(variant: NotificationVariant) {
   if (variant === 'success') {
-    return { shell: 'border-emerald-300/25 bg-emerald-950/92', icon: 'text-emerald-200', bar: 'bg-emerald-300' };
+    return {
+      shell: 'notification-toast notification-toast-success',
+      icon: 'notification-toast-icon notification-toast-icon-success',
+      bar: 'notification-toast-bar notification-toast-bar-success',
+    };
   }
   if (variant === 'error') {
-    return { shell: 'border-rose-300/30 bg-rose-950/94', icon: 'text-rose-200', bar: 'bg-rose-300' };
+    return {
+      shell: 'notification-toast notification-toast-error',
+      icon: 'notification-toast-icon notification-toast-icon-error',
+      bar: 'notification-toast-bar notification-toast-bar-error',
+    };
   }
   if (variant === 'warning') {
-    return { shell: 'border-amber-300/30 bg-amber-950/94', icon: 'text-amber-200', bar: 'bg-amber-300' };
+    return {
+      shell: 'notification-toast notification-toast-warning',
+      icon: 'notification-toast-icon notification-toast-icon-warning',
+      bar: 'notification-toast-bar notification-toast-bar-warning',
+    };
   }
-  return { shell: 'border-cyan-300/25 bg-slate-950/94', icon: 'text-cyan-200', bar: 'bg-cyan-300' };
+  return {
+    shell: 'notification-toast notification-toast-info',
+    icon: 'notification-toast-icon notification-toast-icon-info',
+    bar: 'notification-toast-bar notification-toast-bar-info',
+  };
 }
 
 function friendlyNotificationText(value: string) {

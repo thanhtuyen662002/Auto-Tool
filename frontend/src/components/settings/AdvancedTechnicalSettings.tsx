@@ -21,31 +21,31 @@ export default function AdvancedTechnicalSettings() {
 
   function reset() {
     resetLocalUiSettings();
-    setMessage('Đã reset local UI settings. Tải lại trang nếu muốn thấy toàn bộ thay đổi.');
+    setMessage('Đã khôi phục cài đặt giao diện mặc định. Tải lại trang nếu muốn thấy toàn bộ thay đổi.');
   }
 
   return (
-    <SettingsSection title="Cấu hình nâng cao" description="Các thiết lập này dành cho debug. Nếu không chắc, hãy giữ mặc định.">
+    <SettingsSection title="Cấu hình nâng cao" description="Các thiết lập này dành cho kiểm tra sâu hoặc hỗ trợ kỹ thuật. Nếu không chắc, hãy giữ mặc định.">
       <button
         type="button"
         className="flex w-full items-center justify-between rounded-md border border-white/10 bg-black/15 px-4 py-3 text-left text-sm font-semibold text-white hover:bg-white/8"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
-        Cài đặt Kỹ thuật Nâng cao
+        Cài đặt nâng cao
         <span className="text-xs text-slate-400">{open ? 'Đóng' : 'Mở'}</span>
       </button>
       {open ? (
         <div className="mt-4 grid gap-4">
-          <GlassInput label="Đường dẫn API base URL" value={API_BASE_URL} readOnly />
+          <GlassInput label="Địa chỉ bộ xử lý nội bộ" value={API_BASE_URL} readOnly />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex items-center gap-3 rounded-md border border-white/10 bg-black/15 px-4 py-3 text-sm text-slate-200">
               <input type="checkbox" checked={debugUi} onChange={(event) => setDebugUi(event.target.checked)} />
-              Bật giao diện Debug UI
+              Bật chế độ kiểm tra giao diện
             </label>
             <label className="flex items-center gap-3 rounded-md border border-white/10 bg-black/15 px-4 py-3 text-sm text-slate-200">
               <input type="checkbox" checked={showRawJson} onChange={(event) => setShowRawJson(event.target.checked)} />
-              Hiển thị các nút xem JSON thô
+              Hiển thị dữ liệu kỹ thuật thô
             </label>
           </div>
           <GlassInput
@@ -56,11 +56,11 @@ export default function AdvancedTechnicalSettings() {
             onChange={(event) => setPollingInterval(Math.max(1, Number(event.target.value || 1)))}
           />
           <div className="rounded-md border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
-            Technical logs và raw JSON mặc định được ẩn. Chỉ bật khi cần debug lỗi backend hoặc kiểm tra contract API.
+            Nhật ký kỹ thuật và dữ liệu thô mặc định được ẩn. Chỉ bật khi cần kiểm tra lỗi sâu hoặc gửi thông tin cho người hỗ trợ.
           </div>
           <div className="flex flex-wrap gap-2">
             <GlassButton variant="primary" onClick={save}>Lưu cấu hình nâng cao</GlassButton>
-            <GlassButton variant="danger" onClick={reset}>Khôi phục cài đặt mặc định UI</GlassButton>
+            <GlassButton variant="danger" onClick={reset}>Khôi phục giao diện mặc định</GlassButton>
           </div>
           <NotifyOnChange value={message} variant="success" />
           {message ? <div className="text-sm text-emerald-200">{message}</div> : null}

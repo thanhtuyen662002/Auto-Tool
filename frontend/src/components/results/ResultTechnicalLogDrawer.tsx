@@ -22,12 +22,12 @@ export default function ResultTechnicalLogDrawer({
     : JSON.stringify(jobStatus ?? { status: 'unknown' }, null, 2);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/55" role="dialog" aria-modal="true" aria-label="Log kỹ thuật">
-      <button className="hidden flex-1 cursor-default md:block" type="button" aria-label="Đóng log" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/55" role="dialog" aria-modal="true" aria-label="Nhật ký xử lý">
+      <button className="hidden flex-1 cursor-default md:block" type="button" aria-label="Đóng nhật ký" onClick={onClose} />
       <aside className="h-full w-full max-w-xl overflow-auto border-l border-white/10 bg-slate-950/95 p-5 shadow-2xl backdrop-blur">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-white">Log kỹ thuật</h2>
+            <h2 className="text-lg font-semibold text-white">Nhật ký xử lý</h2>
             <p className="mt-1 truncate text-sm text-slate-400">{item?.filename ?? jobStatus?.job_id ?? 'Chi tiết công việc'}</p>
           </div>
           <button className="rounded-md p-2 text-slate-300 hover:bg-white/10 hover:text-white" type="button" onClick={onClose} aria-label="Đóng">
@@ -52,14 +52,14 @@ export default function ResultTechnicalLogDrawer({
             <Section title="Danh sách File">
               {item.files.length ? item.files.map((file) => <PathRow key={`${file.label}-${file.path}`} label={file.label} value={file.path} />) : <EmptyLine text="Không có file liên quan." />}
             </Section>
-            <Section title="Cảnh báo (Warnings)">
+            <Section title="Cảnh báo">
               {item.warnings.length ? item.warnings.map((warning, index) => <LogLine key={`${warning}-${index}`} tone="warning" text={warning} />) : <EmptyLine text="Không có cảnh báo." />}
             </Section>
-            <Section title="Lỗi (Errors)">
+            <Section title="Lỗi">
               {item.errors.length ? item.errors.map((error, index) => <LogLine key={`${error}-${index}`} tone="error" text={error} />) : <EmptyLine text="Không có lỗi." />}
             </Section>
-            <Section title="Đánh giá QA cuối">
-              {item.qa?.issues.length ? item.qa.issues.map((issue, index) => <LogLine key={`${issue.issue_type}-${index}`} tone={issue.severity === 'critical' ? 'error' : 'warning'} text={`${issue.message}${issue.suggestion ? ` Gợi ý: ${issue.suggestion}` : ''}`} />) : <EmptyLine text={item.qa ? 'QA không phát hiện vấn đề.' : 'QA chưa chạy.'} />}
+            <Section title="Kiểm tra chất lượng cuối">
+              {item.qa?.issues.length ? item.qa.issues.map((issue, index) => <LogLine key={`${issue.issue_type}-${index}`} tone={issue.severity === 'critical' ? 'error' : 'warning'} text={`${issue.message}${issue.suggestion ? ` Gợi ý: ${issue.suggestion}` : ''}`} />) : <EmptyLine text={item.qa ? 'Không phát hiện vấn đề.' : 'Chưa chạy kiểm tra.'} />}
             </Section>
           </div>
         ) : null}
@@ -73,7 +73,7 @@ export default function ResultTechnicalLogDrawer({
               </div>
             ))
           ) : (
-            <EmptyLine text="Không có job log trong response hiện tại." />
+            <EmptyLine text="Chưa có nhật ký công việc trong dữ liệu hiện tại." />
           )}
         </Section>
       </aside>

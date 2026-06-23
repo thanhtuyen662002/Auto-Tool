@@ -18,9 +18,9 @@ const FALLBACK_VERSION = '1.0.0-rc1';
 
 const pageTitles: Array<[string, string]> = [
   ['/onboarding', 'Hướng dẫn nhanh'],
-  ['/recovery', 'Khôi phục job'],
+  ['/recovery', 'Khôi phục tác vụ'],
   ['/help', 'Trợ giúp'],
-  ['/settings/', 'Cài đặt project'],
+  ['/settings/', 'Cài đặt dự án'],
   ['/settings', 'Cài đặt'],
   ['/app-settings', 'Cài đặt'],
   ['/douyin-download', 'Tải video Douyin'],
@@ -90,7 +90,7 @@ export default function StudioLayout() {
           <div className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm text-amber-100 lg:mx-6">
             <div className="flex items-center gap-2">
               <CircleAlert size={17} />
-              <span>Backend đang offline. Bạn vẫn có thể xem UI, nhưng cần backend để scan, render và mở thư mục.</span>
+              <span>Bộ xử lý đang tắt hoặc chưa phản hồi. Bạn vẫn có thể xem giao diện, nhưng cần bật bộ xử lý để quét, render và mở thư mục.</span>
             </div>
             <div className="flex gap-2">
               <GlassButton className="min-h-8 px-3 py-1" variant="ghost" onClick={() => void refreshStatus()}><RefreshCw size={14} /> Kiểm tra lại</GlassButton>
@@ -118,7 +118,7 @@ export default function StudioLayout() {
       </GlassModal>
       <GlassModal open={shutdownOpen} title="Tắt Auto Tool" onClose={() => (shuttingDown ? undefined : setShutdownOpen(false))}>
         <div className="space-y-4 text-sm text-slate-300">
-          <p>Auto Tool sẽ dừng backend local. Những tác vụ đang chạy có thể bị gián đoạn.</p>
+          <p>Auto Tool sẽ dừng bộ xử lý cục bộ. Những tác vụ đang chạy có thể bị gián đoạn.</p>
           <div className="flex justify-end gap-2">
             <GlassButton variant="ghost" className="min-h-9 px-3 text-xs" disabled={shuttingDown} onClick={() => setShutdownOpen(false)}>
               Hủy

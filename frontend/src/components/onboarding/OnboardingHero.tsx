@@ -34,7 +34,7 @@ export default function OnboardingHero({ onSkip }: { onSkip?: () => void }) {
           </div>
         </div>
         <div className="grid gap-3 rounded-md border border-white/10 bg-black/18 p-4">
-          {['Chọn quy trình', 'Kiểm tra backend và bộ dựng video', 'Chọn thư mục đầu ra', 'Chạy lô test nhỏ'].map((item, index) => (
+          {['Chọn quy trình', 'Kiểm tra bộ xử lý và bộ dựng video', 'Chọn thư mục đầu ra', 'Chạy lô thử nhỏ'].map((item, index) => (
             <div className="flex items-center gap-3 text-sm text-slate-200" key={item}>
               <span className="grid h-7 w-7 place-items-center rounded-full border border-cyan-300/30 bg-cyan-300/10 text-xs font-semibold text-cyan-100">
                 {index + 1}

@@ -90,9 +90,9 @@ function ResultCard({ output }: { output: JobOutput }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <GlassButton className="px-3" variant="secondary" title="Sao chép đường dẫn video" onClick={() => copy(output.path)}><Clipboard size={15} /> Copy path</GlassButton>
-          {caption ? <GlassButton className="px-3" variant="ghost" title="Sao chép caption và hashtag" onClick={() => copy(caption)}><FileText size={15} /> Caption</GlassButton> : null}
-          <GlassButton className="px-3" variant="ghost" disabled={!output.log_file} title="Mở log kỹ thuật" onClick={() => openLocalPath(output.log_file)}><FolderOpen size={15} /> Log</GlassButton>
+          <GlassButton className="px-3" variant="secondary" title="Sao chép đường dẫn video" onClick={() => copy(output.path)}><Clipboard size={15} /> Sao chép đường dẫn</GlassButton>
+          {caption ? <GlassButton className="px-3" variant="ghost" title="Sao chép lời bình và hashtag" onClick={() => copy(caption)}><FileText size={15} /> Lời bình</GlassButton> : null}
+          <GlassButton className="px-3" variant="ghost" disabled={!output.log_file} title="Mở nhật ký xử lý" onClick={() => openLocalPath(output.log_file)}><FolderOpen size={15} /> Nhật ký</GlassButton>
         </div>
 
         <details className="border-t border-white/10 pt-3 text-xs text-slate-400">
@@ -112,10 +112,10 @@ function StatusBadge({ output }: { output: JobOutput }) {
   const normalized = output.status.toLowerCase();
   const warnings = output.warnings?.length ?? 0;
   let variant: GlassBadgeVariant = 'rendered';
-  let label = 'Rendered';
-  if (['failed', 'error'].includes(normalized)) { variant = 'failed'; label = 'Failed'; }
-  else if (warnings || normalized === 'warning') { variant = 'warning'; label = 'Warning'; }
-  else if (normalized === 'needs_review') { variant = 'needs_review'; label = 'Needs review'; }
+  let label = 'Đã render';
+  if (['failed', 'error'].includes(normalized)) { variant = 'failed'; label = 'Lỗi'; }
+  else if (warnings || normalized === 'warning') { variant = 'warning'; label = 'Cảnh báo'; }
+  else if (normalized === 'needs_review') { variant = 'needs_review'; label = 'Cần duyệt'; }
   return <GlassBadge variant={variant}>{label}</GlassBadge>;
 }
 

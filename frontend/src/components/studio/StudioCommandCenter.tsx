@@ -20,14 +20,14 @@ export default function StudioCommandCenter({
   onSystemStatus: () => void;
 }) {
   const actions: Action[] = [
-    { label: 'Douyin Reup', description: 'Dịch thoại Trung sang Việt, review phụ đề rồi render.', to: '/douyin-reup', icon: Clapperboard },
-    { label: 'Silent Mode', description: 'Tạo caption Việt cho video mở hộp, thao tác hoặc demo sản phẩm.', to: '/silent-mode', icon: Waves },
-    { label: 'Product Video Builder', description: 'Tạo video quảng cáo sản phẩm hàng loạt từ video tư liệu thô.', to: '/projects/new', icon: FolderPlus },
-    { label: 'Mở phụ đề cần review', description: 'Sửa, rút gọn và duyệt phụ đề trước khi render.', to: '/subtitle-review', icon: Captions },
-    { label: 'Mở kết quả gần đây', description: 'Xem gallery, Final QA và Export Pack.', to: '/results', icon: FolderCheck },
+    { label: 'Reup có thoại', description: 'Dịch thoại Trung sang Việt, duyệt phụ đề rồi render.', to: '/douyin-reup', icon: Clapperboard },
+    { label: 'Reup không thoại', description: 'Tạo lời bình tiếng Việt cho video mở hộp, thao tác hoặc demo sản phẩm.', to: '/silent-mode', icon: Waves },
+    { label: 'Tạo Video Affiliate', description: 'Tạo video quảng cáo sản phẩm hàng loạt từ video tư liệu thô.', to: '/projects/new', icon: FolderPlus },
+    { label: 'Mở phụ đề cần duyệt', description: 'Sửa, rút gọn và duyệt phụ đề trước khi render.', to: '/subtitle-review', icon: Captions },
+    { label: 'Mở kết quả gần đây', description: 'Xem video đã dựng, kiểm tra chất lượng và gói xuất bản.', to: '/results', icon: FolderCheck },
     {
       label: 'Kiểm tra hệ thống',
-      description: 'Xem Backend, FFmpeg, OCR, TTS và provider.',
+      description: 'Xem bộ xử lý, FFmpeg, đọc chữ, giọng đọc và dịch thuật.',
       icon: Server,
       onClick: () => {
         onClose();
@@ -37,7 +37,7 @@ export default function StudioCommandCenter({
   ];
 
   return (
-    <GlassModal open={open} title="Quick Start" onClose={onClose}>
+    <GlassModal open={open} title="Tạo lô mới" onClose={onClose}>
       <div className="grid gap-3">
         {actions.map(({ icon: Icon, ...action }) => {
           const content = (

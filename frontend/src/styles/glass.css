@@ -227,6 +227,148 @@ html.theme-light.glass-strong {
   box-shadow: inset 0 0 0 1px var(--studio-border-strong);
 }
 
+.notification-toast {
+  color: #f8fafc;
+}
+
+.notification-toast-success {
+  border-color: rgba(110, 231, 183, 0.3);
+  background: rgba(6, 78, 59, 0.94);
+}
+
+.notification-toast-error {
+  border-color: rgba(253, 164, 175, 0.34);
+  background: rgba(76, 5, 25, 0.95);
+}
+
+.notification-toast-warning {
+  border-color: rgba(252, 211, 77, 0.34);
+  background: rgba(69, 26, 3, 0.95);
+}
+
+.notification-toast-info {
+  border-color: rgba(103, 232, 249, 0.3);
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.notification-toast-title {
+  color: #ffffff;
+}
+
+.notification-toast-message {
+  color: #e2e8f0;
+}
+
+.notification-toast-close {
+  color: #cbd5e1;
+}
+
+.notification-toast-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.notification-toast-track {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.notification-toast-bar-success {
+  background: #34d399;
+}
+
+.notification-toast-bar-error {
+  background: #fb7185;
+}
+
+.notification-toast-bar-warning {
+  background: #f59e0b;
+}
+
+.notification-toast-bar-info {
+  background: var(--studio-accent-bg);
+}
+
+html.theme-light .notification-toast,
+html.theme-custom .notification-toast {
+  color: var(--studio-text);
+  background: var(--studio-panel-strong);
+  border-color: var(--studio-border-strong);
+  box-shadow: var(--studio-shadow);
+}
+
+html.theme-light .notification-toast-title,
+html.theme-custom .notification-toast-title {
+  color: var(--studio-text);
+}
+
+html.theme-light .notification-toast-message,
+html.theme-custom .notification-toast-message {
+  color: var(--studio-muted);
+}
+
+html.theme-light .notification-toast-success {
+  border-color: rgba(5, 150, 105, 0.28);
+  background: rgba(240, 253, 244, 0.98);
+}
+
+html.theme-light .notification-toast-error {
+  border-color: rgba(225, 29, 72, 0.28);
+  background: rgba(255, 241, 242, 0.98);
+}
+
+html.theme-light .notification-toast-warning {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: rgba(255, 251, 235, 0.98);
+}
+
+html.theme-light .notification-toast-info {
+  border-color: var(--studio-border-strong);
+  background: rgba(239, 246, 255, 0.98);
+}
+
+html.theme-custom .notification-toast-success,
+html.theme-custom .notification-toast-error,
+html.theme-custom .notification-toast-warning,
+html.theme-custom .notification-toast-info {
+  background: var(--studio-panel-strong);
+}
+
+html.theme-light .notification-toast-icon-success,
+html.theme-custom .notification-toast-icon-success {
+  color: #047857;
+}
+
+html.theme-light .notification-toast-icon-error,
+html.theme-custom .notification-toast-icon-error {
+  color: #be123c;
+}
+
+html.theme-light .notification-toast-icon-warning,
+html.theme-custom .notification-toast-icon-warning {
+  color: #b45309;
+}
+
+html.theme-light .notification-toast-icon-info,
+html.theme-custom .notification-toast-icon-info {
+  color: var(--studio-accent-text);
+}
+
+html.theme-light .notification-toast-close,
+html.theme-custom .notification-toast-close {
+  color: var(--studio-muted);
+}
+
+html.theme-light .notification-toast-close:hover,
+html.theme-custom .notification-toast-close:hover {
+  color: var(--studio-accent-text);
+  background: var(--studio-accent-soft);
+}
+
+html.theme-light .notification-toast-track,
+html.theme-custom .notification-toast-track {
+  background: rgba(15, 23, 42, 0.08);
+}
+
 .studio-theme main {
   color: var(--studio-text);
 }
@@ -319,8 +461,8 @@ html.theme-light.glass-strong {
   background: var(--studio-bg);
 }
 
-.theme-light .studio-theme :is(.text-white, .text-slate-50, .text-slate-100, .text-slate-200),
-.theme-custom .studio-theme :is(.text-white, .text-slate-50, .text-slate-100, .text-slate-200) {
+.theme-light .studio-theme :is(.text-white, .text-slate-50, .text-slate-100, .text-slate-200, .text-slate-800, .text-slate-900, .text-slate-950, .text-gray-800, .text-gray-900),
+.theme-custom .studio-theme :is(.text-white, .text-slate-50, .text-slate-100, .text-slate-200, .text-slate-800, .text-slate-900, .text-slate-950, .text-gray-800, .text-gray-900) {
   color: var(--studio-text) !important;
 }
 
@@ -329,28 +471,28 @@ html.theme-light.glass-strong {
   color: var(--studio-muted) !important;
 }
 
-.theme-light .studio-theme :is(.border-white\/10, .border-white\/12, .border-white\/15, .border-slate-700, .border-slate-800),
-.theme-custom .studio-theme :is(.border-white\/10, .border-white\/12, .border-white\/15, .border-slate-700, .border-slate-800) {
+.theme-light .studio-theme :is(.border-white\/10, .border-white\/12, .border-white\/15, .border-white\/20, .border-white\/25, .border-white\/30, .border-slate-200, .border-slate-300, .border-slate-700, .border-slate-800),
+.theme-custom .studio-theme :is(.border-white\/10, .border-white\/12, .border-white\/15, .border-white\/20, .border-white\/25, .border-white\/30, .border-slate-200, .border-slate-300, .border-slate-700, .border-slate-800) {
   border-color: var(--studio-border) !important;
 }
 
-.theme-light .studio-theme :is(.bg-white, .bg-white\/5, .bg-white\/8, .bg-white\/10, .bg-white\/12, .bg-black\/15, .bg-black\/20, .bg-black\/25),
-.theme-custom .studio-theme :is(.bg-white, .bg-white\/5, .bg-white\/8, .bg-white\/10, .bg-white\/12, .bg-black\/15, .bg-black\/20, .bg-black\/25) {
+.theme-light .studio-theme :is(.bg-white, .bg-white\/5, .bg-white\/6, .bg-white\/7, .bg-white\/8, .bg-white\/10, .bg-white\/12, .bg-white\/15, .bg-black\/10, .bg-black\/15, .bg-black\/18, .bg-black\/20, .bg-black\/25, .bg-black\/30, .bg-black\/35),
+.theme-custom .studio-theme :is(.bg-white, .bg-white\/5, .bg-white\/6, .bg-white\/7, .bg-white\/8, .bg-white\/10, .bg-white\/12, .bg-white\/15, .bg-black\/10, .bg-black\/15, .bg-black\/18, .bg-black\/20, .bg-black\/25, .bg-black\/30, .bg-black\/35) {
   background-color: var(--studio-panel-soft) !important;
 }
 
-.theme-light .studio-theme :is(.bg-slate-950, .bg-slate-950\/40, .bg-slate-950\/45, .bg-slate-950\/50, .bg-slate-950\/55, .bg-slate-950\/60, .bg-slate-950\/65, .bg-slate-950\/70, .bg-slate-950\/75, .bg-slate-950\/80, .bg-slate-950\/85, .bg-slate-950\/90, .bg-slate-950\/95),
-.theme-custom .studio-theme :is(.bg-slate-950, .bg-slate-950\/40, .bg-slate-950\/45, .bg-slate-950\/50, .bg-slate-950\/55, .bg-slate-950\/60, .bg-slate-950\/65, .bg-slate-950\/70, .bg-slate-950\/75, .bg-slate-950\/80, .bg-slate-950\/85, .bg-slate-950\/90, .bg-slate-950\/95) {
+.theme-light .studio-theme :is(.bg-slate-950, .bg-slate-950\/40, .bg-slate-950\/45, .bg-slate-950\/50, .bg-slate-950\/55, .bg-slate-950\/60, .bg-slate-950\/65, .bg-slate-950\/70, .bg-slate-950\/75, .bg-slate-950\/80, .bg-slate-950\/85, .bg-slate-950\/90, .bg-slate-950\/92, .bg-slate-950\/94, .bg-slate-950\/95),
+.theme-custom .studio-theme :is(.bg-slate-950, .bg-slate-950\/40, .bg-slate-950\/45, .bg-slate-950\/50, .bg-slate-950\/55, .bg-slate-950\/60, .bg-slate-950\/65, .bg-slate-950\/70, .bg-slate-950\/75, .bg-slate-950\/80, .bg-slate-950\/85, .bg-slate-950\/90, .bg-slate-950\/92, .bg-slate-950\/94, .bg-slate-950\/95) {
   background-color: var(--studio-panel-strong) !important;
 }
 
-.theme-light .studio-theme :is(.bg-slate-900, .bg-slate-900\/80, .bg-slate-800, .bg-slate-800\/80),
-.theme-custom .studio-theme :is(.bg-slate-900, .bg-slate-900\/80, .bg-slate-800, .bg-slate-800\/80) {
+.theme-light .studio-theme :is(.bg-slate-900, .bg-slate-900\/50, .bg-slate-900\/60, .bg-slate-900\/70, .bg-slate-900\/80, .bg-slate-800, .bg-slate-800\/50, .bg-slate-800\/60, .bg-slate-800\/70, .bg-slate-800\/80, .bg-slate-700, .bg-slate-700\/50),
+.theme-custom .studio-theme :is(.bg-slate-900, .bg-slate-900\/50, .bg-slate-900\/60, .bg-slate-900\/70, .bg-slate-900\/80, .bg-slate-800, .bg-slate-800\/50, .bg-slate-800\/60, .bg-slate-800\/70, .bg-slate-800\/80, .bg-slate-700, .bg-slate-700\/50) {
   background-color: var(--studio-panel) !important;
 }
 
-.theme-light .studio-theme :is(.text-cyan-100, .text-cyan-200, .text-cyan-300),
-.theme-custom .studio-theme :is(.text-cyan-100, .text-cyan-200, .text-cyan-300) {
+.theme-light .studio-theme :is(.text-blue-900, .text-cyan-50, .text-cyan-100, .text-cyan-100\/80, .text-cyan-100\/85, .text-cyan-200, .text-cyan-300, .text-sky-100, .text-sky-200, .text-sky-300),
+.theme-custom .studio-theme :is(.text-blue-900, .text-cyan-50, .text-cyan-100, .text-cyan-100\/80, .text-cyan-100\/85, .text-cyan-200, .text-cyan-300, .text-sky-100, .text-sky-200, .text-sky-300) {
   color: var(--studio-accent-text) !important;
 }
 
@@ -360,8 +502,12 @@ html.theme-light.glass-strong {
   color: var(--studio-accent-foreground) !important;
 }
 
-.theme-light .studio-theme :is(.bg-cyan-300\/10, .bg-cyan-300\/12, .bg-cyan-300\/15, .bg-cyan-300\/20, .bg-blue-50),
-.theme-custom .studio-theme :is(.bg-cyan-300\/10, .bg-cyan-300\/12, .bg-cyan-300\/15, .bg-cyan-300\/20, .bg-blue-50) {
+.theme-light .studio-theme :is(.bg-blue-600, .bg-blue-700, .bg-emerald-500, .bg-emerald-600, .bg-red-500, .bg-rose-500) {
+  color: #ffffff !important;
+}
+
+.theme-light .studio-theme :is(.bg-cyan-300\/8, .bg-cyan-300\/10, .bg-cyan-300\/12, .bg-cyan-300\/15, .bg-cyan-300\/18, .bg-cyan-300\/20, .bg-cyan-300\/25, .bg-sky-300\/10, .bg-blue-50),
+.theme-custom .studio-theme :is(.bg-cyan-300\/8, .bg-cyan-300\/10, .bg-cyan-300\/12, .bg-cyan-300\/15, .bg-cyan-300\/18, .bg-cyan-300\/20, .bg-cyan-300\/25, .bg-sky-300\/10, .bg-blue-50) {
   background-color: var(--studio-accent-soft) !important;
 }
 
@@ -370,36 +516,68 @@ html.theme-light.glass-strong {
   color: var(--studio-accent-text) !important;
 }
 
-.theme-light .studio-theme :is(.bg-emerald-300\/10, .bg-green-50, .bg-emerald-50) {
+.theme-light .studio-theme :is(.bg-emerald-300\/10, .bg-emerald-300\/12, .bg-emerald-300\/15, .bg-emerald-300\/20, .bg-emerald-400\/10, .bg-emerald-400\/12, .bg-emerald-400\/15, .bg-emerald-500\/20, .bg-emerald-950\/92, .bg-green-50, .bg-emerald-50) {
   background-color: rgba(5, 150, 105, 0.10) !important;
 }
 
-.theme-light .studio-theme :is(.text-emerald-100, .text-emerald-200, .text-emerald-300, .text-green-700, .text-green-800, .text-green-900) {
+.theme-light .studio-theme :is(.text-emerald-50, .text-emerald-100, .text-emerald-100\/75, .text-emerald-100\/80, .text-emerald-200, .text-emerald-300, .text-emerald-400, .text-emerald-700, .text-emerald-800, .text-emerald-900, .text-green-600, .text-green-700, .text-green-800, .text-green-900) {
   color: #047857 !important;
 }
 
-.theme-light .studio-theme :is(.border-emerald-300\/20, .border-emerald-300\/25, .border-emerald-300\/30, .border-emerald-300\/35) {
+.theme-light .studio-theme :is(.border-emerald-300, .border-emerald-300\/20, .border-emerald-300\/25, .border-emerald-300\/30, .border-emerald-300\/35, .border-emerald-300\/40, .border-emerald-400\/20, .border-emerald-400\/25, .border-emerald-400\/30, .border-emerald-400\/35, .border-emerald-400\/40) {
   border-color: rgba(5, 150, 105, 0.24) !important;
 }
 
-.theme-light .studio-theme :is(.bg-amber-300\/10, .bg-amber-50) {
+.theme-light .studio-theme :is(.bg-amber-300\/8, .bg-amber-300\/10, .bg-amber-300\/12, .bg-amber-300\/15, .bg-amber-300\/20, .bg-amber-400\/8, .bg-amber-400\/10, .bg-amber-400\/12, .bg-amber-400\/15, .bg-amber-950\/94, .bg-amber-50) {
   background-color: rgba(217, 119, 6, 0.10) !important;
 }
 
-.theme-light .studio-theme :is(.text-amber-100, .text-amber-200, .text-amber-700, .text-amber-800, .text-amber-900) {
+.theme-light .studio-theme :is(.text-amber-50, .text-amber-100, .text-amber-100\/80, .text-amber-200, .text-amber-300, .text-amber-700, .text-amber-800, .text-amber-900) {
   color: #b45309 !important;
 }
 
-.theme-light .studio-theme :is(.bg-red-50, .bg-rose-400\/12) {
+.theme-light .studio-theme :is(.border-amber-300\/20, .border-amber-300\/25, .border-amber-300\/30, .border-amber-300\/35, .border-amber-300\/40) {
+  border-color: rgba(217, 119, 6, 0.26) !important;
+}
+
+.theme-light .studio-theme :is(.bg-red-50, .bg-red-400\/10, .bg-red-400\/12, .bg-red-400\/15, .bg-rose-300\/10, .bg-rose-300\/12, .bg-rose-300\/15, .bg-rose-400\/10, .bg-rose-400\/12, .bg-rose-400\/15, .bg-rose-400\/20, .bg-rose-950\/94) {
   background-color: rgba(225, 29, 72, 0.10) !important;
 }
 
-.theme-light .studio-theme :is(.text-red-600, .text-red-700, .text-red-800, .text-rose-200) {
+.theme-light .studio-theme :is(.text-red-200, .text-red-300, .text-red-500, .text-red-600, .text-red-700, .text-red-800, .text-rose-50, .text-rose-100, .text-rose-100\/75, .text-rose-100\/80, .text-rose-200, .text-rose-200\/80, .text-rose-300) {
   color: #be123c !important;
 }
 
-.theme-light .studio-theme :is(.border-cyan-300\/25, .border-cyan-300\/30, .border-cyan-300\/35, .border-cyan-300\/40, .border-cyan-300\/45, .border-cyan-300\/50, .border-cyan-300\/60, .border-cyan-300\/70),
-.theme-custom .studio-theme :is(.border-cyan-300\/25, .border-cyan-300\/30, .border-cyan-300\/35, .border-cyan-300\/40, .border-cyan-300\/45, .border-cyan-300\/50, .border-cyan-300\/60, .border-cyan-300\/70) {
+.theme-light .studio-theme :is(.border-rose-300\/20, .border-rose-300\/25, .border-rose-300\/30, .border-rose-300\/35, .border-rose-300\/40, .border-rose-400\/20, .border-rose-400\/25, .border-rose-400\/30, .border-rose-400\/35, .border-rose-400\/40, .border-red-200, .border-red-300, .border-red-400\/20, .border-red-400\/25, .border-red-400\/30, .border-red-400\/35) {
+  border-color: rgba(225, 29, 72, 0.26) !important;
+}
+
+.theme-light .studio-theme :is(.bg-violet-300\/10, .bg-violet-300\/12, .bg-violet-300\/15, .bg-violet-400\/10, .bg-violet-400\/12, .bg-violet-400\/15, .bg-purple-300\/10, .bg-purple-300\/12, .bg-purple-300\/15, .bg-purple-400\/10, .bg-purple-400\/12, .bg-purple-400\/15) {
+  background-color: rgba(109, 40, 217, 0.10) !important;
+}
+
+.theme-light .studio-theme :is(.border-violet-300\/20, .border-violet-300\/25, .border-violet-300\/30, .border-purple-300\/20, .border-purple-300\/25, .border-purple-300\/30, .border-purple-400\/20, .border-purple-400\/25, .border-purple-400\/30) {
+  border-color: rgba(109, 40, 217, 0.24) !important;
+}
+
+.theme-light .studio-theme :is(.text-violet-100, .text-violet-200, .text-violet-300, .text-purple-100, .text-purple-200, .text-purple-300) {
+  color: #6d28d9 !important;
+}
+
+.theme-light .studio-theme :is(.bg-pink-300\/10, .bg-pink-300\/12, .bg-pink-300\/15, .bg-pink-400\/10, .bg-pink-400\/12, .bg-pink-400\/15) {
+  background-color: rgba(219, 39, 119, 0.10) !important;
+}
+
+.theme-light .studio-theme :is(.border-pink-300\/20, .border-pink-300\/25, .border-pink-300\/30, .border-pink-400\/20, .border-pink-400\/25, .border-pink-400\/30) {
+  border-color: rgba(219, 39, 119, 0.24) !important;
+}
+
+.theme-light .studio-theme :is(.text-pink-100, .text-pink-200, .text-pink-300) {
+  color: #be185d !important;
+}
+
+.theme-light .studio-theme :is(.border-cyan-200\/50, .border-cyan-300\/15, .border-cyan-300\/20, .border-cyan-300\/25, .border-cyan-300\/30, .border-cyan-300\/35, .border-cyan-300\/40, .border-cyan-300\/45, .border-cyan-300\/50, .border-cyan-300\/60, .border-cyan-300\/65, .border-cyan-300\/70, .border-sky-300\/20, .border-sky-300\/25, .border-sky-300\/30),
+.theme-custom .studio-theme :is(.border-cyan-200\/50, .border-cyan-300\/15, .border-cyan-300\/20, .border-cyan-300\/25, .border-cyan-300\/30, .border-cyan-300\/35, .border-cyan-300\/40, .border-cyan-300\/45, .border-cyan-300\/50, .border-cyan-300\/60, .border-cyan-300\/65, .border-cyan-300\/70, .border-sky-300\/20, .border-sky-300\/25, .border-sky-300\/30) {
   border-color: var(--studio-border-strong) !important;
 }
 

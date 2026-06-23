@@ -98,7 +98,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h2 className="font-semibold text-white">Bạn mới dùng Auto Tool?</h2>
-                <p className="mt-1 text-sm leading-6 text-slate-300">Làm theo 3 bước để chạy batch đầu tiên: chọn workflow, kiểm tra hệ thống, chọn output folder.</p>
+                <p className="mt-1 text-sm leading-6 text-slate-300">Làm theo 3 bước để chạy lô đầu tiên: chọn quy trình, kiểm tra hệ thống, chọn thư mục đầu ra.</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">

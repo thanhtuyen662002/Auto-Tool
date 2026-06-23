@@ -4,10 +4,10 @@ export type SetupHelpTopic = 'backend' | 'ffmpeg' | 'ocr' | 'tts' | 'translation
 
 const helpContent: Record<SetupHelpTopic, { title: string; problem: string; why: string; fix: string; link?: string }> = {
   backend: {
-    title: 'Backend',
-    problem: 'Frontend chưa nhận được phản hồi từ server xử lý local.',
-    why: 'Backend chịu trách nhiệm quét video, xuất video, đọc chữ trên video, tạo giọng đọc và lưu kết quả.',
-    fix: 'Mở terminal backend và chạy lệnh khởi động theo README của dự án, sau đó bấm kiểm tra lại.',
+    title: 'Bộ xử lý',
+    problem: 'Giao diện chưa nhận được phản hồi từ bộ xử lý cục bộ.',
+    why: 'Bộ xử lý chịu trách nhiệm quét video, xuất video, đọc chữ trên video, tạo giọng đọc và lưu kết quả.',
+    fix: 'Mở launcher của Auto Tool hoặc chạy lệnh khởi động bộ xử lý theo hướng dẫn dự án, sau đó bấm kiểm tra lại.',
   },
   ffmpeg: {
     title: 'Bộ dựng video',
@@ -36,7 +36,7 @@ const helpContent: Record<SetupHelpTopic, { title: string; problem: string; why:
   output: {
     title: 'Thư mục đầu ra',
     problem: 'Chưa chọn nơi lưu video sau khi xuất.',
-    why: 'Mỗi lô video cần một thư mục đầu ra để lưu video, phụ đề, log và gói xuất bản.',
+    why: 'Mỗi lô video cần một thư mục đầu ra để lưu video, phụ đề, nhật ký và gói xuất bản.',
     fix: 'Vào Cài đặt hệ thống, chọn thư mục đầu ra dễ nhớ, ví dụ D:/auto-tool/outputs.',
   },
 };
@@ -46,7 +46,7 @@ export default function SetupHelpModal({ topic, onClose }: { topic: SetupHelpTop
   const content = helpContent[topic];
 
   return (
-    <GlassModal open title={`Hướng dẫn setup: ${content.title}`} onClose={onClose}>
+    <GlassModal open title={`Hướng dẫn thiết lập: ${content.title}`} onClose={onClose}>
       <div className="grid gap-4 text-sm leading-6 text-slate-300">
         <section>
           <h3 className="text-sm font-semibold text-white">Vấn đề là gì?</h3>

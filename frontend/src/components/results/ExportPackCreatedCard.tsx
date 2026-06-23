@@ -19,14 +19,14 @@ export default function ExportPackCreatedCard({
         <PackageCheck className="mt-0.5 shrink-0 text-emerald-300" size={20} />
         <div className="min-w-0">
           <div className="font-semibold text-emerald-100">Gói xuất bản đã tạo</div>
-          <div className="mt-1 break-all text-xs leading-5 text-emerald-100/80">{exportPack.output_dir || 'Chưa có output path'}</div>
-          <div className="mt-1 text-xs text-emerald-100/75">{existing}/{items.length} file sẵn sàng</div>
+          <div className="mt-1 break-all text-xs leading-5 text-emerald-100/80">{exportPack.output_dir || 'Chưa có thư mục đầu ra'}</div>
+          <div className="mt-1 text-xs text-emerald-100/75">{existing}/{items.length} tệp sẵn sàng</div>
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <GlassButton className="px-3" variant="secondary" onClick={onCopy}>
           <Clipboard size={15} />
-          Copy đường dẫn
+          Sao chép đường dẫn
         </GlassButton>
         <GlassButton className="px-3" variant="ghost" onClick={onOpen}>
           <FolderOpen size={15} />

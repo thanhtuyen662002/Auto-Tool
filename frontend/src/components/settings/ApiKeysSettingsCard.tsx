@@ -26,7 +26,7 @@ export default function ApiKeysSettingsCard() {
   useEffect(() => {
     getAppSettings()
       .then((res) => setSettings(normalize(res)))
-      .catch(() => setMessage({ type: 'error', text: 'Không thể tải cài đặt API Keys.' }))
+      .catch(() => setMessage({ type: 'error', text: 'Không thể tải cài đặt khóa API.' }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -41,9 +41,9 @@ export default function ApiKeysSettingsCard() {
     try {
       const saved = await saveAppSettings(clean(settings));
       setSettings(normalize(saved));
-      setMessage({ type: 'success', text: '✅ Đã lưu cài đặt API Keys thành công.' });
+      setMessage({ type: 'success', text: 'Đã lưu cài đặt khóa API.' });
     } catch {
-      setMessage({ type: 'error', text: '❌ Không thể lưu. Kiểm tra lại kết nối backend.' });
+      setMessage({ type: 'error', text: 'Không thể lưu. Kiểm tra lại kết nối bộ xử lý.' });
     } finally {
       setSaving(false);
     }
@@ -58,9 +58,9 @@ export default function ApiKeysSettingsCard() {
         credentialsJsonPath: settings.google_tts_credentials_json_path,
         accessToken: settings.google_tts_access_token,
       });
-      setMessage({ type: 'success', text: `✅ Google Cloud TTS kết nối thành công — ${res.voices.length} giọng.` });
+      setMessage({ type: 'success', text: `Google Cloud TTS kết nối thành công, có ${res.voices.length} giọng.` });
     } catch (err) {
-      setMessage({ type: 'error', text: `❌ ${err instanceof Error ? err.message : 'Không thể kết nối Google Cloud TTS.'}` });
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Không thể kết nối Google Cloud TTS.' });
     } finally {
       setTesting(false);
     }
@@ -69,7 +69,7 @@ export default function ApiKeysSettingsCard() {
   if (loading) {
     return (
       <div className="rounded-lg border border-white/10 bg-black/15 p-5 text-sm text-slate-400">
-        Đang tải cài đặt API Keys...
+        Đang tải cài đặt khóa API...
       </div>
     );
   }
@@ -94,15 +94,14 @@ export default function ApiKeysSettingsCard() {
       {/* ── GEMINI ── */}
       <SettingsSection
         title="Gemini AI"
-        description="API keys dùng cho AI Script Generator, dịch phụ đề và các tính năng AI khác. Backend tự xoay vòng key khi một key bị lỗi."
+        description="Khóa Gemini dùng để tạo kịch bản, dịch phụ đề và các tính năng AI. Có thể dán nhiều khóa, mỗi dòng một khóa; hệ thống tự đổi khóa khi một khóa hết hạn mức."
       >
         <div className="grid gap-4">
           {/* Key count badge */}
           <div className="flex items-center gap-3 rounded-md border border-white/10 bg-black/15 px-4 py-3">
             <BrainCircuit size={18} className="shrink-0 text-violet-300" />
             <div className="flex-1 text-sm text-slate-300">
-              Đang lưu <span className="font-semibold text-white">{geminiKeyCount}</span>{' '}
-              {geminiKeyCount === 1 ? 'API key' : 'API keys'}
+              Đang lưu <span className="font-semibold text-white">{geminiKeyCount}</span> khóa Gemini
             </div>
             {geminiKeyCount > 0 && (
               <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
@@ -114,13 +113,16 @@ export default function ApiKeysSettingsCard() {
           {/* Textarea */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-400">
-              Danh sách API Key (mỗi dòng một key)
+              Danh sách khóa Gemini (mỗi dòng một khóa)
             </label>
             <textarea
               id="gemini-api-keys"
-              className="w-full rounded-md border border-white/10 bg-black/20 px-3 py-2.5 font-mono text-xs text-slate-200 placeholder-slate-600 focus:border-violet-400/60 focus:outline-none focus:ring-1 focus:ring-violet-400/30"
+              className="min-h-40 w-full resize-y whitespace-pre-wrap rounded-md border border-white/10 bg-black/20 px-3 py-2.5 font-mono text-xs text-slate-200 placeholder-slate-600 focus:border-violet-400/60 focus:outline-none focus:ring-1 focus:ring-violet-400/30"
               rows={6}
-              placeholder={'AIzaSy... (key 1)\nAIzaSy... (key 2)'}
+              placeholder={'AIzaSy... (khóa 1)\nAIzaSy... (khóa 2)'}
+              autoCapitalize="off"
+              autoComplete="off"
+              spellCheck={false}
               value={(settings.gemini_api_keys ?? []).join('\n')}
               onChange={(e) =>
                 patch({
@@ -136,7 +138,7 @@ export default function ApiKeysSettingsCard() {
               <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="text-violet-400 underline hover:text-violet-300">
                 aistudio.google.com/apikey
               </a>
-              . Khi một key vượt quota, backend tự chuyển sang key tiếp theo.
+              . Khi một khóa vượt hạn mức, hệ thống tự chuyển sang khóa tiếp theo.
             </p>
           </div>
         </div>
@@ -145,7 +147,7 @@ export default function ApiKeysSettingsCard() {
       {/* ── GOOGLE CLOUD TTS ── */}
       <SettingsSection
         title="Google Cloud TTS"
-        description="Dùng để tạo giọng đọc tiếng Việt chất lượng cao (Studio voices). Chỉ cần cấu hình nếu bạn chọn provider 'Google Cloud TTS' trong dự án."
+        description="Dùng để tạo giọng đọc tiếng Việt chất lượng cao. Chỉ cần cấu hình nếu bạn chọn Google Cloud TTS trong dự án."
       >
         <div className="grid gap-4">
           {/* Auth method info */}
@@ -181,7 +183,7 @@ export default function ApiKeysSettingsCard() {
           <div>
             <label htmlFor="gcp-api-key" className="mb-1.5 block text-xs font-medium text-slate-400">
               <KeyRound size={12} className="mr-1 inline text-amber-300" />
-              API Key Google Cloud
+              Khóa API Google Cloud
             </label>
             <input
               id="gcp-api-key"
@@ -224,7 +226,7 @@ export default function ApiKeysSettingsCard() {
       <div className="flex flex-wrap gap-3">
         <GlassButton variant="primary" loading={saving} onClick={() => void handleSave()}>
           <ShieldCheck size={15} />
-          Lưu API Keys
+          Lưu khóa API
         </GlassButton>
       </div>
     </div>

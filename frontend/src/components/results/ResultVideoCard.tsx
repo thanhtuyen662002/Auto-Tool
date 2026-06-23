@@ -55,7 +55,7 @@ export default function ResultVideoCard({
   return (
     <GlassCard className={`overflow-hidden ${selected ? 'border-cyan-300/60 bg-cyan-300/10' : ''}`} hover>
       <PreviewTile item={item} onPreview={onPreview} />
-      <div className="grid gap-4 p-4">
+      <div className="grid gap-3 p-3">
         <CardBody item={item} />
         <CardActions
           hasCaption={hasCaption}
@@ -185,7 +185,7 @@ function CardActions({
       </GlassButton>
       <GlassButton className="px-3" variant="ghost" disabled={!item.logFile && !item.files.length} onClick={() => onShowLog(item)}>
         <FileSearch size={15} />
-        Log
+        Nhật ký
       </GlassButton>
     </div>
   );

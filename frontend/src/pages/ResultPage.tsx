@@ -83,7 +83,7 @@ export default function ResultPage() {
         setExportPack(view.exportPack);
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Không thể tải kết quả job.');
+        setError(err instanceof Error ? err.message : 'Không thể tải kết quả tác vụ.');
       } finally {
         if (!quiet) setLoading(false);
       }
@@ -112,6 +112,8 @@ export default function ResultPage() {
   const items = useMemo(() => outputs.map(normalizeResultOutput), [outputs]);
   const visibleItems = useMemo(() => filterAndSortResults(items, filter, search, sort), [filter, items, search, sort]);
   const totalPages = Math.ceil(visibleItems.length / pageSize);
+  const pageStart = visibleItems.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(currentPage * pageSize, visibleItems.length);
   const paginatedItems = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return visibleItems.slice(start, start + pageSize);
@@ -143,6 +145,12 @@ export default function ResultPage() {
     });
   }, [items]);
 
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   function toggleSelected(item: NormalizedResultItem) {
     if (!item.exportEligible) return;
     setSelectedIds((current) => {
@@ -164,7 +172,7 @@ export default function ResultPage() {
 
   async function copyCaption(item: NormalizedResultItem) {
     await copyText(captionBundle(item));
-    setActionMessage(`Đã copy caption: ${item.filename}`);
+    setActionMessage(`Đã sao chép lời bình: ${item.filename}`);
   }
 
   async function revealResult(item: NormalizedResultItem) {
@@ -191,9 +199,9 @@ export default function ResultPage() {
     try {
       const response = await runFinalQA(jobId, platformTarget);
       await loadResults(true);
-      setActionMessage(`Final QA đã check ${response.summary.total_checked} output.`);
+      setActionMessage(`Đã kiểm tra chất lượng ${response.summary.total_checked} video.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể chạy Final QA cho job này.');
+      setError(err instanceof Error ? err.message : 'Không thể kiểm tra chất lượng cho tác vụ này.');
     } finally {
       setBusyAction(null);
     }
@@ -212,10 +220,10 @@ export default function ResultPage() {
         output_indexes: exportOutputIndexes,
       });
       setExportPack(response.export_pack);
-      setActionMessage(`Export pack đã tạo: ${response.export_pack.output_dir}`);
+      setActionMessage(`Đã tạo gói xuất bản: ${response.export_pack.output_dir}`);
       await loadResults(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể tạo Export Pack cho job này.');
+      setError(err instanceof Error ? err.message : 'Không thể tạo gói xuất bản cho tác vụ này.');
     } finally {
       setBusyAction(null);
     }
@@ -232,9 +240,9 @@ export default function ResultPage() {
         return;
       }
       const response = await openResultsExportPack(jobId);
-      setActionMessage(response.path ? `Đã mở thư mục: ${response.path}` : 'Đã gửi lệnh mở Export Pack.');
+      setActionMessage(response.path ? `Đã mở thư mục: ${response.path}` : 'Đã gửi lệnh mở gói xuất bản.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể mở thư mục Export Pack.');
+      setError(err instanceof Error ? err.message : 'Không thể mở thư mục gói xuất bản.');
     } finally {
       setBusyAction(null);
     }
@@ -242,7 +250,7 @@ export default function ResultPage() {
 
   async function handleCopyPack() {
     await copyText(exportPack?.output_dir);
-    setActionMessage('Đã copy thư mục Export Pack.');
+    setActionMessage('Đã sao chép thư mục gói xuất bản.');
   }
 
   async function handleRetryFailed() {
@@ -254,7 +262,7 @@ export default function ResultPage() {
       const response = await retryFailedResults(jobId);
       navigate(`/queue/douyin-reup/${response.job_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể retry failed outputs.');
+      setError(err instanceof Error ? err.message : 'Không thể chạy lại các video lỗi.');
     } finally {
       setBusyAction(null);
     }
@@ -262,8 +270,8 @@ export default function ResultPage() {
 
   if (!jobId) {
     return (
-      <ResultsLayout title="Kết quả" subtitle="Chưa có job id." actions={<LinkButton to="/douyin-reup" label="Douyin Reup" />}>
-        <ResultsEmptyState title="Thiếu job id" message="Mở trang kết quả từ batch đã chạy để xem gallery, Final QA và Export Pack." />
+      <ResultsLayout title="Kết quả" subtitle="Chưa có mã tác vụ." actions={<LinkButton to="/douyin-reup" label="Douyin Reup" />}>
+        <ResultsEmptyState title="Thiếu mã tác vụ" message="Mở trang kết quả từ lô đã chạy để xem video, kiểm tra chất lượng và gói xuất bản." />
       </ResultsLayout>
     );
   }
@@ -285,9 +293,9 @@ export default function ResultPage() {
       actions={
         <>
           {isDouyinResult ? <LinkButton to={reupAdjustUrl} label="Chỉnh/render lại" icon={<SlidersHorizontal size={16} />} /> : null}
-          {projectId ? <LinkButton to={`/projects/${projectId}/content`} label="Caption" /> : null}
+          {projectId ? <LinkButton to={`/projects/${projectId}/content`} label="Lời bình" /> : null}
           {projectId ? <LinkButton to={`/projects/${projectId}/review`} label="Đánh giá" /> : null}
-          <LinkButton to="/douyin-reup" label="Batch mới" icon={<Clapperboard size={16} />} />
+          <LinkButton to="/douyin-reup" label="Lô mới" icon={<Clapperboard size={16} />} />
           <GlassButton variant="secondary" loading={loading} onClick={() => void loadResults()}>
             <RefreshCw size={16} />
             Làm mới
@@ -380,17 +388,24 @@ export default function ResultPage() {
               onShowLog={showLog}
               onToggleSelected={toggleSelected}
             />
-            <GlassPagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              className="mt-6"
-            />
+            {visibleItems.length ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-400">
+                <span>
+                  Đang xem <span className="font-semibold text-white">{pageStart}-{pageEnd}</span> / {visibleItems.length} video
+                </span>
+                <GlassPagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  className="mt-0"
+                />
+              </div>
+            ) : null}
           </>
         ) : (
           <ResultsEmptyState
             title="Chưa có video đầu ra"
-            message="Khi batch hoàn tất, video render, cảnh báo, QA và file export liên quan sẽ xuất hiện tại đây."
+            message="Khi lô hoàn tất, video đã dựng, cảnh báo, điểm kiểm tra và tệp xuất bản liên quan sẽ xuất hiện tại đây."
             action={<LinkButton to="/douyin-reup" label="Tạo batch mới" />}
           />
         )}

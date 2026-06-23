@@ -34,9 +34,9 @@ export default function ResultQAPanel({
         <div>
           <h2 className="flex items-center gap-2 font-semibold text-white">
             <ShieldCheck size={18} className="text-emerald-300" />
-            Đánh giá QA
+            Kiểm tra chất lượng
           </h2>
-          <p className="mt-1 text-sm text-slate-400">Kiểm tra kỹ thuật cuối trước khi đóng gói đăng nền tảng.</p>
+          <p className="mt-1 text-sm text-slate-400">Kiểm tra lỗi cuối trước khi gom video để đăng lên nền tảng.</p>
         </div>
         <GlassBadge variant={failed.length ? 'failed' : warnings.length ? 'warning' : checked.length ? 'success' : 'neutral'}>
           {checked.length ? `Đã kiểm tra ${checked.length}/${items.length}` : 'Chưa kiểm tra'}
@@ -44,9 +44,9 @@ export default function ResultQAPanel({
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-center">
-        <Metric label="Đạt (Passed)" value={batchSummary?.passed ?? passed.length} />
-        <Metric label="Cảnh báo (Warnings)" value={batchSummary?.passed_with_warnings ?? warnings.length} />
-        <Metric label="Lỗi (Failed)" value={batchSummary?.failed ?? failed.length} />
+        <Metric label="Đạt" value={batchSummary?.passed ?? passed.length} />
+        <Metric label="Cảnh báo" value={batchSummary?.passed_with_warnings ?? warnings.length} />
+        <Metric label="Lỗi" value={batchSummary?.failed ?? failed.length} />
         <Metric label="Trung bình" value={average == null ? '-' : `${average}%`} />
       </div>
 
@@ -66,7 +66,7 @@ export default function ResultQAPanel({
         </label>
         <GlassButton variant="primary" loading={busy} disabled={!items.length} onClick={onRunQA}>
           <RefreshCw size={16} />
-          Chạy Final QA
+          Kiểm tra lại chất lượng
         </GlassButton>
       </div>
 
@@ -86,14 +86,14 @@ export default function ResultQAPanel({
                 {item.qa?.report_path ? (
                   <a className="mt-2 inline-flex items-center gap-1 font-semibold text-cyan-200 hover:text-cyan-100" href={finalOutputQAReportUrl(item.qa.report_path)} target="_blank" rel="noreferrer">
                     <ExternalLink size={13} />
-                    Báo cáo QA
+                    Mở báo cáo
                   </a>
                 ) : null}
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm leading-6 text-slate-400">Chưa có issue QA. Chạy Final QA để lấy điểm kỹ thuật thực tế.</p>
+          <p className="text-sm leading-6 text-slate-400">Chưa có vấn đề nào được ghi nhận. Bấm kiểm tra lại chất lượng để lấy điểm thực tế.</p>
         )}
       </div>
     </GlassCard>

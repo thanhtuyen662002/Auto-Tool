@@ -17,17 +17,17 @@ export interface ExportPackOptions {
 }
 
 const optionRows: Array<[keyof ExportPackOptions, string]> = [
-  ['copy_videos', 'Tệp Video'],
+  ['copy_videos', 'Tệp video'],
   ['include_subtitles', 'Tệp phụ đề'],
-  ['include_logs', 'Nhật ký (Logs)'],
+  ['include_logs', 'Nhật ký xử lý'],
   ['include_captions', 'Lời bình/Hashtag'],
   ['include_posting_checklist', 'Checklist đăng bài'],
 ];
 
 const scopes: Array<{ value: ExportScope; label: string; hint: string }> = [
-  { value: 'selected', label: 'Đang chọn', hint: 'Chỉ các card đã tick' },
-  { value: 'all_rendered', label: 'Tất cả sẵn sàng', hint: 'Bỏ qua output lỗi' },
-  { value: 'qa_passed', label: 'QA ổn', hint: 'Chỉ video đã qua Final QA' },
+  { value: 'selected', label: 'Đang chọn', hint: 'Chỉ các video đã tick' },
+  { value: 'all_rendered', label: 'Tất cả sẵn sàng', hint: 'Bỏ qua video lỗi' },
+  { value: 'qa_passed', label: 'Đã kiểm tra ổn', hint: 'Chỉ video đã qua kiểm tra cuối' },
   { value: 'include_warnings', label: 'Kèm cảnh báo', hint: 'Sẵn sàng + cảnh báo, không lấy lỗi' },
 ];
 
@@ -70,14 +70,14 @@ export default function ExportPackPanel({
             <FileArchive size={18} className="text-cyan-200" />
             Gói xuất bản
           </h2>
-          <p className="mt-1 text-sm text-slate-400">Đóng gói video, subtitle, caption và checklist đăng bài.</p>
+          <p className="mt-1 text-sm text-slate-400">Gom video, phụ đề, lời bình và checklist đăng bài vào một thư mục.</p>
         </div>
-        <GlassBadge variant={outputIndexes.length ? 'ready' : 'neutral'}>{outputIndexes.length} output</GlassBadge>
+        <GlassBadge variant={outputIndexes.length ? 'ready' : 'neutral'}>{outputIndexes.length} video</GlassBadge>
       </div>
 
       <div className="grid gap-3">
         <label>
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-normal text-slate-500">Nền tảng (Platform)</span>
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-normal text-slate-500">Nền tảng đăng</span>
           <select
             className="h-10 w-full rounded-md border border-white/15 bg-slate-950/70 px-3 text-sm"
             value={platformTarget}
@@ -106,7 +106,7 @@ export default function ExportPackPanel({
             </label>
           ))}
         </div>
-        {exportScope === 'selected' ? <div className="text-xs text-slate-400">{selectedCount} card đang được chọn trong {items.length} output.</div> : null}
+        {exportScope === 'selected' ? <div className="text-xs text-slate-400">{selectedCount} video đang được chọn trong {items.length} video.</div> : null}
       </div>
 
       <div className="grid gap-2">

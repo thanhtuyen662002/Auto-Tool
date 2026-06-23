@@ -26,7 +26,7 @@ const studioItems: SidebarItem[] = [
 const utilityItems: SidebarItem[] = [
   { to: '/subtitle-review', label: 'Sửa phụ đề', helper: 'Kiểm tra & chỉnh sửa phụ đề', icon: Captions },
   { to: '/recovery', label: 'Khôi phục tác vụ', helper: 'Khôi phục các job bị gián đoạn', icon: RotateCcw },
-  { to: '/settings', label: 'Cài đặt hệ thống', helper: 'Cấu hình & API Keys', icon: Settings },
+  { to: '/settings', label: 'Cài đặt hệ thống', helper: 'Cấu hình & khóa API', icon: Settings },
 ];
 
 export default function StudioSidebar({
@@ -146,7 +146,7 @@ export default function StudioSidebar({
         <div className="text-xs font-semibold text-slate-200 group-hover:text-cyan-200 transition-colors">Auto Tool Studio</div>
         <div className="mt-1 font-mono text-[11px] text-slate-500">v{version}</div>
         <div className="mt-3 flex items-center justify-between gap-2">
-          <span className="text-xs text-slate-400">Backend</span>
+          <span className="text-xs text-slate-400">Bộ xử lý</span>
           <GlassBadge variant={connected ? 'success' : 'failed'}>{connected ? 'Đã kết nối' : 'Ngoại tuyến'}</GlassBadge>
         </div>
       </button>

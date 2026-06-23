@@ -60,7 +60,7 @@ export default function OutputFolderCard({
         <div className="rounded-md border border-rose-300/20 bg-rose-400/10 p-3 text-sm text-rose-100">Thư mục đầu ra không được rỗng.</div>
       ) : (
         <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs text-slate-400">
-          Nếu thư mục chưa tồn tại, backend sẽ tạo hoặc báo lỗi thân thiện khi bắt đầu.
+          Nếu thư mục chưa tồn tại, tool sẽ tạo hoặc báo lỗi dễ hiểu khi bắt đầu.
         </div>
       )}
       <StartRecentFolders folders={recentFolders} onRemove={onRemoveRecent} onUse={onUseRecent} />

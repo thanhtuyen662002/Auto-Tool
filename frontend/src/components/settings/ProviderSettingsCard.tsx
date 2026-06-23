@@ -7,27 +7,27 @@ import SettingsSection from './SettingsSection';
 const providerRows = [
   {
     id: 'translation',
-    title: 'Dịch thuật (Translation)',
-    description: 'Dùng để dịch phụ đề và caption sang tiếng Việt. Nếu backend quản lý provider, UI chỉ hiển thị trạng thái.',
+    title: 'Dịch thuật',
+    description: 'Dùng để dịch phụ đề và lời bình sang tiếng Việt. Trạng thái bên dưới cho biết dịch vụ đã sẵn sàng hay chưa.',
     icon: Languages,
   },
   {
     id: 'ocr',
-    title: 'Nhận diện chữ (OCR)',
-    description: 'Bạn chỉ cần OCR nếu video có chữ Trung dính trên màn hình.',
+    title: 'Nhận diện chữ trên video',
+    description: 'Chỉ cần bật khi video có chữ Trung dính trên màn hình.',
     icon: ScanText,
   },
   {
     id: 'tts',
-    title: 'Giọng đọc (TTS)',
-    description: 'Chỉ cần khi tạo voiceover tiếng Việt cho Silent Mode.',
+    title: 'Giọng đọc',
+    description: 'Chỉ cần khi tạo lời đọc tiếng Việt cho video không thoại.',
     icon: Mic,
   },
 ] as const;
 
 export default function ProviderSettingsCard({ status, onOpenGuide }: { status: NormalizedSystemStatus; onOpenGuide?: () => void }) {
   return (
-    <SettingsSection title="Nhà cung cấp dịch vụ" description="Hiển thị trạng thái provider ở mức dễ hiểu. Cấu hình chi tiết nằm ở backend hoặc Advanced nếu cần.">
+    <SettingsSection title="Dịch thuật & Giọng đọc" description="Hiển thị trạng thái các dịch vụ cần cho dịch phụ đề, đọc chữ trên video và tạo giọng đọc. Cấu hình sâu nằm trong Cấu hình nâng cao khi cần.">
       <div className="grid gap-3">
         {providerRows.map(({ icon: Icon, ...row }) => {
           const value = status[row.id] as SystemStatusValue;

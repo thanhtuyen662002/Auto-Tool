@@ -60,14 +60,14 @@ export default function DataBackupCard() {
       setResult(response);
       await refreshBackups();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể tạo backup.');
+      setError(err instanceof Error ? err.message : 'Không thể tạo bản sao lưu.');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <SettingsSection title="Sao lưu Dữ liệu" description="Tạo backup zip có manifest. Mặc định không backup video output để tránh file quá nặng.">
+    <SettingsSection title="Sao lưu Dữ liệu" description="Tạo file sao lưu dạng zip. Mặc định không sao lưu video kết quả để tránh file quá nặng.">
       <div className="grid gap-5 xl:grid-cols-2">
         <div className="grid gap-3">
           <Toggle label="Cấu hình & thiết lập" checked={request.include_config} onChange={(value) => setRequest({ ...request, include_config: value })} />
@@ -75,9 +75,9 @@ export default function DataBackupCard() {
           <Toggle label="Ví dụ & metadata dự án" checked={request.include_projects} onChange={(value) => setRequest({ ...request, include_projects: value })} />
           <Toggle label="Dữ liệu duyệt phụ đề" checked={request.include_subtitles} onChange={(value) => setRequest({ ...request, include_subtitles: value })} />
           <Toggle label="Các gói xuất dữ liệu" checked={request.include_exports} onChange={(value) => setRequest({ ...request, include_exports: value })} />
-          <Toggle label="Các video kết quả cuối cùng" checked={request.include_outputs} onChange={(value) => setRequest({ ...request, include_outputs: value })} warning="Có thể làm backup rất nặng." />
-          <Toggle label="Nhật ký hoạt động (Logs)" checked={request.include_logs} onChange={(value) => setRequest({ ...request, include_logs: value })} />
-          <GlassInput label="Tên backup tùy chọn" value={request.backup_name ?? ''} onChange={(event) => setRequest({ ...request, backup_name: event.target.value })} />
+          <Toggle label="Các video kết quả cuối cùng" checked={request.include_outputs} onChange={(value) => setRequest({ ...request, include_outputs: value })} warning="Có thể làm file sao lưu rất nặng." />
+          <Toggle label="Nhật ký hoạt động" checked={request.include_logs} onChange={(value) => setRequest({ ...request, include_logs: value })} />
+          <GlassInput label="Tên bản sao lưu tùy chọn" value={request.backup_name ?? ''} onChange={(event) => setRequest({ ...request, backup_name: event.target.value })} />
           <GlassButton variant="primary" loading={loading} onClick={() => void handleCreate()}>
             Tạo bản sao lưu
           </GlassButton>

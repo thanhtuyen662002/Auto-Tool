@@ -42,13 +42,13 @@ export default function ResultVideoPreviewModal({
           <div className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <ResultStatusBadges item={item} />
-              <div className="text-sm font-semibold text-cyan-100">{item.qaScorePercent == null ? 'QA chưa chạy' : `${item.qaScorePercent}% QA`}</div>
+              <div className="text-sm font-semibold text-cyan-100">{item.qaScorePercent == null ? 'Chưa kiểm tra' : `${item.qaScorePercent}% điểm kiểm tra`}</div>
             </div>
             <div className="grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
               <PathLine label="Video" value={item.path} />
               <PathLine label="Phụ đề" value={item.subtitleFile} />
               <PathLine label="Giọng đọc" value={item.voiceFile} />
-              <PathLine label="Nhật ký (Log)" value={item.logFile} />
+              <PathLine label="Nhật ký xử lý" value={item.logFile} />
             </div>
             {item.caption ? <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm leading-6 text-slate-200">{item.caption}</p> : null}
           </div>
@@ -74,7 +74,7 @@ export default function ResultVideoPreviewModal({
             </GlassButton>
             <GlassButton variant="ghost" onClick={() => onShowLog(item)}>
               <FolderOpen size={16} />
-              Log kỹ thuật
+              Nhật ký xử lý
             </GlassButton>
           </div>
         </div>

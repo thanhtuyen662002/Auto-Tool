@@ -12,11 +12,11 @@ export default function ResultsSummaryCards({
 }) {
   const progress = jobStatus ? `${Math.round(jobStatus.progress)}%` : summary.total ? '100%' : '-';
   const cards = [
-    { label: 'Tổng output', value: summary.total, detail: `${summary.exportEligible} có thể xuất`, icon: FileArchive, tone: 'text-cyan-200' },
+    { label: 'Tổng video', value: summary.total, detail: `${summary.exportEligible} có thể xuất`, icon: FileArchive, tone: 'text-cyan-200' },
     { label: 'Sẵn sàng', value: summary.ready, detail: `${summary.selected} đang chọn`, icon: CheckCircle2, tone: 'text-emerald-300' },
     { label: 'Cảnh báo', value: summary.warnings, detail: `${summary.needsReview} cần đánh giá`, icon: AlertTriangle, tone: 'text-amber-300' },
-    { label: 'Lỗi', value: summary.failed, detail: `${summary.qaFailed} lỗi QA`, icon: ShieldAlert, tone: 'text-rose-300' },
-    { label: 'Điểm QA', value: summary.averageQaScore == null ? '-' : `${summary.averageQaScore}%`, detail: `${summary.qaChecked} đã kiểm tra`, icon: Gauge, tone: 'text-violet-200' },
+    { label: 'Lỗi', value: summary.failed, detail: `${summary.qaFailed} lỗi kiểm tra`, icon: ShieldAlert, tone: 'text-rose-300' },
+    { label: 'Điểm kiểm tra', value: summary.averageQaScore == null ? '-' : `${summary.averageQaScore}%`, detail: `${summary.qaChecked} đã kiểm tra`, icon: Gauge, tone: 'text-violet-200' },
   ];
 
   return (

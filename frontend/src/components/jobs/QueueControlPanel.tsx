@@ -53,7 +53,7 @@ export default function QueueControlPanel({
         <div className="flex flex-wrap gap-2">
           <ActionButton icon={<Pause size={16} />} label="Tạm dừng" busy={busyAction === 'pause'} disabled={disabled || status === 'paused'} onClick={onPause} />
           <ActionButton icon={<Play size={16} />} label="Tiếp tục" busy={busyAction === 'resume'} disabled={disabled} onClick={onResume} />
-          <ActionButton icon={<XCircle size={16} />} label="Hủy batch" busy={busyAction === 'cancel'} disabled={disabled || status === 'cancelled'} danger onClick={onCancel} />
+        <ActionButton icon={<XCircle size={16} />} label="Hủy lô" busy={busyAction === 'cancel'} disabled={disabled || status === 'cancelled'} danger onClick={onCancel} />
         </div>
       </div>
 
@@ -66,8 +66,8 @@ export default function QueueControlPanel({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <ActionButton icon={<RotateCcw size={16} />} label="Retry lỗi" busy={busyAction === 'retryFailed'} disabled={disabled || !queue?.failed_items} onClick={onRetryFailed} />
-        <ActionButton icon={<RotateCcw size={16} />} label={`Retry đã chọn (${selectedCount})`} busy={busyAction === 'retrySelected'} disabled={disabled || !hasSelection} onClick={onRetrySelected} />
+        <ActionButton icon={<RotateCcw size={16} />} label="Chạy lại lỗi" busy={busyAction === 'retryFailed'} disabled={disabled || !queue?.failed_items} onClick={onRetryFailed} />
+        <ActionButton icon={<RotateCcw size={16} />} label={`Chạy lại đã chọn (${selectedCount})`} busy={busyAction === 'retrySelected'} disabled={disabled || !hasSelection} onClick={onRetrySelected} />
         <ActionButton icon={<SkipForward size={16} />} label="Bỏ qua đã chọn" busy={busyAction === 'skipSelected'} disabled={disabled || !hasSelection} onClick={onSkipSelected} />
         <ActionButton icon={<ArrowUp size={16} />} label="Ưu tiên" busy={busyAction === 'prioritize'} disabled={disabled || !hasSelection} onClick={onPrioritizeSelected} />
         <ActionButton icon={<ArrowUp size={16} />} label="Lên đầu" busy={busyAction === 'top'} disabled={disabled || !hasSelection} onClick={onMoveToTop} />

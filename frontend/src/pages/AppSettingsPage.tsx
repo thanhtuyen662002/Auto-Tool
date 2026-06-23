@@ -97,7 +97,7 @@ export default function AppSettingsPage() {
       <div className="mb-5">
         <h1 className="text-2xl font-semibold text-ink">Cài đặt chung</h1>
         <p className="mt-1 text-sm text-muted">
-          Các thông tin này chỉ cần nhập một lần và sẽ được backend dùng khi tạo kịch bản hoặc tạo giọng đọc.
+          Các thông tin này chỉ cần nhập một lần và sẽ được bộ xử lý dùng khi tạo kịch bản hoặc tạo giọng đọc.
         </p>
       </div>
 
@@ -121,9 +121,13 @@ export default function AppSettingsPage() {
           <section className="rounded-md border border-white/10 bg-black/10 p-5">
           <h2 className="mb-3 text-base font-semibold text-ink">Gemini</h2>
           <TextArea
-            label="Danh sách Gemini API key"
+            label="Danh sách khóa Gemini (mỗi dòng một khóa)"
             value={(settings.gemini_api_keys ?? []).join('\n')}
             rows={6}
+            placeholder={'AIzaSy... (khóa 1)\nAIzaSy... (khóa 2)'}
+            className="font-mono text-xs"
+            spellCheck={false}
+            autoComplete="off"
             onChange={(value) =>
               update({
                 gemini_api_keys: value
@@ -134,7 +138,7 @@ export default function AppSettingsPage() {
             }
           />
           <p className="mt-2 text-xs text-muted">
-            Mỗi dòng là một key. Khi một key lỗi, backend sẽ xoay sang key tiếp theo.
+            Mỗi dòng là một khóa. Khi một khóa lỗi hoặc hết hạn mức, hệ thống sẽ tự dùng khóa tiếp theo.
           </p>
           </section>
 

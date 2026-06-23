@@ -20,7 +20,7 @@ const labels: Record<SystemStatusValue | 'connected' | 'offline' | 'unknown', st
 };
 
 const descriptions = {
-  backend: 'Máy chủ xử lý cục bộ cho quét, render, nhận diện chữ, giọng đọc và xuất bản.',
+  backend: 'Bộ xử lý cục bộ dùng để quét, dựng video, nhận diện chữ, tạo giọng đọc và xuất bản.',
   ffmpeg: 'Cần để đọc, ghép, chèn phụ đề và render video.',
   ffprobe: 'Cần để đọc thông tin video trước khi xử lý.',
   translation: 'Dùng để dịch phụ đề hoặc lời dẫn sang tiếng Việt.',
@@ -81,7 +81,7 @@ export default function StudioSystemStatus({ status, loading, onRefresh }: Props
       </div>
       {status.backend !== 'connected' ? (
         <div className="mt-4 rounded-md border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
-          Backend đang offline hoặc chưa phản hồi. Bạn vẫn có thể xem UI, nhưng cần backend để scan và render.
+          Bộ xử lý đang tắt hoặc chưa phản hồi. Bạn vẫn có thể xem giao diện, nhưng cần bật bộ xử lý để quét và render.
         </div>
       ) : null}
     </GlassCard>

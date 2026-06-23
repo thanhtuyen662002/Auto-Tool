@@ -1590,7 +1590,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
   }
 
   async function browseOutputFolder() {
-    const path = await browseStartFolder('Chọn output folder', outputFolder);
+    const path = await browseStartFolder('Chọn thư mục đầu ra', outputFolder);
     if (path) {
       setOutputFolder(path);
       setRecentOutputFolders((current) => addRecentFolder(RECENT_OUTPUT_KEY, current, path));
@@ -1731,9 +1731,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       const response = await runFinalOutputQAForJob(jobId, platformTarget);
       await loadResults(jobId);
       setResultsTab('final_qa');
-      setActionMessage(`Checked ${response.summary.total_checked} final output(s).`);
+      setActionMessage(`Đã kiểm tra chất lượng ${response.summary.total_checked} video.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not run final output QA.');
+      setError(err instanceof Error ? err.message : 'Không thể kiểm tra chất lượng video.');
     } finally {
       setBusy(false);
     }
@@ -1753,9 +1753,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       });
       setExportPack(response.export_pack);
       await loadResults(jobId);
-      setActionMessage(`Export pack created: ${response.export_pack.output_dir}`);
+      setActionMessage(`Đã tạo gói xuất bản: ${response.export_pack.output_dir}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create export pack.');
+      setError(err instanceof Error ? err.message : 'Không thể tạo gói xuất bản.');
     } finally {
       setBusy(false);
     }
@@ -3014,8 +3014,8 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   <div>SRT đã sửa: {output.corrected_srt_file || '-'}</div>
                   <div>ASS: {output.corrected_ass_file || output.subtitle_ass_file || '-'}</div>
                   <div>Nhạc nền: {output.bgm_file || '-'}</div>
-                  <div>Log: {output.log_file || '-'}</div>
-                  <div>Failed step: {output.failed_step || '-'}</div>
+                  <div>Nhật ký: {output.log_file || '-'}</div>
+                  <div>Bước lỗi: {output.failed_step || '-'}</div>
                 </div>
                 {output.reup_mode === 'silent_immersive' ? (
                   <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
@@ -3848,7 +3848,7 @@ function buildChecklist({
       id: 'output',
       label: 'Thư mục đầu ra',
       status: outputFolder.trim() ? 'ok' : 'missing',
-      message: outputFolder.trim() ? 'Tool sẽ kiểm tra quyền ghi khi bắt đầu xử lý.' : 'Chưa chọn output folder.',
+      message: outputFolder.trim() ? 'Tool sẽ kiểm tra quyền ghi khi bắt đầu xử lý.' : 'Chưa chọn thư mục đầu ra.',
     },
     {
       id: 'music',
@@ -3867,7 +3867,7 @@ function buildChecklist({
       message: needsGemini
         ? hasGemini
           ? 'Gemini đã sẵn sàng để dịch hoặc tạo nội dung.'
-          : 'Chưa xác nhận được Gemini API key. Nếu backend yêu cầu Gemini, tool sẽ chặn trước khi chạy.'
+          : 'Chưa xác nhận được khóa API Gemini. Nếu quy trình cần Gemini, tool sẽ dừng trước khi chạy.'
         : 'Flow hiện tại không yêu cầu Gemini.',
     },
     {
@@ -3884,9 +3884,9 @@ function buildChecklist({
     },
     {
       id: 'backend',
-      label: 'Backend',
+      label: 'Bộ xử lý',
       status: backendReady ? 'ok' : 'warning',
-      message: backendReady ? 'Connected.' : 'Backend sẽ được kiểm tra lại khi start.',
+      message: backendReady ? 'Đã kết nối.' : 'Bộ xử lý sẽ được kiểm tra lại khi bắt đầu.',
     },
   ];
 }
@@ -3906,7 +3906,7 @@ function buildValidationMessages(
   checklist
     .filter((item) => item.status === 'missing')
     .forEach((item) => messages.push({ id: `missing-${item.id}`, tone: 'error', message: item.message || `${item.label} đang thiếu.` }));
-  if (!dependencyStatus) messages.push({ id: 'backend', tone: 'warning', message: 'Backend đang offline hoặc chưa phản hồi. Hãy khởi động backend rồi thử lại.' });
+  if (!dependencyStatus) messages.push({ id: 'backend', tone: 'warning', message: 'Bộ xử lý đang tắt hoặc chưa phản hồi. Hãy khởi động lại tool rồi thử lại.' });
   if (scanSummary?.invalid) messages.push({ id: 'scan-invalid', tone: 'warning', message: `Folder có ${scanSummary.invalid} file không đọc được. Tool sẽ bỏ qua hoặc bạn có thể kiểm tra lại.` });
   if (autoRender) messages.push({ id: 'auto-render', tone: 'warning', message: `${preset?.name ?? 'Chế độ hiện tại'} sẽ xuất MP4 ngay, không chờ duyệt phụ đề/caption.` });
   if (preset?.id === 'ocr_priority' && dependencyStatus && !dependencyStatus.ocr_available) {
@@ -4223,7 +4223,7 @@ function AutoRouteNoSpeechCard({
       </label>
       {enabled ? (
         <div className="rounded-md border border-sky-300/20 bg-sky-300/10 p-3 text-xs leading-5 text-sky-100">
-          Video được chuyển sẽ dùng cài đặt nhạc, khung phủ và giọng đọc hiện tại. Log của từng video vẫn ghi mã kỹ thuật `auto_routed_silent_immersive` để dễ lọc kết quả sau lô.
+          Video được chuyển sẽ dùng cài đặt nhạc, khung phủ và giọng đọc hiện tại. Tool vẫn ghi log nội bộ để bạn dễ lọc lại nhóm video này trong kết quả, không cần nhớ mã kỹ thuật.
         </div>
       ) : null}
     </GlassCard>
@@ -4314,7 +4314,7 @@ function VoiceoverCard({
       </label>
       {enabled && provider === 'google_cloud_tts' ? (
         <div className="rounded-md border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
-          Google Cloud TTS cần API key hoặc Service Account trong Cài đặt hệ thống. Nếu chưa cấu hình, backend sẽ chặn render trước khi chạy.
+          Google Cloud TTS cần khóa API hoặc Service Account trong Cài đặt hệ thống. Nếu chưa cấu hình, tool sẽ dừng trước khi render.
         </div>
       ) : null}
     </GlassCard>

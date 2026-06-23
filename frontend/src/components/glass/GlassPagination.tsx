@@ -9,6 +9,7 @@ interface Props {
 
 export default function GlassPagination({ currentPage, totalPages, onPageChange, className = '' }: Props) {
   if (totalPages <= 1) return null;
+  const spacingClass = className || 'mt-6';
 
   const pages: number[] = [];
   if (totalPages <= 7) {
@@ -29,7 +30,7 @@ export default function GlassPagination({ currentPage, totalPages, onPageChange,
   }
 
   return (
-    <div className={`flex items-center justify-center gap-2 mt-6 ${className}`}>
+    <div className={`flex items-center justify-center gap-2 ${spacingClass}`}>
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}

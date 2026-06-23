@@ -7,7 +7,7 @@ const filters: Array<{ value: ResultFilter; label: string; countKey?: keyof Resu
   { value: 'ready', label: 'Sẵn sàng', countKey: 'ready' },
   { value: 'warnings', label: 'Cảnh báo', countKey: 'warnings' },
   { value: 'failed', label: 'Lỗi', countKey: 'failed' },
-  { value: 'qa_failed', label: 'QA lỗi', countKey: 'qaFailed' },
+  { value: 'qa_failed', label: 'Lỗi kiểm tra', countKey: 'qaFailed' },
   { value: 'needs_review', label: 'Cần đánh giá', countKey: 'needsReview' },
 ];
 

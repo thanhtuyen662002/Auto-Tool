@@ -32,7 +32,7 @@ export default function LocalAppSettingsCard() {
         setConfig(loadedConfig);
         setFrontendStatus(loadedStatus);
       })
-      .catch((error) => setMessage(error instanceof Error ? error.message : 'Không thể tải Local App settings.'))
+      .catch((error) => setMessage(error instanceof Error ? error.message : 'Không thể tải cài đặt ứng dụng cục bộ.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -43,9 +43,9 @@ export default function LocalAppSettingsCard() {
       const saved = await saveLocalAppConfig(config);
       setConfig(saved);
       syncLocalFolderDefaults(saved);
-      setMessage('Đã lưu Local App settings.');
+      setMessage('Đã lưu cài đặt ứng dụng cục bộ.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Không thể lưu Local App settings.');
+      setMessage(error instanceof Error ? error.message : 'Không thể lưu cài đặt ứng dụng cục bộ.');
     } finally {
       setLoading(false);
     }
@@ -77,7 +77,7 @@ export default function LocalAppSettingsCard() {
       setSystemCheck(nextSystemCheck);
       setFrontendStatus(nextFrontendStatus);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Backend đang offline.');
+      setMessage(error instanceof Error ? error.message : 'Bộ xử lý đang tắt hoặc chưa phản hồi.');
     } finally {
       setChecking(false);
     }
@@ -85,27 +85,27 @@ export default function LocalAppSettingsCard() {
 
   async function copyProductionUrl() {
     await copyText(frontendStatus?.data.single_port_url || config.single_port_url);
-    setMessage('Đã copy production URL.');
+    setMessage('Đã sao chép đường dẫn mở app.');
   }
 
   return (
     <div className="grid gap-5">
-      <SettingsSection title="Cấu hình ứng dụng Local" description="Cấu hình launcher, thư mục mặc định và các thao tác desktop trên máy hiện tại.">
+      <SettingsSection title="Ứng dụng cục bộ" description="Cấu hình cách tool mở trên máy này, thư mục mặc định và thao tác mở thư mục/tệp.">
         <div className="grid gap-4 lg:grid-cols-3">
           <GlassInput label="Thư mục nguồn mặc định" value={config.default_source_folder} onChange={(event) => setConfig({ ...config, default_source_folder: event.target.value })} />
           <GlassInput label="Thư mục đầu ra mặc định" value={config.default_output_folder} onChange={(event) => setConfig({ ...config, default_output_folder: event.target.value })} />
           <GlassInput label="Thư mục nhạc mặc định" value={config.default_music_folder} onChange={(event) => setConfig({ ...config, default_music_folder: event.target.value })} />
-          <GlassInput label="Địa chỉ Backend (Host)" value={config.backend_host} onChange={(event) => setConfig({ ...config, backend_host: event.target.value })} />
-          <GlassInput label="Cổng Backend (Port)" type="number" min={1} max={65535} value={config.backend_port} onChange={(event) => setConfig({ ...config, backend_port: Number(event.target.value) })} />
+          <GlassInput label="Địa chỉ bộ xử lý (Host)" value={config.backend_host} onChange={(event) => setConfig({ ...config, backend_host: event.target.value })} />
+          <GlassInput label="Cổng bộ xử lý (Port)" type="number" min={1} max={65535} value={config.backend_port} onChange={(event) => setConfig({ ...config, backend_port: Number(event.target.value) })} />
           <GlassInput label="Số mục gần đây tối đa" type="number" min={1} max={20} value={config.max_recent_items} onChange={(event) => setConfig({ ...config, max_recent_items: Number(event.target.value) })} />
-          <GlassInput label="Đường dẫn Single Port (URL)" value={config.single_port_url} onChange={(event) => setConfig({ ...config, single_port_url: event.target.value })} />
-          <GlassInput label="Đường dẫn bản build Frontend" value={config.frontend_dist_path} onChange={(event) => setConfig({ ...config, frontend_dist_path: event.target.value })} />
+          <GlassInput label="Đường dẫn mở app (URL)" value={config.single_port_url} onChange={(event) => setConfig({ ...config, single_port_url: event.target.value })} />
+          <GlassInput label="Thư mục giao diện đã build" value={config.frontend_dist_path} onChange={(event) => setConfig({ ...config, frontend_dist_path: event.target.value })} />
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <Toggle label="Tự mở trình duyệt khi app khởi động" checked={config.auto_open_browser} onChange={(checked) => setConfig({ ...config, auto_open_browser: checked })} />
-          <Toggle label="Cho phép Open Folder / Reveal File" checked={config.enable_open_folder} onChange={(checked) => setConfig({ ...config, enable_open_folder: checked })} />
-          <Toggle label="Chạy chế độ đơn cổng (Production single port)" checked={config.production_single_port} onChange={(checked) => setConfig({ ...config, production_single_port: checked })} />
-          <Toggle label="Backend tự phục vụ file build Frontend" checked={config.serve_frontend_dist} onChange={(checked) => setConfig({ ...config, serve_frontend_dist: checked })} />
+          <Toggle label="Cho phép mở thư mục / hiện tệp trong máy" checked={config.enable_open_folder} onChange={(checked) => setConfig({ ...config, enable_open_folder: checked })} />
+          <Toggle label="Chạy app trên một cổng duy nhất" checked={config.production_single_port} onChange={(checked) => setConfig({ ...config, production_single_port: checked })} />
+          <Toggle label="Bộ xử lý tự phục vụ giao diện đã build" checked={config.serve_frontend_dist} onChange={(checked) => setConfig({ ...config, serve_frontend_dist: checked })} />
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
           <GlassButton variant="primary" loading={loading} onClick={() => void save()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><Save size={16} /> Lưu</GlassButton>
@@ -116,22 +116,22 @@ export default function LocalAppSettingsCard() {
         {message ? <p className="mt-3 text-sm text-cyan-100">{message}</p> : null}
       </SettingsSection>
  
-      <SettingsSection title="Trạng thái máy chủ (Production)" description="Trạng thái frontend production build được phục vụ trực tiếp bởi FastAPI.">
+      <SettingsSection title="Trạng thái mở app cục bộ" description="Kiểm tra app đã có thể chạy gọn trên một địa chỉ cục bộ hay chưa.">
         <div className="grid gap-3 md:grid-cols-3">
-          <StatusValue label="Chế độ chạy" value={frontendStatus?.data.mode === 'production_single_port' ? 'Single Port (Production)' : frontendStatus ? 'Phát triển (Development)' : 'Không xác định'} ready={frontendStatus?.data.mode === 'production_single_port'} />
-          <StatusValue label="Frontend Build" value={frontendStatus?.data.index_html_exists ? 'Đã tìm thấy bản build' : 'Thiếu bản build'} ready={Boolean(frontendStatus?.data.index_html_exists)} />
+          <StatusValue label="Chế độ chạy" value={frontendStatus?.data.mode === 'production_single_port' ? 'Một cổng duy nhất' : frontendStatus ? 'Chế độ phát triển' : 'Không xác định'} ready={frontendStatus?.data.mode === 'production_single_port'} />
+          <StatusValue label="Giao diện đã build" value={frontendStatus?.data.index_html_exists ? 'Đã tìm thấy' : 'Chưa có'} ready={Boolean(frontendStatus?.data.index_html_exists)} />
           <StatusValue label="Máy chủ cục bộ" value={frontendStatus?.data.served_by_backend ? 'Sẵn sàng' : 'Không xác định'} ready={Boolean(frontendStatus?.data.served_by_backend)} />
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-black/15 p-4">
           <div className="min-w-0">
-            <div className="text-xs font-semibold uppercase text-slate-500">Đường dẫn URL Single Port</div>
+            <div className="text-xs font-semibold uppercase text-slate-500">Đường dẫn mở app</div>
             <div className="mt-1 truncate font-mono text-sm text-cyan-100">{frontendStatus?.data.single_port_url || config.single_port_url}</div>
           </div>
-          <GlassButton variant="secondary" onClick={() => void copyProductionUrl()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><Copy size={15} /> Sao chép URL Single Port</GlassButton>
+          <GlassButton variant="secondary" onClick={() => void copyProductionUrl()} className="hover:scale-[1.02] active:scale-[0.98] transition-all"><Copy size={15} /> Sao chép đường dẫn</GlassButton>
         </div>
         {frontendStatus && !frontendStatus.success ? (
           <div className="mt-4 rounded-md border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
-            Bản build production của Frontend chưa tồn tại. Hãy chạy scripts/build_frontend hoặc scripts/start_local_prod để build trước.
+            Chưa có bản giao diện đã build. Hãy dùng launcher hoặc lệnh build đi kèm để tạo bản giao diện trước.
           </div>
         ) : null}
       </SettingsSection>

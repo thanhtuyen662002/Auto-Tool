@@ -28,8 +28,8 @@ export default function FirstRunChecklist({ status, onRefresh, prominent }: Prop
         </div>
         <div className="mt-5 grid gap-3 lg:grid-cols-2">
           <SetupRequirementCard
-            title="Backend"
-            description="Server xử lý local cho scan, render và xuất kết quả."
+            title="Bộ xử lý"
+            description="Phần xử lý cục bộ dùng để quét, render và xuất kết quả."
             status={status.backend === 'connected' ? 'connected' : 'offline'}
             topic="backend"
             onHelp={setHelpTopic}

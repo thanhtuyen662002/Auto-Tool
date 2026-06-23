@@ -18,9 +18,9 @@ export default function ResultRetryPanel({
       <div className="flex items-start gap-3">
         <ShieldAlert className="mt-0.5 shrink-0 text-rose-300" size={20} />
         <div className="min-w-0">
-          <h2 className="font-semibold text-white">Retry lỗi</h2>
+          <h2 className="font-semibold text-white">Chạy lại video lỗi</h2>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Có {failedItems.length} output lỗi hoặc không qua QA. Retry sẽ tạo job mới bằng endpoint Douyin retry hiện có.
+            Có {failedItems.length} video lỗi hoặc không qua kiểm tra cuối. Tool sẽ tạo lô mới chỉ cho nhóm video này.
           </p>
         </div>
       </div>
@@ -28,7 +28,7 @@ export default function ResultRetryPanel({
         {failedItems.slice(0, 4).map((item) => (
           <div className="min-w-0 rounded-md border border-rose-300/20 bg-rose-400/10 p-3 text-xs" key={item.id}>
             <div className="truncate font-semibold text-rose-100">{item.filename}</div>
-            <div className="mt-1 text-rose-200/80">{item.failedStep || item.errorText || 'Render/QA thất bại'}</div>
+            <div className="mt-1 text-rose-200/80">{item.failedStep || item.errorText || 'Render hoặc kiểm tra thất bại'}</div>
           </div>
         ))}
       </div>

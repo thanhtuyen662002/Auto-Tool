@@ -1,5 +1,20 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.51
+
+### Highlights
+
+- Fixed Light theme readability across notice cards, guidance cards, status panels, toast notifications, and common action blocks.
+- Made Douyin Reup result pages denser with a 2/3/4-column video grid and pagination instead of showing every output at once.
+- Changed Gemini API key settings to a multi-line input so users can paste one key per line.
+- Reworded technical labels such as Backend, Final QA, Export Pack, Retry, Log, and output into clearer Vietnamese UI copy.
+- Removed internal silent-reup routing codes from visible user guidance.
+
+### QA
+
+- Frontend production build passed.
+- Manually checked Light theme pages for remaining large dark-theme blocks.
+
 ## v1.0.50
 
 ### Highlights

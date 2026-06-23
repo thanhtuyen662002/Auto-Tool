@@ -9,15 +9,15 @@ import { formatBytes } from '../../utils/formatBytes';
 
 const categoryLabels: Record<string, string> = {
   config: 'Cài đặt',
-  database: 'Database',
+  database: 'Cơ sở dữ liệu',
   projects: 'Dữ liệu Dự án',
-  outputs: 'Outputs',
+  outputs: 'Video kết quả',
   exports: 'Gói xuất bản',
   subtitles: 'Phụ đề',
-  logs: 'Logs',
-  cache: 'Cache',
-  temp: 'Temp',
-  backups: 'Bản sao lưu (Backups)',
+  logs: 'Nhật ký',
+  cache: 'Bộ nhớ tạm',
+  temp: 'Tệp tạm',
+  backups: 'Bản sao lưu',
   frontend: 'Bản build giao diện',
 };
 
@@ -57,9 +57,9 @@ export default function DataStorageUsageCard() {
     if (!target) return;
     try {
       await openFolder(target);
-      setMessage('Đã mở thư mục outputs.');
+      setMessage('Đã mở thư mục video kết quả.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể mở thư mục outputs.');
+      setError(err instanceof Error ? err.message : 'Không thể mở thư mục video kết quả.');
     }
   }
 
@@ -77,7 +77,7 @@ export default function DataStorageUsageCard() {
               <RefreshCw size={16} /> Làm mới
             </GlassButton>
             <GlassButton variant="ghost" onClick={() => void openFirstOutputFolder()}>
-              Mở thư mục output
+              Mở thư mục video kết quả
             </GlassButton>
           </div>
         </div>
