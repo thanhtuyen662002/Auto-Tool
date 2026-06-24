@@ -50,18 +50,21 @@ class SpeechPresenceDetector:
         speech_segments_count = 0
         method = "audio_energy_heuristic"
 
-        if self._should_run_asr():
+        if self._should_run_asr(energy_score):
             try:
                 speech_segments_count = self._asr_segment_count(video_path)
                 asr_score = min(1.0, speech_segments_count / 4.0)
-                speech_score = max(speech_score, asr_score)
+                speech_score = asr_score
                 method = "asr_fast_detect"
             except Exception as exc:
-                warnings.append(f"ASR speech detect không chạy được, đã dùng audio energy heuristic: {exc}")
+                speech_score = 0.0
+                method = "asr_unavailable"
+                warnings.append(f"ASR speech detect failed, keep video in silent mode to avoid mistaking music or operation sounds for speech: {exc}")
 
         if method == "audio_energy_heuristic":
+            speech_score = 0.0
             warnings.append(
-                "Chỉ dùng audio energy heuristic nên không phân biệt chính xác lời thoại với nhạc/tiếng thao tác."
+                "Only audio energy was available, so this is not treated as confirmed speech. The video stays in silent mode unless ASR confirms speech."
             )
 
         return SpeechPresenceResult(
@@ -74,7 +77,7 @@ class SpeechPresenceDetector:
             warnings=_dedupe(warnings),
         )
 
-    def _should_run_asr(self) -> bool:
+    def _should_run_asr(self, energy_score: float = 1.0) -> bool:
         if self.enable_asr is not None:
             return self.enable_asr
         configured = os.getenv("AUTO_TOOL_SILENT_SPEECH_ASR", "").strip().lower()
@@ -82,7 +85,9 @@ class SpeechPresenceDetector:
             return False
         if configured in {"1", "true", "yes", "on"}:
             return True
-        return False
+        if configured and configured != "auto":
+            return False
+        return energy_score >= _env_float("AUTO_TOOL_SILENT_SPEECH_ASR_MIN_ENERGY", 0.18)
 
     @staticmethod
     def _audio_energy_score(video_path: str, max_duration: float, warnings: list[str]) -> float:
@@ -170,6 +175,13 @@ def _speech_asr_worker(video_path: str) -> int:
 def _env_int(name: str, default: int) -> int:
     try:
         return max(1, int(os.getenv(name, str(default)).strip()))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return max(0.0, min(1.0, float(os.getenv(name, str(default)).strip())))
     except ValueError:
         return default
 

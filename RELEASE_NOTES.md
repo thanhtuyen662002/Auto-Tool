@@ -1,5 +1,18 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.55
+
+### Highlights
+
+- Hardened Silent Mode speech detection so audio energy alone no longer pushes product-only videos into the voice reup flow.
+- Added automatic short ASR confirmation for suspicious audio before treating a silent-mode video as spoken content.
+- Kept music, ambient sound, and operation-noise videos in Silent Mode when ASR finds no clear speech segments or cannot run safely.
+
+### QA
+
+- Speech detector and Douyin silent/voice routing tests passed.
+- Silent product detector, silent pipeline, and silent review tests passed.
+
 ## v1.0.54
 
 ### Highlights

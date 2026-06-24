@@ -1035,7 +1035,7 @@ class DouyinReupService:
         )
         _step_progress(step_progress_callback, "speech_route_check", 3)
         speech = speech_result_for_video(video.path, route_settings)
-        if not speech.has_speech:
+        if not _speech_result_is_reliable_for_voice_route(speech):
             return None
 
         routed_settings = _voice_reup_settings_from_silent(settings)
@@ -1301,6 +1301,14 @@ def _voice_reup_settings_from_silent(settings: DouyinReupSettings) -> DouyinReup
             "silent_voiceover_voice": settings.silent_voiceover_voice,
         }
     )
+
+
+def _speech_result_is_reliable_for_voice_route(speech: SpeechPresenceResult) -> bool:
+    if not speech.has_speech:
+        return False
+    if speech.method == "audio_energy_heuristic":
+        return False
+    return speech.speech_segments_count > 0 or speech.method in {"asr_fast_detect", "test"}
 
 
 def _silent_reup_settings_from_voice(settings: DouyinReupSettings) -> DouyinReupSettings:
