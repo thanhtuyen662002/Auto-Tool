@@ -319,6 +319,59 @@ def test_silent_batch_does_not_auto_route_audio_energy_only_to_voice_flow(tmp_pa
     assert routed is None
 
 
+def test_silent_batch_does_not_auto_route_single_weak_asr_segment(tmp_path, monkeypatch):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "outputs"
+    source_dir.mkdir()
+    output_dir.mkdir()
+    video_path = source_dir / "credit_only.mp4"
+    video_path.write_bytes(b"fake video")
+
+    monkeypatch.setattr(
+        "app.modules.douyin_reup.douyin_reup_service.speech_result_for_video",
+        lambda video_path, settings: SpeechPresenceResult(
+            video_path=video_path,
+            has_speech=True,
+            speech_score=0.4,
+            audio_energy_score=0.9,
+            speech_segments_count=1,
+            method="asr_fast_detect",
+            warnings=[],
+        ),
+    )
+
+    settings = DouyinReupSettings(
+        enabled=True,
+        preset_id="silent_chill_immersive",
+        silent_mode_detection=True,
+        detect_speech_presence=True,
+        auto_route_speech_to_voice_reup=True,
+        auto_route_speech_threshold=0.28,
+    )
+    video = DouyinVideoItem(
+        path=str(video_path),
+        filename=video_path.name,
+        duration=8,
+        width=1080,
+        height=1920,
+        fps=30,
+        has_audio=True,
+    )
+
+    routed = DouyinReupService()._route_silent_video_to_voice_if_needed(
+        index=1,
+        video=video,
+        config=_project_config(tmp_path, source_dir, output_dir).model_copy(update={"douyin_reup": settings}),
+        settings=settings,
+        output_root=output_dir,
+        project_id=None,
+        job_id=None,
+        step_progress_callback=None,
+    )
+
+    assert routed is None
+
+
 def test_voice_batch_auto_routes_no_speech_video_to_silent_flow(tmp_path, monkeypatch):
     source_dir = tmp_path / "source"
     output_dir = tmp_path / "outputs"

@@ -93,6 +93,9 @@ class SilentProductDetector:
             except (ScriptGenerationError, OSError, ValueError, KeyError, TypeError) as exc:
                 warnings.append(f"AI vision không nhận diện được sản phẩm: {exc}")
 
+        if vision_image_paths and not gemini_api_keys:
+            warnings.append("Chua co Gemini API key nen AI vision chua chay; tool tam dung nhan dien heuristic.")
+
         fallback = self._fallback_report(
             video_path=video_path,
             segments=segments,
@@ -568,7 +571,7 @@ def _make_cv2_focus_crop(source: Path, target: Path) -> bool:
         import numpy as np
     except Exception:
         return False
-    image = cv2.imread(str(source))
+    image = _read_cv2_image(source)
     if image is None:
         return False
     height, width = image.shape[:2]
@@ -607,7 +610,7 @@ def _make_cv2_focus_crop(source: Path, target: Path) -> bool:
         if (x2 - x1) < width * 0.22 or (y2 - y1) < height * 0.18:
             return False
         crop = image[y1:y2, x1:x2]
-        return bool(cv2.imwrite(str(target), crop))
+        return _write_cv2_image(target, crop)
     except Exception:
         return False
 
@@ -627,6 +630,37 @@ def _make_center_focus_crop(source: Path, target: Path) -> bool:
             left = max(0, (width - crop_width) // 2)
             top = max(0, (height - crop_height) // 2)
             image.crop((left, top, left + crop_width, top + crop_height)).save(target, quality=92)
+        return target.exists() and target.stat().st_size > 0
+    except Exception:
+        return False
+
+
+def _read_cv2_image(source: Path):
+    try:
+        import cv2
+        import numpy as np
+    except Exception:
+        return None
+    try:
+        data = np.frombuffer(source.read_bytes(), dtype=np.uint8)
+        if data.size <= 0:
+            return None
+        return cv2.imdecode(data, cv2.IMREAD_COLOR)
+    except Exception:
+        return None
+
+
+def _write_cv2_image(target: Path, image) -> bool:
+    try:
+        import cv2
+    except Exception:
+        return False
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        if not ok:
+            return False
+        target.write_bytes(encoded.tobytes())
         return target.exists() and target.stat().st_size > 0
     except Exception:
         return False

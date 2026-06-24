@@ -97,6 +97,8 @@ def test_silent_pipeline_render_from_plan_uses_existing_renderer(tmp_path, monke
 
     assert result.status == "success"
     assert result.output_video_path
+    assert result.output_video_path.endswith(".mp4")
+    assert Path(result.output_video_path).exists()
     assert Path(result.caption_srt_path or "").exists()
 
 

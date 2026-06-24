@@ -1,5 +1,20 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.56
+
+### Highlights
+
+- Fixed Silent Mode AI vision on Windows by writing internal analysis frames with stable ASCII filenames and Unicode-safe image encoding.
+- Restored Gemini vision product detection for Douyin videos with Chinese/emoji filenames, including frame and focus-crop evidence in product reports.
+- Filtered ASR credit/watermark text such as `字幕by...` so silent product videos are not routed into the voice reup flow by mistake.
+- Reduced false `overlay_missing` QA warnings when overlay mode is disabled, while keeping final MP4 validation in the silent render path.
+
+### QA
+
+- Silent product detector, visual frame analyzer, silent render pipeline, speech detector, Douyin routing, and final output QA tests passed.
+- Verified against the real test batch that new frame paths exist and are passed into AI vision.
+- Frontend production build passed.
+
 ## v1.0.55
 
 ### Highlights

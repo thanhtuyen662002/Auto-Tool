@@ -590,7 +590,7 @@ class DouyinReupService:
                 overlay_path=render_payload.get("overlay_file"),
                 subtitle_expected=settings.burn_subtitle,
                 audio_expected=settings.keep_original_audio or settings.add_bgm or settings.generate_voiceover_for_silent_video,
-                overlay_expected=settings.add_overlay,
+                overlay_expected=_overlay_expected_for_qa(settings),
                 report_path=str(video_dir / f"video_{index:03d}_final_qa.json"),
             )
             steps["final_output_qa"] = final_qa_report.status
@@ -887,7 +887,7 @@ class DouyinReupService:
                     or settings.add_bgm_for_silent_video
                     or settings.generate_voiceover_for_silent_video
                 ),
-                overlay_expected=settings.add_overlay,
+                overlay_expected=_overlay_expected_for_qa(settings),
                 report_path=str(video_dir / f"video_{index:03d}_final_qa.json"),
             )
             steps["final_output_qa"] = final_qa_report.status
@@ -1308,7 +1308,13 @@ def _speech_result_is_reliable_for_voice_route(speech: SpeechPresenceResult) -> 
         return False
     if speech.method == "audio_energy_heuristic":
         return False
-    return speech.speech_segments_count > 0 or speech.method in {"asr_fast_detect", "test"}
+    if speech.method in {"asr_fast_detect", "test"}:
+        return speech.speech_segments_count >= 2
+    return speech.speech_segments_count >= 2
+
+
+def _overlay_expected_for_qa(settings: DouyinReupSettings) -> bool:
+    return bool(settings.add_overlay and settings.overlay_mode != "none")
 
 
 def _silent_reup_settings_from_voice(settings: DouyinReupSettings) -> DouyinReupSettings:

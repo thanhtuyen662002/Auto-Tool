@@ -104,12 +104,13 @@ class VisualSegmentAnalyzer:
                     continue
                 window = [sample for sample in samples if start <= sample["time"] <= end] or [min(samples, key=lambda item: abs(item["time"] - ((start + end) / 2)))]
                 mid_sample = min(window, key=lambda item: abs(item["time"] - ((start + end) / 2)))
-                frame_path = frames_dir / f"{Path(video_path).stem}_seg_{index:03d}.jpg"
-                cv2.imwrite(str(frame_path), mid_sample["frame"])
+                frame_path = frames_dir / f"frame_seg_{index:03d}.jpg"
+                frame_written = _write_cv2_frame(frame_path, mid_sample["frame"])
                 motion_score = mean(sample["motion_score"] for sample in window)
                 sharpness_score = mean(sample["sharpness_score"] for sample in window)
                 brightness_score = mean(sample["brightness_score"] for sample in window)
                 visual_score = _clamp01((sharpness_score * 0.45) + (brightness_score * 0.25) + (motion_score * 0.30))
+                segment_warnings = [] if frame_written else ["Không ghi được frame đại diện để gửi AI vision."]
                 segments.append(
                     SilentVisualSegment(
                         id=f"seg_{index:03d}",
@@ -121,7 +122,8 @@ class VisualSegmentAnalyzer:
                         motion_score=round(motion_score, 4),
                         sharpness_score=round(sharpness_score, 4),
                         brightness_score=round(brightness_score, 4),
-                        representative_frame_path=str(frame_path),
+                        representative_frame_path=str(frame_path) if frame_written else None,
+                        warnings=segment_warnings,
                     )
                 )
             return segments
@@ -165,3 +167,19 @@ def _brightness_score(value: float) -> float:
 
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+def _write_cv2_frame(target: Path, frame) -> bool:
+    try:
+        import cv2
+    except Exception:
+        return False
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        if not ok:
+            return False
+        target.write_bytes(encoded.tobytes())
+        return target.exists() and target.stat().st_size > 0
+    except Exception:
+        return False

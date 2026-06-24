@@ -3416,7 +3416,7 @@ def run_silent_reup_plan_job(
                     or settings.add_bgm_for_silent_video
                     or settings.generate_voiceover_for_silent_video
                 ),
-                overlay_expected=settings.add_overlay,
+                overlay_expected=bool(settings.add_overlay and settings.overlay_mode != "none"),
                 report_path=str(Path(output_dir) / "video_001_final_qa.json"),
             )
             qa_summary = {
@@ -3734,7 +3734,7 @@ def run_subtitle_review_render_job(
                         or document_settings.add_bgm
                         or document_settings.generate_voiceover_for_silent_video
                     ),
-                    overlay_expected=document_settings.add_overlay,
+                    overlay_expected=bool(document_settings.add_overlay and document_settings.overlay_mode != "none"),
                     report_path=str(document_dir / f"video_{index:03d}_final_qa.json"),
                 )
                 qa_summary = {

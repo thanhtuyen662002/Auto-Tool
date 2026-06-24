@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_video
-from app.modules.douyin_reup.subtitle_timing_guard import parse_srt_blocks
+from app.modules.douyin_reup.subtitle_timing_guard import clean_subtitle_text, parse_srt_blocks
 from app.modules.silent_immersive_reup.silent_schema import SpeechPresenceResult
 from app.utils.dependency_manager import DependencyError, resolve_tool
 from app.utils.process_isolation import run_in_isolated_process
@@ -167,9 +167,58 @@ def _speech_asr_worker(video_path: str) -> int:
             max_audio_seconds=_env_int("AUTO_TOOL_SILENT_SPEECH_MAX_AUDIO_SECONDS", 30),
         )
         try:
-            return len(parse_srt_blocks(str(output_path)))
+            return _count_reliable_asr_speech_segments(str(output_path))
         except (OSError, FFmpegError):
             return 0
+
+
+ASR_CREDIT_OR_WATERMARK_RE = re.compile(
+    r"("
+    r"字幕\s*(?:by|由|[:：])|"
+    r"(?:subtitle|subtitles|caption|captions)\s*(?:by|from|created|provided|edited)|"
+    r"(?:剪映|capcut)\s*(?:出品|制作|模板|水印)?|"
+    r"(?:抖音|douyin|tiktok)\s*(?:号|id|水印|作者|user|@)|"
+    r"(?:小米同学)|"
+    r"(?:索兰娅|soranya)"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _count_reliable_asr_speech_segments(srt_path: str) -> int:
+    blocks = parse_srt_blocks(srt_path)
+    reliable_blocks = []
+    for block in blocks:
+        text = clean_subtitle_text(block.text)
+        if not text or _is_asr_credit_or_watermark(text):
+            continue
+        signal_chars = _speech_signal_char_count(text)
+        duration = max(0.0, block.end - block.start)
+        if signal_chars < 4 and duration < 1.2:
+            continue
+        reliable_blocks.append((signal_chars, duration))
+
+    if not reliable_blocks:
+        return 0
+    if len(reliable_blocks) == 1:
+        signal_chars, duration = reliable_blocks[0]
+        return 2 if signal_chars >= 18 or duration >= 4.0 else 0
+    return len(reliable_blocks)
+
+
+def _is_asr_credit_or_watermark(text: str) -> bool:
+    normalized = re.sub(r"\s+", "", text).casefold()
+    if not normalized:
+        return True
+    if ASR_CREDIT_OR_WATERMARK_RE.search(normalized):
+        return True
+    if normalized.startswith("@") and _speech_signal_char_count(normalized) <= 24:
+        return True
+    return False
+
+
+def _speech_signal_char_count(text: str) -> int:
+    return len(re.findall(r"[\w\u4e00-\u9fff]", text, flags=re.UNICODE))
 
 
 def _env_int(name: str, default: int) -> int:
