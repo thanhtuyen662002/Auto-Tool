@@ -617,6 +617,7 @@ export interface DouyinOutputResult {
   speech_score?: number | null;
   caption_source?: string | null;
   silent_plan_file?: string | null;
+  product_detection?: SilentProductDetectionReport | null;
   voiceover_file?: string | null;
   voiceover_script_file?: string | null;
   voiceover_subtitle_file?: string | null;
@@ -1058,6 +1059,57 @@ export interface SilentCaptionLine {
 
 export type VisualTagCategory = 'industry' | 'scene' | 'action' | 'product_stage' | 'quality';
 
+export interface ProductDetectionEvidence {
+  source: 'frame' | 'visual_tag' | 'ocr_text' | 'filename' | 'folder_name' | 'manual' | 'heuristic';
+  value: string;
+  confidence: number;
+  segment_id?: string | null;
+  frame_path?: string | null;
+}
+
+export interface ProductDetectionCandidate {
+  display_name: string;
+  product_name: string;
+  product_type: string;
+  industry: string;
+  certainty: 'exact_product' | 'product_type' | 'category_only' | 'unknown';
+  confidence: number;
+  visible_features: string[];
+  use_cases: string[];
+  evidence: ProductDetectionEvidence[];
+  risk_flags: string[];
+}
+
+export interface ProductDetectionFrameObservation {
+  frame_label: string;
+  frame_path?: string | null;
+  crop_path?: string | null;
+  product_type: string;
+  industry: string;
+  primary_object: string;
+  is_product_visible: boolean;
+  confidence: number;
+  visible_features: string[];
+  evidence: string;
+  noise_objects: string[];
+}
+
+export interface SilentProductDetectionReport {
+  video_path: string;
+  provider: 'gemini_vision' | 'heuristic_fallback' | 'manual_context' | 'disabled';
+  model?: string | null;
+  status: 'detected' | 'fallback' | 'manual_context' | 'unavailable';
+  top_candidate?: ProductDetectionCandidate | null;
+  candidates: ProductDetectionCandidate[];
+  frame_observations: ProductDetectionFrameObservation[];
+  context_updates: Record<string, unknown>;
+  frame_paths: string[];
+  focus_crop_paths: string[];
+  average_confidence: number;
+  warnings: string[];
+  created_at: string;
+}
+
 export interface SilentVisualTag {
   tag: string;
   category: VisualTagCategory;
@@ -1151,6 +1203,7 @@ export interface SilentReupPlan {
     warnings: string[];
   };
   visual_tag_report?: VideoVisualTagReport | null;
+  product_detection?: SilentProductDetectionReport | null;
   warnings: string[];
 }
 

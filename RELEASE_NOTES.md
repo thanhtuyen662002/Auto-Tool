@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.54
+
+### Highlights
+
+- Upgraded Silent Mode product recognition with Gemini vision frames, crop evidence, candidate voting, and fallback context for videos without text/subtitles.
+- Added product detection details to silent output cards and preserved that context when rendering approved review documents.
+- Fixed Douyin result selection so failed or not-yet-rendered videos can still be selected for "Chọn sửa lại" and rerendered from the adjust flow.
+- Kept export selection separate from rerender selection so broken outputs are not accidentally included in export packs.
+
+### QA
+
+- Frontend production build passed.
+- Douyin retry, preset retry, silent review, silent pipeline, and silent product detector tests passed.
+
 ## v1.0.53
 
 ### Highlights

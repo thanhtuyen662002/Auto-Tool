@@ -120,13 +120,20 @@ export default function ResultPage() {
     const start = (currentPage - 1) * pageSize;
     return visibleItems.slice(start, start + pageSize);
   }, [visibleItems, currentPage, pageSize]);
-  const selectedCount = useMemo(() => items.filter((item) => selectedIds.has(item.id)).length, [items, selectedIds]);
+  const selectedItems = useMemo(() => items.filter((item) => selectedIds.has(item.id)), [items, selectedIds]);
+  const selectedCount = selectedItems.length;
+  const selectedExportCount = useMemo(() => selectedItems.filter((item) => item.exportEligible).length, [selectedItems]);
   const summary = useMemo(() => summarizeResults(items, selectedCount), [items, selectedCount]);
   const failedItems = useMemo(() => items.filter((item) => item.health === 'failed' || item.qaStatus === 'failed'), [items]);
   const isDouyinResult = isDouyinReup || Boolean(douyinSummary || (jobStatus?.project_id || projectId || '').toLowerCase().includes('douyin'));
+  const canSelectItem = useMemo(
+    () => (item: NormalizedResultItem) => (isDouyinResult ? Boolean(item.sourceVideo) : item.exportEligible),
+    [isDouyinResult],
+  );
+  const totalSelectable = useMemo(() => items.filter(canSelectItem).length, [canSelectItem, items]);
   const selectedRetryVideoIds = useMemo(
-    () => items.filter((item) => selectedIds.has(item.id)).map((item) => `video_${String(item.index).padStart(3, '0')}`),
-    [items, selectedIds],
+    () => selectedItems.filter((item) => Boolean(item.sourceVideo)).map((item) => `video_${String(item.index).padStart(3, '0')}`),
+    [selectedItems],
   );
   const reupAdjustUrl = useMemo(() => {
     if (!jobId) return '/douyin-reup';
@@ -154,7 +161,7 @@ export default function ResultPage() {
   }, [currentPage, totalPages]);
 
   function toggleSelected(item: NormalizedResultItem) {
-    if (!item.exportEligible) return;
+    if (!canSelectItem(item)) return;
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(item.id)) next.delete(item.id);
@@ -164,7 +171,7 @@ export default function ResultPage() {
   }
 
   function selectAllEligible() {
-    setSelectedIds(new Set(items.filter((item) => item.exportEligible).map((item) => item.id)));
+    setSelectedIds(new Set(items.filter(canSelectItem).map((item) => item.id)));
   }
 
   async function copyPath(item: NormalizedResultItem) {
@@ -336,7 +343,7 @@ export default function ResultPage() {
             options={exportOptions}
             outputIndexes={exportOutputIndexes}
             platformTarget={platformTarget}
-            selectedCount={selectedCount}
+            selectedCount={selectedExportCount}
             onCopyPack={() => void handleCopyPack()}
             onCreatePack={() => void handleCreateExportPack()}
             onExportScopeChange={setExportScope}
@@ -368,7 +375,7 @@ export default function ResultPage() {
               selectionMode={selectionMode}
               sort={sort}
               summary={summary}
-              totalSelectable={summary.exportEligible}
+              totalSelectable={totalSelectable}
               viewMode={viewMode}
               onClearSelection={() => setSelectedIds(new Set())}
               onFilterChange={setFilter}
@@ -382,7 +389,9 @@ export default function ResultPage() {
               items={paginatedItems}
               selectedIds={selectedIds}
               selectionMode={selectionMode}
+              selectionLabel={isDouyinResult ? 'Chọn sửa lại' : 'Chọn xuất'}
               viewMode={viewMode}
+              canSelectItem={canSelectItem}
               onCopyCaption={(item) => void copyCaption(item)}
               onCopyPath={(item) => void copyPath(item)}
               onRevealFile={(item) => void revealResult(item)}
@@ -417,6 +426,8 @@ export default function ResultPage() {
         item={previewItem}
         selected={Boolean(previewItem && selectedIds.has(previewItem.id))}
         selectionMode={selectionMode}
+        selectionLabel={isDouyinResult ? 'Chọn sửa lại' : 'Chọn xuất'}
+        canSelectItem={canSelectItem}
         onClose={() => setPreviewItem(null)}
         onCopyCaption={(item) => void copyCaption(item)}
         onCopyPath={(item) => void copyPath(item)}

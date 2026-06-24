@@ -9,6 +9,8 @@ export default function ResultVideoPreviewModal({
   item,
   selected,
   selectionMode,
+  selectionLabel = 'Chọn xuất',
+  canSelectItem = (result) => result.exportEligible,
   onClose,
   onToggleSelected,
   onCopyPath,
@@ -19,6 +21,8 @@ export default function ResultVideoPreviewModal({
   item: NormalizedResultItem | null;
   selected: boolean;
   selectionMode: boolean;
+  selectionLabel?: string;
+  canSelectItem?: (item: NormalizedResultItem) => boolean;
   onClose: () => void;
   onToggleSelected: (item: NormalizedResultItem) => void;
   onCopyPath: (item: NormalizedResultItem) => void;
@@ -55,9 +59,9 @@ export default function ResultVideoPreviewModal({
 
           <div className="flex flex-wrap gap-2">
             {selectionMode ? (
-              <GlassButton variant={selected ? 'primary' : 'secondary'} disabled={!item.exportEligible} onClick={() => onToggleSelected(item)}>
+              <GlassButton variant={selected ? 'primary' : 'secondary'} disabled={!canSelectItem(item)} onClick={() => onToggleSelected(item)}>
                 {selected ? <CheckSquare size={16} /> : <Square size={16} />}
-                {selected ? 'Đã chọn xuất' : 'Chọn xuất'}
+                {selected ? `Đã ${selectionLabel.toLowerCase()}` : selectionLabel}
               </GlassButton>
             ) : null}
             <GlassButton variant="secondary" disabled={!item.path} onClick={() => onCopyPath(item)}>

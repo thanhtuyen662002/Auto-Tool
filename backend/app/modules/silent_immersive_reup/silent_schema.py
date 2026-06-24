@@ -102,6 +102,65 @@ class SilentCaptionGenerationMetadata(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ProductDetectionEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["frame", "visual_tag", "ocr_text", "filename", "folder_name", "manual", "heuristic"]
+    value: str
+    confidence: float = Field(default=0.0, ge=0, le=1)
+    segment_id: str | None = None
+    frame_path: str | None = None
+
+
+class ProductDetectionCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str
+    product_name: str = ""
+    product_type: str = ""
+    industry: str = "general_product"
+    certainty: Literal["exact_product", "product_type", "category_only", "unknown"] = "unknown"
+    confidence: float = Field(default=0.0, ge=0, le=1)
+    visible_features: list[str] = Field(default_factory=list)
+    use_cases: list[str] = Field(default_factory=list)
+    evidence: list[ProductDetectionEvidence] = Field(default_factory=list)
+    risk_flags: list[str] = Field(default_factory=list)
+
+
+class ProductDetectionFrameObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    frame_label: str
+    frame_path: str | None = None
+    crop_path: str | None = None
+    product_type: str = ""
+    industry: str = "general_product"
+    primary_object: str = ""
+    is_product_visible: bool = True
+    confidence: float = Field(default=0.0, ge=0, le=1)
+    visible_features: list[str] = Field(default_factory=list)
+    evidence: str = ""
+    noise_objects: list[str] = Field(default_factory=list)
+
+
+class SilentProductDetectionReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    video_path: str
+    provider: Literal["gemini_vision", "heuristic_fallback", "manual_context", "disabled"] = "heuristic_fallback"
+    model: str | None = None
+    status: Literal["detected", "fallback", "manual_context", "unavailable"] = "fallback"
+    top_candidate: ProductDetectionCandidate | None = None
+    candidates: list[ProductDetectionCandidate] = Field(default_factory=list)
+    frame_observations: list[ProductDetectionFrameObservation] = Field(default_factory=list)
+    context_updates: dict[str, object] = Field(default_factory=dict)
+    frame_paths: list[str] = Field(default_factory=list)
+    focus_crop_paths: list[str] = Field(default_factory=list)
+    average_confidence: float = Field(default=0.0, ge=0, le=1)
+    warnings: list[str] = Field(default_factory=list)
+    created_at: str
+
+
 class SilentReupPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -117,6 +176,7 @@ class SilentReupPlan(BaseModel):
     caption_generation: SilentCaptionGenerationMetadata = Field(default_factory=SilentCaptionGenerationMetadata)
     visual_tagging: SilentVisualTaggingMetadata = Field(default_factory=SilentVisualTaggingMetadata)
     visual_tag_report: VideoVisualTagReport | None = None
+    product_detection: SilentProductDetectionReport | None = None
     warnings: list[str] = Field(default_factory=list)
 
 

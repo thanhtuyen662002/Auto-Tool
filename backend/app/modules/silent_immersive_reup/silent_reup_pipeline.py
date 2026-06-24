@@ -18,9 +18,11 @@ from app.modules.script_writer.script_writer import ProductVideoScript, Subtitle
 from app.modules.silent_immersive_reup.immersive_caption_generator import ImmersiveCaptionGenerator
 from app.modules.silent_immersive_reup.immersive_scene_classifier import ImmersiveSceneClassifier
 from app.modules.silent_immersive_reup.immersive_script_generator import ImmersiveScriptGenerator
+from app.modules.silent_immersive_reup.product_detector import SilentProductDetector, merge_product_detection_context
 from app.modules.silent_immersive_reup.silent_schema import (
     ImmersiveCaptionLine,
     SilentCaptionGenerationMetadata,
+    SilentProductDetectionReport,
     SilentReupPlan,
     SilentReupResult,
     SilentVisualSegment,
@@ -53,6 +55,7 @@ class SilentReupPipeline:
         voice_generator: VoiceGenerator | None = None,
         visual_tag_service: VisualTagService | None = None,
         visual_tag_repository: VisualTagRepository | None = None,
+        product_detector: SilentProductDetector | None = None,
     ) -> None:
         self.speech_detector = speech_detector
         self.visual_analyzer = visual_analyzer or VisualSegmentAnalyzer()
@@ -65,6 +68,7 @@ class SilentReupPipeline:
         self.voice_generator = voice_generator or VoiceGenerator()
         self.visual_tag_service = visual_tag_service or VisualTagService()
         self.visual_tag_repository = visual_tag_repository or VisualTagRepository()
+        self.product_detector = product_detector or SilentProductDetector()
         self.last_plan_path: str | None = None
         self.last_caption_srt_path: str | None = None
         self.last_ocr_source_srt_path: str | None = None
@@ -78,6 +82,8 @@ class SilentReupPipeline:
         self.recent_caption_texts: list[str] = []
         self.last_visual_tag_report = None
         self.last_visual_tag_report_id: str | None = None
+        self.last_product_detection_report: SilentProductDetectionReport | None = None
+        self.last_product_detection_path: str | None = None
 
     def build_plan(
         self,
@@ -101,6 +107,8 @@ class SilentReupPipeline:
         self.last_voiceover_subtitle_path = None
         self.last_visual_tag_report = None
         self.last_visual_tag_report_id = None
+        self.last_product_detection_report = None
+        self.last_product_detection_path = None
         target_dir = ensure_dir(output_dir)
         warnings: list[str] = []
 
@@ -158,17 +166,28 @@ class SilentReupPipeline:
             self.last_visual_tag_report_id = self.visual_tag_repository.save_report(visual_tag_report)
         except Exception as exc:
             warnings.append(f"Không thể lưu visual tag report: {exc}")
+        _progress(progress_callback, "product_detection", 78)
+        product_detection = self.product_detector.detect(
+            video_path=video_path,
+            segments=segments,
+            visual_tag_report=visual_tag_report,
+            product_context=product_context,
+            gemini_api_keys=gemini_api_keys or [],
+        )
+        self.last_product_detection_report = product_detection
+        warnings.extend(product_detection.warnings)
+        effective_product_context = merge_product_detection_context(product_context, product_detection)
         if settings.visual_caption_language.casefold() not in {"vi", "vi-vn"}:
             warnings.append("Visual caption templates are Vietnamese; visual_caption_language was normalized to vi.")
-        _progress(progress_callback, "caption_generation", 82)
+        _progress(progress_callback, "caption_generation", 84)
         if ocr_translated_srt_path or settings.generate_visual_captions:
             captions = self.caption_generator.generate_captions(
                 video_path=video_path,
                 segments=segments,
                 strategy=settings.silent_mode_strategy,
-                product_context=product_context,
+                product_context=effective_product_context,
                 ocr_translated_srt_path=ocr_translated_srt_path,
-                industry=(product_context or {}).get("industry") or (product_context or {}).get("category"),
+                industry=(effective_product_context or {}).get("industry") or (effective_product_context or {}).get("category"),
                 tone=settings.silent_caption_tone,
                 recent_caption_texts=self.recent_caption_texts,
                 video_recommended_industry=visual_tag_report.recommended_industry,
@@ -192,7 +211,7 @@ class SilentReupPipeline:
                     recommended_audio_mode="voiceover_plus_original_audio_plus_bgm",
                     warnings=warnings,
                 ),
-                product_context=product_context,
+                product_context=effective_product_context,
                 style=settings.visual_caption_style,
             )
             script_path = target_dir / f"{Path(video_path).stem}_voiceover_script.txt"
@@ -201,7 +220,11 @@ class SilentReupPipeline:
 
         _progress(progress_callback, "quality_scoring", 92)
         quality_scores = [caption.quality_score for caption in captions if caption.quality_score is not None]
-        industry = visual_tag_report.recommended_industry or normalize_silent_industry(product_context)
+        industry = (
+            str((effective_product_context or {}).get("industry") or (effective_product_context or {}).get("category") or "").strip()
+            or visual_tag_report.recommended_industry
+            or normalize_silent_industry(effective_product_context)
+        )
         template_count = len(
             self.caption_generator.template_service.list_templates(
                 industry=industry,
@@ -242,6 +265,7 @@ class SilentReupPipeline:
                 warnings=visual_tag_report.warnings,
             ),
             visual_tag_report=visual_tag_report,
+            product_detection=product_detection,
             warnings=_dedupe(warnings),
         )
         self.recent_caption_texts.extend(caption.text for caption in captions)
@@ -251,6 +275,9 @@ class SilentReupPipeline:
         self.last_plan_path = str(plan_path)
         visual_tag_report_path = target_dir / "visual_tag_report.json"
         write_json(visual_tag_report_path, visual_tag_report.model_dump(mode="json"))
+        product_detection_path = target_dir / "product_detection_report.json"
+        write_json(product_detection_path, product_detection.model_dump(mode="json"))
+        self.last_product_detection_path = str(product_detection_path)
         caption_log_path = target_dir / "caption_generation_log.json"
         write_json(
             caption_log_path,
@@ -261,7 +288,7 @@ class SilentReupPipeline:
                 "strategy": settings.silent_mode_strategy,
                 "industry": industry,
                 "status": "success" if captions else "success_with_warnings",
-                "steps": ["ocr", "visual_tagging", "caption_generation", "quality_scoring"],
+                "steps": ["ocr", "visual_tagging", "product_detection", "caption_generation", "quality_scoring"],
                 "failed_step": None,
                 "warnings": generation_warnings,
                 "errors": [],
@@ -269,10 +296,12 @@ class SilentReupPipeline:
                 "paths": {
                     "plan": str(plan_path),
                     "visual_tag_report": str(visual_tag_report_path),
+                    "product_detection_report": str(product_detection_path),
                     "ocr_source_srt": self.last_ocr_source_srt_path,
                     "ocr_translated_srt": self.last_ocr_translated_srt_path,
                 },
                 "caption_generation": plan.caption_generation.model_dump(mode="json"),
+                "product_detection": product_detection.model_dump(mode="json"),
                 "caption_sources": dict(Counter(caption.source for caption in captions)),
             },
         )
@@ -282,13 +311,14 @@ class SilentReupPipeline:
                 settings=settings,
                 industry=industry,
                 status="planned",
-                steps=["speech_detection", "visual_segmentation", "ocr", "visual_tagging", "caption_generation"],
+                steps=["speech_detection", "visual_segmentation", "ocr", "visual_tagging", "product_detection", "caption_generation"],
                 warnings=plan.warnings,
                 durations={"plan_seconds": round(perf_counter() - started, 3)},
                 paths={
                     "video": video_path,
                     "plan": str(plan_path),
                     "visual_tag_report": str(visual_tag_report_path),
+                    "product_detection_report": str(product_detection_path),
                     "caption_generation_log": str(caption_log_path),
                 },
             ),
@@ -318,7 +348,7 @@ class SilentReupPipeline:
             if industry == "auto"
             else industry
         )
-        context = {**(product_context or {}), "industry": effective_industry}
+        context = merge_product_detection_context({**(product_context or {}), "industry": effective_industry}, plan.product_detection)
         captions = self.caption_generator.generate_captions(
             video_path=plan.video_path,
             segments=plan.visual_segments,
@@ -516,10 +546,14 @@ class SilentReupPipeline:
             }
         )
         voiceover_path = None
+        review_product_context = merge_product_detection_context(
+            context.get("product_context") if isinstance(context.get("product_context"), dict) else None,
+            plan.product_detection,
+        )
         if settings.generate_voiceover_for_silent_video:
             script = self.script_generator.generate_voiceover_script(
                 plan,
-                product_context=context.get("product_context") if isinstance(context.get("product_context"), dict) else None,
+                product_context=review_product_context,
                 style=settings.visual_caption_style,
             )
             plan = plan.model_copy(update={"voiceover_script": script})
@@ -552,6 +586,7 @@ class SilentReupPipeline:
                 "voiceover_file": voiceover_path,
                 "voiceover_script_file": self.last_voiceover_script_path,
                 "voiceover_subtitle_file": self.last_voiceover_subtitle_path,
+                "product_detection": plan.product_detection.model_dump(mode="json") if plan.product_detection else None,
             }
         )
         write_json(

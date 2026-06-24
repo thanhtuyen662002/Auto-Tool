@@ -3027,6 +3027,12 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                     <div>Cách xử lý: {formatSilentStrategy(output.silent_strategy)}</div>
                     <div>Điểm phát hiện lời thoại: {Math.round((output.speech_score ?? 0) * 100)}%</div>
                     <div>Nguồn caption: {formatCaptionSource(output.caption_source)}</div>
+                    {output.product_detection?.top_candidate ? (
+                      <div>
+                        Nhận diện sản phẩm: {formatProductDetectionLabel(output.product_detection)}
+                        {' '}({Math.round((output.product_detection.average_confidence ?? 0) * 100)}%)
+                      </div>
+                    ) : null}
                     <div>Giọng đọc: {output.voiceover_file ? 'Có' : 'Không'}</div>
                     <div>BGM: {output.bgm_file ? 'Đã thêm' : 'Không'}</div>
                     <div className="break-all">Kế hoạch dựng: {output.silent_plan_file || '-'}</div>
@@ -4421,6 +4427,12 @@ function formatCaptionSource(source?: string | null): string {
     manual: 'Tự chỉnh',
   };
   return source ? labels[source] ?? source : '-';
+}
+
+function formatProductDetectionLabel(report?: DouyinOutputResult['product_detection'] | null): string {
+  const candidate = report?.top_candidate;
+  if (!candidate) return 'Chưa nhận diện';
+  return candidate.product_name || candidate.product_type || candidate.display_name || 'Sản phẩm trong video';
 }
 
 function buildSilentProductContext(context: SilentProductContext): Record<string, unknown> {

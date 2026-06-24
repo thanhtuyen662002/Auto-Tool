@@ -1349,6 +1349,7 @@ def create_app() -> FastAPI:
                 "caption_generation": plan.caption_generation.model_dump(mode="json"),
                 "visual_tagging": plan.visual_tagging.model_dump(mode="json"),
                 "visual_tag_report": plan.visual_tag_report.model_dump(mode="json") if plan.visual_tag_report else None,
+                "product_detection": plan.product_detection.model_dump(mode="json") if plan.product_detection else None,
                 "product_context": stored.get("product_context") or {},
                 "settings_snapshot": settings.model_dump(mode="json"),
             },
@@ -3448,6 +3449,7 @@ def run_silent_reup_plan_job(
             "voiceover_script_file": pipeline.last_voiceover_script_path,
             "bgm_file": result.bgm_path,
             "silent_plan_file": result.plan_path,
+            "product_detection": plan.product_detection.model_dump(mode="json") if plan.product_detection else None,
             "log_file": result.log_path,
             "final_output_qa": qa_summary,
             "warnings": result.warnings,
@@ -3473,6 +3475,7 @@ def run_silent_reup_plan_job(
                 "videos_processed_silent": 1 if success else 0,
                 "strategies": {plan.strategy: 1},
                 "caption_sources": {_silent_plan_caption_source(plan): 1},
+                "product_detection": plan.product_detection.model_dump(mode="json") if plan.product_detection else None,
             },
             "final_output_qa": _final_qa_summary_from_outputs([output]),
             "summary_file": str(summary_path),
@@ -3685,12 +3688,14 @@ def run_subtitle_review_render_job(
                 document_dir = ensure_dir(output_root / f"video_{index:03d}")
                 log_path = document_dir / f"video_{index:03d}_log.json"
                 document = review_service.get_document(document_id)
-                is_silent = (document.context or {}).get("reup_mode") == "silent_immersive"
+                document_context = document.context or {}
+                is_silent = document_context.get("reup_mode") == "silent_immersive"
+                product_detection = document_context.get("product_detection") if isinstance(document_context.get("product_detection"), dict) else None
                 document_settings = settings
-                if is_silent and isinstance((document.context or {}).get("settings_snapshot"), dict):
+                if is_silent and isinstance(document_context.get("settings_snapshot"), dict):
                     document_settings = DouyinReupSettings.model_validate(
                         {
-                            **document.context["settings_snapshot"],
+                            **document_context["settings_snapshot"],
                             "review_subtitles_before_render": False,
                             "silent_review_before_render": False,
                             "auto_render_after_translation": True,
@@ -3748,6 +3753,7 @@ def run_subtitle_review_render_job(
                         "reup_mode": result.get("reup_mode"),
                         "silent_strategy": result.get("silent_strategy"),
                         "voiceover_file": result.get("voiceover_file"),
+                        "product_detection": result.get("product_detection") or product_detection,
                         "final_output_qa": qa_summary,
                         "warnings": result.get("warnings") or [],
                         "errors": result.get("errors") or [],
@@ -3775,6 +3781,7 @@ def run_subtitle_review_render_job(
                         "speech_score": result.get("speech_score"),
                         "caption_source": result.get("caption_source"),
                         "silent_plan_file": result.get("silent_plan_file"),
+                        "product_detection": result.get("product_detection") or product_detection,
                         "log_file": str(log_path),
                         "duration": result.get("duration"),
                         "warnings": result.get("warnings") or [],

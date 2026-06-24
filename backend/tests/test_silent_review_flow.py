@@ -227,6 +227,7 @@ def test_silent_review_render_job_returns_valid_douyin_summary(tmp_path):
     )
     plan_path = tmp_path / "silent_reup_plan.json"
     plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+    product_detection = {"top_candidate": {"normalized_name": "Ke bep"}, "average_confidence": 0.82}
     service = SubtitleReviewService()
     document = service.create_document_from_srt(
         video_id="silent-render",
@@ -237,6 +238,7 @@ def test_silent_review_render_job_returns_valid_douyin_summary(tmp_path):
             "reup_mode": "silent_immersive",
             "silent_strategy": "chill_immersive",
             "silent_plan_file": str(plan_path),
+            "product_detection": product_detection,
             "settings_snapshot": settings.model_dump(mode="json"),
         },
     )
@@ -256,4 +258,5 @@ def test_silent_review_render_job_returns_valid_douyin_summary(tmp_path):
     DouyinReupSummary.model_validate(job["results"]["summary"])
     output = job["results"]["outputs"][0]
     assert output["reup_mode"] == "silent_immersive"
+    assert output["product_detection"] == product_detection
     assert output["final_output_qa"]["status"] in {"passed", "passed_with_warnings"}

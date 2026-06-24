@@ -401,6 +401,7 @@ class DouyinOutputResult(BaseModel):
     silent_plan_file: str | None = None
     silent_caption_generation: dict[str, Any] | None = None
     silent_visual_tagging: dict[str, Any] | None = None
+    product_detection: dict[str, Any] | None = None
     voiceover_file: str | None = None
     voiceover_script_file: str | None = None
     voiceover_subtitle_file: str | None = None

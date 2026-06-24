@@ -59,6 +59,7 @@ def test_silent_pipeline_builds_plan_and_writes_srt(tmp_path):
 
     assert plan.has_speech is False
     assert plan.captions
+    assert plan.product_detection is not None
     assert Path(srt_path).exists()
     assert Path(pipeline.last_plan_path or "").exists()
 

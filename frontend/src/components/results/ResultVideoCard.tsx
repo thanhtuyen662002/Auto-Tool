@@ -9,7 +9,9 @@ export default function ResultVideoCard({
   item,
   selected,
   selectionMode,
+  selectionLabel = 'Chọn xuất',
   viewMode,
+  canSelectItem = (result) => result.exportEligible,
   onToggleSelected,
   onPreview,
   onCopyPath,
@@ -20,7 +22,9 @@ export default function ResultVideoCard({
   item: NormalizedResultItem;
   selected: boolean;
   selectionMode: boolean;
+  selectionLabel?: string;
   viewMode: ResultViewMode;
+  canSelectItem?: (item: NormalizedResultItem) => boolean;
   onToggleSelected: (item: NormalizedResultItem) => void;
   onPreview: (item: NormalizedResultItem) => void;
   onCopyPath: (item: NormalizedResultItem) => void;
@@ -40,6 +44,8 @@ export default function ResultVideoCard({
             item={item}
             selected={selected}
             selectionMode={selectionMode}
+            selectionLabel={selectionLabel}
+            canSelectItem={canSelectItem}
             onCopyCaption={onCopyCaption}
             onCopyPath={onCopyPath}
             onRevealFile={onRevealFile}
@@ -62,6 +68,8 @@ export default function ResultVideoCard({
           item={item}
           selected={selected}
           selectionMode={selectionMode}
+          selectionLabel={selectionLabel}
+          canSelectItem={canSelectItem}
           onCopyCaption={onCopyCaption}
           onCopyPath={onCopyPath}
           onRevealFile={onRevealFile}
@@ -141,6 +149,8 @@ function CardActions({
   hasCaption,
   selected,
   selectionMode,
+  selectionLabel,
+  canSelectItem,
   onToggleSelected,
   onPreview,
   onCopyPath,
@@ -152,6 +162,8 @@ function CardActions({
   hasCaption: boolean;
   selected: boolean;
   selectionMode: boolean;
+  selectionLabel: string;
+  canSelectItem: (item: NormalizedResultItem) => boolean;
   onToggleSelected: (item: NormalizedResultItem) => void;
   onPreview: (item: NormalizedResultItem) => void;
   onCopyPath: (item: NormalizedResultItem) => void;
@@ -163,8 +175,8 @@ function CardActions({
     <div className="flex flex-wrap items-center gap-2">
       {selectionMode ? (
         <label className="inline-flex min-h-10 items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200">
-          <input type="checkbox" checked={selected} disabled={!item.exportEligible} onChange={() => onToggleSelected(item)} />
-          Chọn xuất
+          <input type="checkbox" checked={selected} disabled={!canSelectItem(item)} onChange={() => onToggleSelected(item)} />
+          {selectionLabel}
         </label>
       ) : null}
       <GlassButton className="px-3" variant="primary" disabled={!item.path} onClick={() => onPreview(item)}>

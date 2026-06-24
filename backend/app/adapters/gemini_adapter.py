@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
 import os
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from json import JSONDecodeError
+from pathlib import Path
 from typing import Any
 
 from app.modules.provider_quota import ProviderQuotaCoolingDown, get_provider_quota_manager
@@ -49,7 +52,47 @@ class GeminiAdapter:
 
         raise ScriptGenerationError("All Gemini API keys failed: " + " | ".join(errors))
 
+    def generate_json_with_images(self, prompt: str, image_paths: list[str]) -> dict:
+        if not self.api_keys:
+            raise ScriptGenerationError(
+                "No Gemini API key configured. Add keys in the UI or set GEMINI_API_KEY/GEMINI_API_KEYS."
+            )
+        parts: list[dict[str, Any]] = [{"text": prompt}]
+        valid_images = 0
+        for index, image_path in enumerate(image_paths, start=1):
+            path = Path(image_path)
+            if not path.exists() or not path.is_file():
+                continue
+            mime_type = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+            if mime_type not in {"image/jpeg", "image/png", "image/webp"}:
+                mime_type = "image/jpeg"
+            data = base64.b64encode(path.read_bytes()).decode("ascii")
+            parts.append({"text": f"Frame {index}: {path.name}"})
+            parts.append({"inlineData": {"mimeType": mime_type, "data": data}})
+            valid_images += 1
+        if valid_images <= 0:
+            raise ScriptGenerationError("No readable image frames were provided to Gemini.")
+
+        errors: list[str] = []
+        for key_index, api_key in self._rotated_keys():
+            try:
+                response = self._request_generate_content_parts(parts, api_key, key_index)
+                text = self._extract_text(response)
+                return self._parse_json_text(text)
+            except ScriptGenerationError as exc:
+                errors.append(str(exc))
+
+        raise ScriptGenerationError("All Gemini API keys failed: " + " | ".join(errors))
+
     def _request_generate_content(self, prompt: str, api_key: str, key_index: int) -> dict[str, Any]:
+        return self._request_generate_content_parts([{"text": prompt}], api_key, key_index)
+
+    def _request_generate_content_parts(
+        self,
+        parts: list[dict[str, Any]],
+        api_key: str,
+        key_index: int,
+    ) -> dict[str, Any]:
         model_path = self.model_name if self.model_name.startswith("models/") else f"models/{self.model_name}"
         endpoint = (
             "https://generativelanguage.googleapis.com/v1beta/"
@@ -60,7 +103,7 @@ class GeminiAdapter:
             "contents": [
                 {
                     "role": "user",
-                    "parts": [{"text": prompt}],
+                    "parts": parts,
                 }
             ],
             "generationConfig": {

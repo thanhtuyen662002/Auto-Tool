@@ -6,7 +6,9 @@ export default function ResultVideoGrid({
   items,
   selectedIds,
   selectionMode,
+  selectionLabel = 'Chọn xuất',
   viewMode,
+  canSelectItem = (item) => item.exportEligible,
   onToggleSelected,
   onPreview,
   onCopyPath,
@@ -17,7 +19,9 @@ export default function ResultVideoGrid({
   items: NormalizedResultItem[];
   selectedIds: Set<string>;
   selectionMode: boolean;
+  selectionLabel?: string;
   viewMode: ResultViewMode;
+  canSelectItem?: (item: NormalizedResultItem) => boolean;
   onToggleSelected: (item: NormalizedResultItem) => void;
   onPreview: (item: NormalizedResultItem) => void;
   onCopyPath: (item: NormalizedResultItem) => void;
@@ -42,7 +46,9 @@ export default function ResultVideoGrid({
           key={item.id}
           selected={selectedIds.has(item.id)}
           selectionMode={selectionMode}
+          selectionLabel={selectionLabel}
           viewMode={viewMode}
+          canSelectItem={canSelectItem}
           onCopyCaption={onCopyCaption}
           onCopyPath={onCopyPath}
           onRevealFile={onRevealFile}
