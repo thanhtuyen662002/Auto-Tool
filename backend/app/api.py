@@ -3411,7 +3411,7 @@ def run_silent_reup_plan_job(
                 video_id="video_001",
                 ass_path=result.caption_ass_path,
                 overlay_path=result.overlay_path,
-                subtitle_expected=settings.burn_subtitle,
+                subtitle_expected=bool(result.caption_ass_path and settings.burn_subtitle),
                 audio_expected=(
                     settings.keep_immersive_original_audio
                     or settings.add_bgm_for_silent_video
@@ -4369,6 +4369,8 @@ def _silent_settings_from_payload(payload: dict[str, Any] | None = None) -> Douy
 
 
 def _silent_plan_caption_source(plan: SilentReupPlan) -> str:
+    if not plan.captions and plan.recommended_audio_mode == "music_only_safe":
+        return "music_only_safe"
     sources = [caption.source for caption in plan.captions]
     if "ocr_translation" in sources:
         return "ocr_translation"

@@ -44,6 +44,7 @@ from app.modules.silent_immersive_reup.silent_reup_service import is_silent_reup
 from app.modules.subtitle_review import SubtitleReviewService
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir, write_json
+from app.utils.process_isolation import run_in_isolated_process
 
 ProgressCallback = Callable[[dict[str, Any]], None]
 LogCallback = Callable[[str, str], None]
@@ -61,6 +62,19 @@ class DouyinReupService:
         silent_pipeline: SilentReupPipeline | None = None,
         output_cleanup: OutputCleanupService | None = None,
     ) -> None:
+        self._allow_item_process_isolation = all(
+            dependency is None
+            for dependency in (
+                scanner,
+                source_detector,
+                translator,
+                timing_guard,
+                render_pipeline,
+                subtitle_review_service,
+                silent_pipeline,
+                output_cleanup,
+            )
+        )
         self.scanner = scanner or DouyinFolderScanner()
         self.source_detector = source_detector or SubtitleSourceDetector()
         self.translator = translator or SubtitleTranslator()
@@ -264,7 +278,7 @@ class DouyinReupService:
                         {"source_video": video.path},
                     )
                 with ffmpeg_timeout(_queue_ffmpeg_timeout_seconds(queue_state)):
-                    output = self._process_one_video(
+                    output = self._process_one_video_with_item_timeout(
                         index=index,
                         video=video,
                         config=config,
@@ -354,6 +368,52 @@ class DouyinReupService:
         _progress(progress_callback, total, completed, failed, final_step, final_progress, status=queue_status)
         _log(log_callback, "info", f"Đã ghi tổng kết Douyin Reup: {summary_file}")
         return summary.model_dump(mode="json")
+
+    def _process_one_video_with_item_timeout(
+        self,
+        *,
+        index: int,
+        video: DouyinVideoItem,
+        config: ProjectConfig,
+        settings: DouyinReupSettings,
+        output_root: Path,
+        project_id: str | None,
+        job_id: str | None,
+        cached_output: dict[str, Any] | None,
+        retry_steps: set[str],
+        step_progress_callback: ProgressCallback | None,
+    ) -> DouyinOutputResult:
+        timeout_seconds = int(settings.batch_item_timeout_seconds or 0)
+        if not (job_id and self._allow_item_process_isolation and timeout_seconds > 0):
+            return self._process_one_video(
+                index=index,
+                video=video,
+                config=config,
+                settings=settings,
+                output_root=output_root,
+                project_id=project_id,
+                job_id=job_id,
+                cached_output=cached_output,
+                retry_steps=retry_steps,
+                step_progress_callback=step_progress_callback,
+            )
+
+        _step_progress(step_progress_callback, "item_worker_start", 1)
+        payload = run_in_isolated_process(
+            _douyin_process_one_video_worker,
+            index,
+            video.model_dump(mode="json"),
+            config.model_dump(mode="json"),
+            settings.model_dump(mode="json"),
+            str(output_root),
+            project_id,
+            job_id,
+            cached_output,
+            sorted(retry_steps),
+            timeout_seconds=timeout_seconds,
+            stage_name=f"Douyin video {index}",
+        )
+        return DouyinOutputResult.model_validate(payload)
 
     def _process_one_video(
         self,
@@ -777,14 +837,17 @@ class DouyinReupService:
 
             failed_step = "silent_caption_srt"
             _step_progress(step_progress_callback, "silent_caption_srt", 72)
-            caption_srt_path = self.silent_pipeline.write_caption_srt(
-                plan,
-                str(video_dir),
-                f"video_{index:03d}_silent_vi.srt",
-            )
-            steps["silent_caption_srt"] = "ok"
+            if plan.captions:
+                caption_srt_path = self.silent_pipeline.write_caption_srt(
+                    plan,
+                    str(video_dir),
+                    f"video_{index:03d}_silent_vi.srt",
+                )
+                steps["silent_caption_srt"] = "ok"
+            else:
+                steps["silent_caption_srt"] = "skipped_music_only"
 
-            if settings.silent_review_before_render and not settings.auto_render_after_translation:
+            if plan.captions and settings.silent_review_before_render and not settings.auto_render_after_translation:
                 failed_step = "review_document"
                 document = self.subtitle_review_service.create_document_from_srt(
                     video_id=f"douyin_silent_{index:03d}",
@@ -885,7 +948,7 @@ class DouyinReupService:
                 video_id=f"douyin_silent_{index:03d}",
                 ass_path=render_result.caption_ass_path,
                 overlay_path=render_result.overlay_path,
-                subtitle_expected=settings.burn_subtitle,
+                subtitle_expected=bool(render_result.caption_ass_path and plan.captions and settings.burn_subtitle),
                 audio_expected=(
                     settings.keep_immersive_original_audio
                     or settings.add_bgm_for_silent_video
@@ -1189,6 +1252,35 @@ class DouyinReupService:
         )
 
 
+def _douyin_process_one_video_worker(
+    index: int,
+    video_payload: dict[str, Any],
+    config_payload: dict[str, Any],
+    settings_payload: dict[str, Any],
+    output_root: str,
+    project_id: str | None,
+    job_id: str | None,
+    cached_output: dict[str, Any] | None,
+    retry_steps: list[str],
+) -> dict[str, Any]:
+    service = DouyinReupService()
+    settings = DouyinReupSettings.model_validate(settings_payload)
+    config = ProjectConfig.model_validate(config_payload).model_copy(update={"douyin_reup": settings})
+    output = service._process_one_video(
+        index=index,
+        video=DouyinVideoItem.model_validate(video_payload),
+        config=config,
+        settings=settings,
+        output_root=Path(output_root),
+        project_id=project_id,
+        job_id=job_id,
+        cached_output=cached_output,
+        retry_steps=set(retry_steps or []),
+        step_progress_callback=None,
+    )
+    return output.model_dump(mode="json")
+
+
 def _product_context(config: ProjectConfig) -> dict[str, Any]:
     product = config.product
     settings = config.douyin_reup
@@ -1311,6 +1403,8 @@ def _voice_reup_settings_from_silent(settings: DouyinReupSettings) -> DouyinReup
 def _speech_result_is_reliable_for_voice_route(speech: SpeechPresenceResult) -> bool:
     if not speech.has_speech:
         return False
+    if float(speech.speech_score or 0.0) < 0.65:
+        return False
     if speech.method == "audio_energy_heuristic":
         return False
     if speech.method in {"asr_fast_detect", "test"}:
@@ -1349,6 +1443,8 @@ def _silent_reup_settings_from_voice(settings: DouyinReupSettings) -> DouyinReup
 
 def _silent_caption_source(plan) -> str:
     if not plan or not plan.captions:
+        if plan and getattr(plan, "recommended_audio_mode", "") == "music_only_safe":
+            return "music_only_safe"
         return "template"
     sources = [caption.source for caption in plan.captions]
     if "ocr_translation" in sources:

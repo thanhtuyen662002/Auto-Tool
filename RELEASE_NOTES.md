@@ -1,5 +1,21 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.58
+
+### Highlights
+
+- Added a safe music-only fallback for Silent Mode when OCR/caption/product context is too short, noisy, or unsafe for Vietnamese subtitle and voiceover generation.
+- Kept Silent Mode voiceover aligned to the subtitle timeline when voiceover is allowed, and stopped generating voice when estimated narration would be too long for the video.
+- Standardized Silent Mode output MP4 names such as `video_001_silent.mp4` instead of using long Douyin/Chinese source names.
+- Replaced original video audio when a Silent Mode BGM source is configured, avoiding harsh original-audio-plus-background-music mixing.
+- Added hard per-video worker timeouts for default Douyin Reup batches so one stuck OCR/ASR/subtitle-source item cannot freeze a large batch for hours.
+- Removed the generated product-name colon prefix from Silent Mode captions.
+
+### QA
+
+- Silent pipeline, Douyin routing, silent render job, silent review, Douyin render, and queue watchdog regression tests passed.
+- Frontend production build passed.
+
 ## v1.0.57
 
 ### Highlights

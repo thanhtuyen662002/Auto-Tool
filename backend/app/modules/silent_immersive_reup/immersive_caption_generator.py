@@ -129,10 +129,6 @@ class ImmersiveCaptionGenerator:
             )
             text = self.template_service.render_template(template, product_context)
             source = "template"
-            product_name = _product_name(product_context)
-            if product_name and intent == SilentCaptionIntent.product_reveal:
-                text = _short_caption(f"{product_name}: {text}", max_chars=56)
-                source = "visual_generated"
             candidate = ImmersiveCaptionLine(
                 index=index,
                 start=segment.start,
@@ -269,12 +265,6 @@ def _selection_reason(
     sources = sorted({tag.source for tag in segment.visual_tags}) if use_visual_tags else []
     suffix = f"; tag sources: {', '.join(sources)}" if sources else ""
     return f"Caption picked from: {industry} + {intent.value}{suffix}"
-
-
-def _product_name(product_context: dict | None) -> str:
-    if not product_context:
-        return ""
-    return str(product_context.get("product_name") or product_context.get("name") or "").strip()
 
 
 def _product_lock_enabled(product_context: dict | None) -> bool:

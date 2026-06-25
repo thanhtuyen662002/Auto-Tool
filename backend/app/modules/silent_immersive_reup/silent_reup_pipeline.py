@@ -31,6 +31,7 @@ from app.modules.silent_immersive_reup.speech_presence_detector import SpeechPre
 from app.modules.silent_immersive_reup.visual_segment_analyzer import VisualSegmentAnalyzer
 from app.modules.subtitle_review.subtitle_review_schema import SubtitleReviewDocument
 from app.modules.tts.settings_builder import voiceover_tts_settings
+from app.modules.tts.text_cleanup import estimate_voice_duration
 from app.modules.tts.tts_schema import TTSSettings
 from app.modules.voice_generator.voice_generator import VoiceGenerator
 from app.modules.silent_visual_tagging.visual_tag_repository import VisualTagRepository
@@ -197,7 +198,19 @@ class SilentReupPipeline:
             captions = []
             warnings.append("Visual caption generation is disabled and OCR did not produce translated text.")
         voiceover_script = None
-        if settings.generate_voiceover_for_silent_video:
+        generate_voiceover = bool(settings.generate_voiceover_for_silent_video)
+        music_only_reason = _music_only_fallback_reason(
+            settings=settings,
+            captions=captions,
+            speech=speech,
+            product_detection=product_detection,
+            ocr_average_confidence=self.last_ocr_average_confidence,
+        )
+        if music_only_reason:
+            warnings.append(f"silent_safe_music_only: {music_only_reason}")
+            captions = []
+            generate_voiceover = False
+        if generate_voiceover:
             voiceover_script = self.script_generator.generate_voiceover_script(
                 SilentReupPlan(
                     video_path=video_path,
@@ -214,9 +227,20 @@ class SilentReupPipeline:
                 product_context=effective_product_context,
                 style=settings.visual_caption_style,
             )
-            script_path = target_dir / f"{Path(video_path).stem}_voiceover_script.txt"
-            script_path.write_text(voiceover_script, encoding="utf-8")
-            self.last_voiceover_script_path = str(script_path)
+            voice_duration = estimate_voice_duration(voiceover_script, settings.target_language)
+            available_duration = _plan_duration_from(captions, segments)
+            if voice_duration > max(available_duration * 1.1, available_duration + 1.0):
+                warnings.append(
+                    "silent_safe_music_only: Voiceover du kien dai hon timeline video/sub, "
+                    "nen chi thay nhac de tranh tieng Viet lech phu de."
+                )
+                captions = []
+                voiceover_script = None
+                generate_voiceover = False
+            else:
+                script_path = target_dir / f"{_stable_output_stem(target_dir)}_voiceover_script.txt"
+                script_path.write_text(voiceover_script, encoding="utf-8")
+                self.last_voiceover_script_path = str(script_path)
 
         _progress(progress_callback, "quality_scoring", 92)
         quality_scores = [caption.quality_score for caption in captions if caption.quality_score is not None]
@@ -243,9 +267,9 @@ class SilentReupPipeline:
             speech_score=speech.speech_score,
             visual_segments=segments,
             captions=captions,
-            generate_voiceover=settings.generate_voiceover_for_silent_video,
+            generate_voiceover=generate_voiceover,
             voiceover_script=voiceover_script,
-            recommended_audio_mode=_recommended_audio_mode(settings),
+            recommended_audio_mode="music_only_safe" if not captions and not generate_voiceover else _recommended_audio_mode(settings),
             caption_generation=SilentCaptionGenerationMetadata(
                 industry=industry,
                 tone=settings.silent_caption_tone,
@@ -430,16 +454,23 @@ class SilentReupPipeline:
         write_json(plan_path, plan.model_dump(mode="json"))
         self.last_plan_path = str(plan_path)
         _progress(progress_callback, "caption_export", 5)
-        caption_srt = self.write_caption_srt(plan, str(target_dir), "silent_reup_caption_vi.srt")
+        render_has_subtitle = bool(plan.captions)
+        caption_srt = (
+            self.write_caption_srt(plan, str(target_dir), "silent_reup_caption_vi.srt")
+            if render_has_subtitle
+            else _write_empty_caption_srt(target_dir / "silent_reup_caption_vi.srt")
+        )
         voiceover_path = None
         try:
             if plan.generate_voiceover and plan.voiceover_script:
                 _progress(progress_callback, "voiceover", 20)
                 if not self.last_voiceover_script_path:
-                    script_path = target_dir / f"{Path(plan.video_path).stem}_voiceover_script.txt"
+                    script_path = target_dir / f"{_stable_output_stem(target_dir)}_voiceover_script.txt"
                     script_path.write_text(plan.voiceover_script, encoding="utf-8")
                     self.last_voiceover_script_path = str(script_path)
                 self.last_voiceover_subtitle_path = self._write_voiceover_subtitle(plan, target_dir)
+                caption_srt = self.last_voiceover_subtitle_path
+                render_has_subtitle = True
                 voiceover_path = self._generate_voiceover(plan, settings, str(target_dir), tts_settings=tts_settings)
                 warnings.extend(self.voice_generator.warnings)
 
@@ -454,14 +485,18 @@ class SilentReupPipeline:
                 fps=media.fps,
                 has_audio=media.has_audio,
             )
-            render_settings = _render_settings_for_silent(settings)
+            render_settings = _render_settings_for_silent(
+                settings,
+                burn_subtitle=render_has_subtitle,
+                generate_voiceover=bool(plan.generate_voiceover and plan.voiceover_script),
+            )
             _progress(progress_callback, "ffmpeg_render", 50)
             render_kwargs: dict[str, Any] = {
                 "video": video,
                 "subtitle_srt_path": caption_srt,
                 "settings": render_settings,
                 "output_dir": str(target_dir),
-                "output_name": f"{Path(plan.video_path).stem}_silent_reup.mp4",
+                "output_name": f"{_stable_output_stem(target_dir)}.mp4",
                 "warnings": warnings,
                 "voiceover_path": voiceover_path,
             }
@@ -472,7 +507,7 @@ class SilentReupPipeline:
                 input_video_path=plan.video_path,
                 output_video_path=render_payload.get("path"),
                 plan_path=self.last_plan_path,
-                caption_srt_path=caption_srt,
+                caption_srt_path=caption_srt if render_has_subtitle else None,
                 caption_ass_path=render_payload.get("subtitle_ass_file"),
                 overlay_path=render_payload.get("overlay_file"),
                 voiceover_path=voiceover_path,
@@ -557,7 +592,7 @@ class SilentReupPipeline:
                 style=settings.visual_caption_style,
             )
             plan = plan.model_copy(update={"voiceover_script": script})
-            script_path = target_dir / f"{Path(document.video_path).stem}_voiceover_script.txt"
+            script_path = target_dir / f"{_stable_output_stem(target_dir)}_voiceover_script.txt"
             script_path.write_text(script, encoding="utf-8")
             self.last_voiceover_script_path = str(script_path)
             self.last_voiceover_subtitle_path = self._write_voiceover_subtitle(plan, target_dir)
@@ -731,7 +766,7 @@ class SilentReupPipeline:
             )
             for index, sentence in enumerate(sentences, start=1)
         ]
-        path = target_dir / f"{Path(plan.video_path).stem}_voiceover_sub.srt"
+        path = target_dir / f"{_stable_output_stem(target_dir)}_voiceover_sub.srt"
         write_srt_blocks(blocks, str(path))
         return str(path)
 
@@ -773,15 +808,24 @@ class SilentReupPipeline:
         )
 
 
-def _render_settings_for_silent(settings: DouyinReupSettings) -> DouyinReupSettings:
+def _render_settings_for_silent(
+    settings: DouyinReupSettings,
+    *,
+    burn_subtitle: bool | None = None,
+    generate_voiceover: bool | None = None,
+) -> DouyinReupSettings:
+    replace_original_with_bgm = bool(settings.add_bgm_for_silent_video and (settings.music_folder or settings.favorite_music_paths))
     return settings.model_copy(
         update={
-            "keep_original_audio": settings.keep_immersive_original_audio,
-            "original_audio_volume": settings.immersive_original_audio_volume,
+            "keep_original_audio": False if replace_original_with_bgm else settings.keep_immersive_original_audio,
+            "original_audio_volume": 0.0 if replace_original_with_bgm else settings.immersive_original_audio_volume,
             "add_bgm": settings.add_bgm_for_silent_video,
             "bgm_volume": settings.immersive_bgm_volume,
-            "burn_subtitle": settings.burn_subtitle,
+            "burn_subtitle": settings.burn_subtitle if burn_subtitle is None else bool(burn_subtitle),
             "add_overlay": settings.add_overlay,
+            "generate_voiceover_for_silent_video": (
+                settings.generate_voiceover_for_silent_video if generate_voiceover is None else bool(generate_voiceover)
+            ),
         }
     )
 
@@ -790,7 +834,8 @@ def _recommended_audio_mode(settings: DouyinReupSettings) -> str:
     parts: list[str] = []
     if settings.generate_voiceover_for_silent_video:
         parts.append("voiceover")
-    if settings.keep_immersive_original_audio:
+    replace_original_with_bgm = bool(settings.add_bgm_for_silent_video and (settings.music_folder or settings.favorite_music_paths))
+    if settings.keep_immersive_original_audio and not replace_original_with_bgm:
         parts.append("original_audio")
     if settings.add_bgm_for_silent_video:
         parts.append("bgm")
@@ -821,11 +866,67 @@ def _voice_lines_from_script(plan: SilentReupPlan) -> list[VoiceoverLine]:
 
 
 def _plan_duration(plan: SilentReupPlan) -> float:
-    if plan.captions:
-        return max(caption.end for caption in plan.captions)
-    if plan.visual_segments:
-        return max(segment.end for segment in plan.visual_segments)
-    return 8.0
+    return _plan_duration_from(plan.captions, plan.visual_segments)
+
+
+def _plan_duration_from(captions: list[ImmersiveCaptionLine], segments: list[SilentVisualSegment]) -> float:
+    caption_end = max((caption.end for caption in captions), default=0.0)
+    segment_end = max((segment.end for segment in segments), default=0.0)
+    return max(caption_end, segment_end, 8.0 if caption_end <= 0 and segment_end <= 0 else 0.0)
+
+
+def _caption_display_duration(captions: list[ImmersiveCaptionLine]) -> float:
+    return sum(max(0.0, float(caption.end) - float(caption.start)) for caption in captions)
+
+
+def _caption_text_chars(captions: list[ImmersiveCaptionLine]) -> int:
+    return sum(len("".join(ch for ch in caption.text if ch.isalnum())) for caption in captions)
+
+
+def _music_only_fallback_reason(
+    *,
+    settings: DouyinReupSettings,
+    captions: list[ImmersiveCaptionLine],
+    speech,
+    product_detection: SilentProductDetectionReport | None,
+    ocr_average_confidence: float,
+) -> str | None:
+    if speech.has_speech and float(speech.speech_score or 0.0) >= 0.45:
+        return "Phat hien dau hieu loi thoai nhung chua du chac de tu dich/sub/voice an toan."
+    if not captions:
+        return "Khong co caption Viet du tin cay."
+
+    sources = {str(caption.source or "") for caption in captions}
+    avg_quality = sum(float(caption.quality_score or 1.0) for caption in captions) / max(1, len(captions))
+    display_duration = _caption_display_duration(captions)
+    text_chars = _caption_text_chars(captions)
+    if "ocr_translation" in sources:
+        if avg_quality < 0.72:
+            return "OCR/dich phu de co diem chat luong thap."
+        if ocr_average_confidence and ocr_average_confidence < max(0.5, float(settings.ocr_min_confidence) + 0.15):
+            return "OCR co do tin cay thap, de bi nhieu watermark/chu nen."
+        if len(captions) <= 2 and (display_duration < 4.0 or text_chars < 18):
+            return "Phu de OCR qua ngan hoac roi rac, khong du ngu canh de them voice/sub."
+
+    if settings.generate_voiceover_for_silent_video:
+        if display_duration < 4.0 and len(captions) <= 2:
+            return "Timeline caption qua ngan de canh voiceover Viet."
+        if text_chars < 24:
+            return "Noi dung caption qua it de tao loi binh Viet co nghia."
+
+    if product_detection and product_detection.status == "detected" and product_detection.average_confidence < 0.45:
+        return "AI vision nhan dien san pham chua du chac."
+    return None
+
+
+def _stable_output_stem(target_dir: Path) -> str:
+    name = target_dir.name.strip() or "silent_reup"
+    return f"{name}_silent" if name.lower().startswith("video_") else "silent_reup"
+
+
+def _write_empty_caption_srt(path: Path) -> str:
+    path.write_text("", encoding="utf-8")
+    return str(path)
 
 
 def _dedupe(values: list[str]) -> list[str]:
