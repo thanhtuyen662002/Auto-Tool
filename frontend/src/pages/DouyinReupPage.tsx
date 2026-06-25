@@ -2256,9 +2256,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                     style={{
                       bottom: `${coverBottomPercent}%`,
                       height: `${coverHeightPercent}%`,
-                      backgroundColor: settings.subtitle_cover_mode === 'blur'
-                        ? 'rgba(15, 23, 42, 0.16)'
-                        : settings.subtitle_cover_enabled ? hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity) : 'rgba(15, 23, 42, 0.85)',
+                      backgroundColor: settings.subtitle_cover_enabled
+                        ? (settings.subtitle_cover_mode === 'blur' ? 'rgba(15, 23, 42, 0.16)' : hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity))
+                        : 'transparent',
                       backdropFilter: settings.subtitle_cover_mode === 'blur' ? `blur(${Math.max(2, Math.round(settings.subtitle_cover_blur_strength / 2))}px)` : undefined,
                       WebkitBackdropFilter: settings.subtitle_cover_mode === 'blur' ? `blur(${Math.max(2, Math.round(settings.subtitle_cover_blur_strength / 2))}px)` : undefined,
                       borderRadius: `${Math.round(Math.max(0, settings.subtitle_cover_radius_ratio || 0) * 220)}px`,
@@ -2346,9 +2346,9 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
               <div
                 className="min-w-[220px] rounded-md border border-white/10 px-4 py-3 text-center"
                 style={{
-                  backgroundColor: settings.subtitle_cover_mode === 'blur'
-                    ? 'rgba(15, 23, 42, 0.16)'
-                    : settings.subtitle_cover_enabled ? hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity) : 'rgba(15, 23, 42, 0.85)',
+                  background: settings.subtitle_cover_enabled
+                    ? (settings.subtitle_cover_mode === 'blur' ? 'rgba(15, 23, 42, 0.16)' : hexToRgba(settings.subtitle_cover_color, settings.subtitle_cover_opacity))
+                    : 'repeating-conic-gradient(rgba(255, 255, 255, 0.08) 0% 25%, rgba(0, 0, 0, 0.18) 0% 50%) 50% / 16px 16px',
                   backdropFilter: settings.subtitle_cover_mode === 'blur' ? `blur(${Math.max(2, Math.round(settings.subtitle_cover_blur_strength / 2))}px)` : undefined,
                   WebkitBackdropFilter: settings.subtitle_cover_mode === 'blur' ? `blur(${Math.max(2, Math.round(settings.subtitle_cover_blur_strength / 2))}px)` : undefined,
                   borderRadius: `${Math.round(Math.max(0, settings.subtitle_cover_radius_ratio || 0) * 220)}px`,

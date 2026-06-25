@@ -1,5 +1,20 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.63
+
+### Highlights
+
+- **Subtitle Style Preview & Video Preview UI Fixes**:
+  - Fixed the video preview box to render a completely transparent background when "Che phụ đề Trung" (subtitle cover) is disabled. This accurately represents how the final video is rendered without a cover and prevents drawing a fake dark slate box.
+  - Implemented a repeating dark-mode checkerboard pattern (`repeating-conic-gradient`) for the style preview block when subtitle cover is disabled. This ensures both light-theme sub styles (dark text) and dark-theme sub styles (light text) are perfectly legible when previewing transparent backgrounds.
+  - Restored full contrast and readability for light subtitle presets (such as "Sub nổi trên nền sáng") under all cover states.
+
+### QA
+
+- Verified frontend React components compile successfully.
+- Verified visual preview state rendering logic for both enabled and disabled cover options.
+
+
 ## v1.0.62
 
 ### Highlights
