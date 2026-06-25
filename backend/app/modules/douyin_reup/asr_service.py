@@ -377,6 +377,7 @@ def check_asr_support_and_optimize_settings(settings: DouyinReupSettings) -> lis
 
         if not gpu_works:
             settings.asr_device = "cpu"
+            settings.asr_subprocess_isolation = False  # Tắt cô lập tiến trình trên CPU để dùng cache model
             warning_msg = (
                 "Phát hiện lỗi GPU/CUDA (thiếu thư viện CUDA runtime hoặc cublas). "
                 "Tự động chuyển cấu hình ASR sang chạy bằng CPU."
@@ -387,6 +388,7 @@ def check_asr_support_and_optimize_settings(settings: DouyinReupSettings) -> lis
 
     # 3. Kiểm tra xem ASR có chạy được trên CPU không (phòng trường hợp lỗi cài đặt thư viện triệt để)
     if device == "cpu" or settings.asr_device == "cpu":
+        settings.asr_subprocess_isolation = False  # Tắt cô lập tiến trình trên CPU để dùng cache model
         try:
             _ = WhisperModel("tiny", device="cpu", compute_type="int8")
         except Exception as exc:

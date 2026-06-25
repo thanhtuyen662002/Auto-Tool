@@ -1,5 +1,19 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.61
+
+### Highlights
+
+- Optimized CPU ASR performance by automatically disabling subprocess isolation when running ASR on CPU. This allows the parent process to load and cache the Whisper model in memory once, speeding up subsequent batch video transcriptions by 45x (transcription takes 2-5 seconds instead of 7-8 minutes per video).
+- Fixed smart subtitle cover positioning from drawing giant cover boxes over products. Enforced a vertical threshold (bottom ratio >= 0.68) to completely filter out Chinese characters printed on products, faces, or background elements in the middle/upper parts of the screen, focusing only on real bottom subtitles.
+
+### QA
+
+- Verified ASR subprocess isolation is disabled on CPU to enable model caching.
+- Verified subtitle cover detector filters out CJK blocks in the middle and upper screen (Y < 68% of screen height).
+- Backend build and syntax checks passed.
+
+
 ## v1.0.60
 
 ### Highlights

@@ -13,7 +13,7 @@ MIN_DYNAMIC_NON_CJK_CONFIDENCE = 0.2
 MIN_COVER_WIDTH_RATIO = 0.88
 MIN_SUBTITLE_TEXT_WIDTH_RATIO = 0.18
 MAX_DYNAMIC_VERTICAL_SPAN_RATIO = 0.12
-MIN_MID_SCREEN_SUBTITLE_BOTTOM_RATIO = 0.32
+MIN_MID_SCREEN_SUBTITLE_BOTTOM_RATIO = 0.68
 
 
 @dataclass(frozen=True)
@@ -220,7 +220,7 @@ def _block_bounds_from_raw(
     block_height = bottom - top
     if block_width < 6 or block_height < 6:
         return None
-    if bottom < frame_height * 0.24:
+    if bottom < frame_height * 0.68:
         return None
     if block_height / frame_height > 0.18:
         return None
