@@ -32,6 +32,7 @@ class SubtitleSourceDetector:
         errors: list[str] = []
         rejected_sources: list[dict[str, Any]] = []
         attempted_ocr = False
+        attempted_asr = False
 
         for source_type in settings.subtitle_source_priority:
             if source_type == "sidecar_srt" and settings.use_sidecar_srt:
@@ -68,6 +69,7 @@ class SubtitleSourceDetector:
                     return ocr_result.model_copy(update={"warnings": [*warnings, *ocr_result.warnings]})
 
             if source_type == "asr" and settings.use_asr_if_no_subtitle:
+                attempted_asr = True
                 asr_result = self._try_asr(video, settings, target_dir, progress_callback, warnings, errors, rejected_sources)
                 if asr_result:
                     return asr_result
@@ -83,6 +85,27 @@ class SubtitleSourceDetector:
                     )
                     if ocr_result:
                         return ocr_result.model_copy(update={"warnings": [*warnings, *ocr_result.warnings]})
+
+        # --- ULTIMATE FALLBACKS ---
+        # Cứu cánh cuối cùng trước khi báo lỗi cho người dùng: thử tất cả các kênh còn lại
+        if not attempted_ocr:
+            attempted_ocr = True
+            ocr_result = self._try_ocr(
+                video,
+                settings,
+                target_dir,
+                "Cứu cánh cuối cùng (Ultimate Fallback): Tự động thử OCR trước khi báo lỗi.",
+                errors,
+                rejected_sources,
+            )
+            if ocr_result:
+                return ocr_result.model_copy(update={"warnings": [*warnings, *ocr_result.warnings]})
+
+        if not attempted_asr:
+            attempted_asr = True
+            asr_result = self._try_asr(video, settings, target_dir, progress_callback, warnings, errors, rejected_sources)
+            if asr_result:
+                return asr_result
 
         return SubtitleSourceResult(
             video_path=video.path,

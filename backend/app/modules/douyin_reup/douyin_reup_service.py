@@ -147,6 +147,12 @@ class DouyinReupService:
         if not settings.enabled:
             settings = settings.model_copy(update={"enabled": True})
 
+        # Chủ động kiểm tra khả năng chạy ASR của hệ thống và tối ưu hóa cấu hình (GPU/CPU/OCR)
+        from app.modules.douyin_reup.asr_service import check_asr_support_and_optimize_settings
+        asr_warnings = check_asr_support_and_optimize_settings(settings)
+        for warn in asr_warnings:
+            _log(log_callback, "warning", warn)
+
         created_at = datetime.now().replace(microsecond=0)
         output_root = _make_douyin_output_root(config, created_at)
         _log(log_callback, "info", f"Bắt đầu xử lý Douyin Reup: {output_root}")

@@ -307,6 +307,7 @@ def is_asr_gpu_available() -> bool:
     """Kiểm tra GPU sẵn sàng cho ASR (có thể gọi từ UI để cảnh báo user).
     Trả về False nếu đã biết GPU fail trong session này.
     """
+    global _GPU_AVAILABLE  # noqa: PLW0603
     with _GPU_CACHE_LOCK:
         if _GPU_AVAILABLE is False:
             return False
@@ -314,12 +315,97 @@ def is_asr_gpu_available() -> bool:
         from faster_whisper import WhisperModel  # noqa: PLC0415
         _ = WhisperModel("tiny", device="cuda", compute_type="int8")
         with _GPU_CACHE_LOCK:
-            global _GPU_AVAILABLE  # noqa: PLW0603
             _GPU_AVAILABLE = True
         return True
     except Exception:
         _mark_gpu_unavailable()
         return False
+
+
+def check_asr_support_and_optimize_settings(settings: DouyinReupSettings) -> list[str]:
+    """
+    Kiểm tra khả năng chạy ASR của máy người dùng trước khi bắt đầu batch job.
+    Nếu ASR hoàn toàn không chạy được (thiếu thư viện, lỗi cài đặt), tự động chuyển sang OCR và CPU.
+    Nếu GPU/CUDA bị lỗi nhưng CPU vẫn chạy được, chuyển thiết bị ASR về CPU.
+    Trả về danh sách các cảnh báo (warnings) để log/hiển thị cho người dùng.
+    """
+    global _GPU_AVAILABLE  # noqa: PLW0603
+    warnings: list[str] = []
+    if not settings.use_asr_if_no_subtitle:
+        return warnings
+
+    # 1. Kiểm tra xem có import được faster_whisper không
+    try:
+        from faster_whisper import WhisperModel  # noqa: PLC0415
+    except ImportError:
+        warning_msg = (
+            "Hệ thống phát hiện máy chưa cài đặt thư viện 'faster-whisper' (ASR). "
+            "Tự động chuyển sang chế độ OCR (nhận diện chữ dính trên video) và chạy bằng CPU."
+        )
+        logger.warning(warning_msg)
+        warnings.append(warning_msg)
+        settings.use_asr_if_no_subtitle = False
+        settings.use_ocr_if_no_subtitle = True
+        settings.use_ocr_if_asr_failed = True
+        return warnings
+
+    # 2. Kiểm tra xem thiết bị yêu cầu có phải là GPU không
+    device = (settings.asr_device or "auto").strip().lower()
+    if device not in {"auto", "cpu", "cuda"}:
+        device = "auto"
+
+    if device in {"auto", "cuda"}:
+        gpu_works = False
+        try:
+            with _GPU_CACHE_LOCK:
+                if _GPU_AVAILABLE is True:
+                    gpu_works = True
+                elif _GPU_AVAILABLE is False:
+                    gpu_works = False
+                else:
+                    # Tiến hành kiểm tra nhanh trên GPU
+                    _ = WhisperModel("tiny", device="cuda", compute_type="int8")
+                    _GPU_AVAILABLE = True
+                    gpu_works = True
+        except Exception as exc:
+            if _is_asr_hardware_error(exc):
+                _mark_gpu_unavailable()
+                gpu_works = False
+            else:
+                # Không phải lỗi phần cứng CUDA, coi như GPU khả dụng để chạy offline
+                gpu_works = True
+
+        if not gpu_works:
+            settings.asr_device = "cpu"
+            warning_msg = (
+                "Phát hiện lỗi GPU/CUDA (thiếu thư viện CUDA runtime hoặc cublas). "
+                "Tự động chuyển cấu hình ASR sang chạy bằng CPU."
+            )
+            logger.warning(warning_msg)
+            warnings.append(warning_msg)
+            device = "cpu"
+
+    # 3. Kiểm tra xem ASR có chạy được trên CPU không (phòng trường hợp lỗi cài đặt thư viện triệt để)
+    if device == "cpu" or settings.asr_device == "cpu":
+        try:
+            _ = WhisperModel("tiny", device="cpu", compute_type="int8")
+        except Exception as exc:
+            exc_str = str(exc).lower()
+            is_network_error = any(
+                k in exc_str for k in ("connection", "timeout", "network", "unreachable", "http", "status code")
+            )
+            if not is_network_error:
+                warning_msg = (
+                    f"ASR lỗi nghiêm trọng không thể chạy trên CPU ({_short_hardware_error(exc)}). "
+                    "Tự động chuyển hoàn toàn sang chế độ OCR."
+                )
+                logger.warning(warning_msg)
+                warnings.append(warning_msg)
+                settings.use_asr_if_no_subtitle = False
+                settings.use_ocr_if_no_subtitle = True
+                settings.use_ocr_if_asr_failed = True
+
+    return warnings
 
 
 def _float_attr(segment: Any, name: str) -> float | None:
