@@ -595,6 +595,18 @@ export interface DouyinPresetRecommendationResponse {
   signals: Record<string, unknown>;
 }
 
+export interface OutputCleanupReport {
+  enabled: boolean;
+  status: 'completed' | 'skipped' | 'warning' | string;
+  skipped_reason?: string | null;
+  deleted_size_bytes: number;
+  deleted_file_count: number;
+  deleted_paths?: string[];
+  publish_manifest_file?: string | null;
+  warnings?: string[];
+  errors?: string[];
+}
+
 export interface DouyinOutputResult {
   index: number;
   path: string;
@@ -634,6 +646,8 @@ export interface DouyinOutputResult {
   durations?: Record<string, number>;
   retry_history?: Array<Record<string, string | null>>;
   final_output_qa?: FinalOutputQASummary | null;
+  publish_manifest_file?: string | null;
+  cleanup_report?: OutputCleanupReport | null;
   warnings: string[];
   errors: string[];
 }

@@ -35,7 +35,8 @@ from app.modules.douyin_reup.douyin_folder_scanner import DouyinFolderScanner, S
 from app.modules.douyin_reup.bgm_mixer import SUPPORTED_BGM_EXTENSIONS
 from app.modules.douyin_reup.douyin_render_pipeline import DouyinRenderPipeline
 from app.modules.douyin_reup.douyin_reup_service import DouyinReupService, build_retry_cache
-from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
+from app.modules.douyin_reup.douyin_schema import DouyinOutputResult, DouyinReupSettings
+from app.modules.douyin_reup.output_cleanup_service import OutputCleanupService
 from app.modules.douyin_downloader import (
     DouyinDownloaderCloseResponse,
     DouyinDownloaderDownloadRequest,
@@ -3455,6 +3456,13 @@ def run_silent_reup_plan_job(
             "warnings": result.warnings,
             "errors": result.errors,
         }
+        if success:
+            cleanup_output = OutputCleanupService().finalize_success_output(
+                DouyinOutputResult.model_validate(output),
+                settings,
+                output_dir,
+            )
+            output = cleanup_output.model_dump(mode="json")
         project = database.get_project(job.get("project_id")) if job.get("project_id") else None
         project_name = str(((project or {}).get("config") or {}).get("project_name") or f"silent-reup-{job_id[:8]}")
         summary_path = Path(output_dir) / "silent_reup_job_summary.json"
@@ -3759,37 +3767,41 @@ def run_subtitle_review_render_job(
                         "errors": result.get("errors") or [],
                     },
                 )
-                outputs.append(
-                    {
-                        "index": index,
-                        "path": result["path"],
-                        "status": "success",
-                        "source_video": result.get("source_video"),
-                        "subtitle_source": result.get("caption_source") if is_silent else document.source_type,
-                        "source_srt_file": result.get("source_srt_file"),
-                        "translated_srt_file": result.get("translated_srt_file"),
-                        "corrected_srt_file": result.get("corrected_srt_file"),
-                        "subtitle_ass_file": result.get("subtitle_ass_file"),
-                        "corrected_ass_file": result.get("corrected_ass_file"),
-                        "overlay_file": result.get("overlay_file"),
-                        "bgm_file": result.get("bgm_file"),
-                        "voiceover_file": result.get("voiceover_file"),
-                        "voiceover_script_file": result.get("voiceover_script_file"),
-                        "voiceover_subtitle_file": result.get("voiceover_subtitle_file"),
-                        "reup_mode": result.get("reup_mode"),
-                        "silent_strategy": result.get("silent_strategy"),
-                        "speech_score": result.get("speech_score"),
-                        "caption_source": result.get("caption_source"),
-                        "silent_plan_file": result.get("silent_plan_file"),
-                        "product_detection": result.get("product_detection") or product_detection,
-                        "log_file": str(log_path),
-                        "duration": result.get("duration"),
-                        "warnings": result.get("warnings") or [],
-                        "errors": result.get("errors") or [],
-                        "subtitle_review_document_id": document_id,
-                        "final_output_qa": qa_summary,
-                    }
+                output_payload = {
+                    "index": index,
+                    "path": result["path"],
+                    "status": "success",
+                    "source_video": str(result.get("source_video") or document.video_path or ""),
+                    "subtitle_source": result.get("caption_source") if is_silent else document.source_type,
+                    "source_srt_file": result.get("source_srt_file"),
+                    "translated_srt_file": result.get("translated_srt_file"),
+                    "corrected_srt_file": result.get("corrected_srt_file"),
+                    "subtitle_ass_file": result.get("subtitle_ass_file"),
+                    "corrected_ass_file": result.get("corrected_ass_file"),
+                    "overlay_file": result.get("overlay_file"),
+                    "bgm_file": result.get("bgm_file"),
+                    "voiceover_file": result.get("voiceover_file"),
+                    "voiceover_script_file": result.get("voiceover_script_file"),
+                    "voiceover_subtitle_file": result.get("voiceover_subtitle_file"),
+                    "reup_mode": result.get("reup_mode"),
+                    "silent_strategy": result.get("silent_strategy"),
+                    "speech_score": result.get("speech_score"),
+                    "caption_source": result.get("caption_source"),
+                    "silent_plan_file": result.get("silent_plan_file"),
+                    "product_detection": result.get("product_detection") or product_detection,
+                    "log_file": str(log_path),
+                    "duration": result.get("duration"),
+                    "warnings": result.get("warnings") or [],
+                    "errors": result.get("errors") or [],
+                    "subtitle_review_document_id": document_id,
+                    "final_output_qa": qa_summary,
+                }
+                cleanup_output = OutputCleanupService().finalize_success_output(
+                    DouyinOutputResult.model_validate(output_payload),
+                    document_settings,
+                    document_dir,
                 )
+                outputs.append(cleanup_output.model_dump(mode="json"))
                 completed += 1
                 checkpoint_service.mark_step_completed(
                     job_id,

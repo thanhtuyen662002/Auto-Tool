@@ -1,5 +1,20 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.57
+
+### Highlights
+
+- Added safe post-render cleanup for Douyin Reup and Silent Mode outputs: final MP4, subtitles, logs, QA report, product context, and publish manifest are kept while heavy temporary frames/crops/source copies/audio intermediates are removed after successful renders.
+- Added `publish_manifest.json` per successful output so future auto-posting, scheduling, captions, and comment workflows can still use the processed video context after cleanup.
+- Added a Vietnamese "Dọn file tạm sau xử lý" control in the Reup workflow, plus per-video cleanup status in result cards.
+- Skips cleanup automatically when final QA fails or when the user enables keeping temporary files for debugging.
+
+### QA
+
+- Added backend coverage for cleanup deletion safety, keep-temp mode, and QA-failed skip behavior.
+- Douyin Reup, Silent Mode, Douyin API regression tests passed.
+- Frontend production build passed.
+
 ## v1.0.56
 
 ### Highlights

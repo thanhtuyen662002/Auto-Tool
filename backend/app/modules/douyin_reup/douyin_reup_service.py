@@ -21,6 +21,7 @@ from app.modules.douyin_reup.douyin_schema import (
     TranslationResult,
 )
 from app.modules.douyin_reup.douyin_summary_builder import build_douyin_reup_summary
+from app.modules.douyin_reup.output_cleanup_service import OutputCleanupService
 from app.modules.douyin_reup.subtitle_source_detector import SubtitleSourceDetector
 from app.modules.douyin_reup.subtitle_timing_guard import SubtitleTimingGuard
 from app.modules.douyin_reup.subtitle_translator import SubtitleTranslator
@@ -58,6 +59,7 @@ class DouyinReupService:
         render_pipeline: DouyinRenderPipeline | None = None,
         subtitle_review_service: SubtitleReviewService | None = None,
         silent_pipeline: SilentReupPipeline | None = None,
+        output_cleanup: OutputCleanupService | None = None,
     ) -> None:
         self.scanner = scanner or DouyinFolderScanner()
         self.source_detector = source_detector or SubtitleSourceDetector()
@@ -66,6 +68,7 @@ class DouyinReupService:
         self.render_pipeline = render_pipeline or DouyinRenderPipeline()
         self.subtitle_review_service = subtitle_review_service or SubtitleReviewService()
         self.silent_pipeline = silent_pipeline or SilentReupPipeline(render_pipeline=self.render_pipeline)
+        self.output_cleanup = output_cleanup or OutputCleanupService()
 
     def _probe_cover_ocr_debug(
         self,
@@ -595,7 +598,7 @@ class DouyinReupService:
             )
             steps["final_output_qa"] = final_qa_report.status
 
-            return DouyinOutputResult(
+            result = DouyinOutputResult(
                 index=index,
                 path=str(render_payload["path"]),
                 status="success",
@@ -626,6 +629,7 @@ class DouyinReupService:
                 warnings=_dedupe(warnings),
                 errors=_dedupe(errors),
             )
+            return self.output_cleanup.finalize_success_output(result, settings, video_dir)
         except Exception as exc:
             result_status = "failed"
             error_message = _friendly_error(str(exc))
@@ -892,7 +896,7 @@ class DouyinReupService:
             )
             steps["final_output_qa"] = final_qa_report.status
 
-            return DouyinOutputResult(
+            result = DouyinOutputResult(
                 index=index,
                 path=render_result.output_video_path,
                 status="success",
@@ -929,6 +933,7 @@ class DouyinReupService:
                 warnings=_dedupe(warnings),
                 errors=_dedupe(errors),
             )
+            return self.output_cleanup.finalize_success_output(result, settings, video_dir)
         except Exception as exc:
             result_status = "failed"
             error_message = _friendly_error(str(exc))

@@ -91,6 +91,7 @@ import type {
   StartWorkflowMode,
 } from '../types/startWorkflow';
 import { summarizeStartScan } from '../types/startWorkflow';
+import { formatBytes } from '../utils/formatBytes';
 import { friendlyTermLabel } from '../utils/userFacingTerms';
 
 type ExportOptions = {
@@ -1525,6 +1526,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       batch_watchdog_stale_minutes: settings.batch_watchdog_stale_minutes,
       batch_pause_on_repeated_failures: settings.batch_pause_on_repeated_failures,
       batch_max_consecutive_failures: settings.batch_max_consecutive_failures,
+      keep_temp: settings.keep_temp,
     };
   }
 
@@ -2002,6 +2004,10 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             </div>
           </div>
         </GlassCard>
+        <PostProcessCleanupCard
+          autoCleanup={!settings.keep_temp}
+          onAutoCleanupChange={(value) => updateAdvancedSettings({ keep_temp: !value })}
+        />
         <GlassCard className="grid gap-4 p-4" strong>
           <h3 className="font-semibold text-white">Phụ đề và chữ trên video</h3>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -2804,6 +2810,10 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 maxConsecutiveFailures={settings.batch_max_consecutive_failures}
                 onChange={updateSettings}
               />
+              <PostProcessCleanupCard
+                autoCleanup={!settings.keep_temp}
+                onAutoCleanupChange={(value) => updateSettings({ keep_temp: !value })}
+              />
             </AdvancedTuningSection>
             {captionPreview ? (
               <SilentPlanPreview
@@ -3021,6 +3031,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                   <div>Nhật ký: {output.log_file || '-'}</div>
                   <div>Bước lỗi: {output.failed_step || '-'}</div>
                 </div>
+                <CleanupResultNote output={output} />
                 {output.reup_mode === 'silent_immersive' ? (
                   <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
                     <div className="font-semibold">Chế độ: Video không thoại</div>
@@ -3153,6 +3164,47 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       ) : null}
     </>
   );
+}
+
+function CleanupResultNote({ output }: { output: DouyinOutputResult }) {
+  const report = output.cleanup_report;
+  const manifestFile = output.publish_manifest_file || report?.publish_manifest_file;
+  if (!report && !manifestFile) return null;
+  const cleaned = report?.status === 'completed' && report.deleted_file_count > 0;
+  const skipped = report?.status === 'skipped';
+  return (
+    <div className={`mt-3 rounded-md border p-3 text-xs leading-5 ${
+      cleaned
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+        : skipped
+        ? 'border-slate-200 bg-slate-50 text-slate-700'
+        : 'border-amber-200 bg-amber-50 text-amber-900'
+    }`}>
+      <div className="font-semibold">Dọn file sau xử lý</div>
+      {report ? (
+        <div>
+          {cleaned
+            ? `Đã xóa ${report.deleted_file_count} file tạm, tiết kiệm ${formatBytes(report.deleted_size_bytes)}.`
+            : skipped
+            ? `Chưa xóa file tạm: ${cleanupSkipReasonLabel(report.skipped_reason)}.`
+            : `Đã tạo báo cáo cleanup, cần kiểm tra thêm: ${cleanupSkipReasonLabel(report.skipped_reason)}.`}
+        </div>
+      ) : null}
+      {manifestFile ? <div className="break-all">Hồ sơ xuất bản: {manifestFile}</div> : null}
+      {report?.warnings?.length ? <div>Cảnh báo: {report.warnings.join('; ')}</div> : null}
+      {report?.errors?.length ? <div>Lỗi cleanup: {report.errors.join('; ')}</div> : null}
+    </div>
+  );
+}
+
+function cleanupSkipReasonLabel(reason?: string | null): string {
+  const labels: Record<string, string> = {
+    keep_temp_enabled: 'đang bật giữ file tạm để debug',
+    final_qa_failed: 'QA cuối chưa đạt nên giữ file debug',
+    missing_final_mp4: 'chưa thấy MP4 cuối hợp lệ',
+    empty_final_mp4: 'MP4 cuối đang rỗng',
+  };
+  return reason ? labels[reason] ?? reason.replaceAll('_', ' ') : 'không có file tạm cần xóa';
 }
 
 function CustomRetryPanel({
@@ -4202,6 +4254,48 @@ function BatchReliabilityCard({
           />
         ) : null}
       </div>
+    </GlassCard>
+  );
+}
+
+function PostProcessCleanupCard({
+  autoCleanup,
+  onAutoCleanupChange,
+}: {
+  autoCleanup: boolean;
+  onAutoCleanupChange: (value: boolean) => void;
+}) {
+  return (
+    <GlassCard className="grid gap-4 p-5" strong>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Dung lượng</div>
+          <h2 className="mt-2 text-xl font-semibold text-white">Dọn file tạm sau xử lý</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Sau khi video đã render thành công, tool giữ lại MP4 cuối, phụ đề, log và hồ sơ xuất bản. Các frame/crop/audio tạm sẽ được xóa để tiết kiệm ổ cứng.
+          </p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${autoCleanup ? 'border-emerald-300/35 bg-emerald-300/10 text-emerald-100' : 'border-amber-300/35 bg-amber-300/10 text-amber-100'}`}>
+          {autoCleanup ? 'Tự dọn' : 'Giữ file tạm'}
+        </span>
+      </div>
+      <label className="flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200">
+        <input type="checkbox" checked={autoCleanup} onChange={(event) => onAutoCleanupChange(event.target.checked)} />
+        <span>Tự dọn file tạm sau khi render thành công</span>
+      </label>
+      <div className="grid gap-2 text-xs leading-5 text-slate-400 sm:grid-cols-2">
+        <div className="rounded-md border border-emerald-300/20 bg-emerald-300/10 p-3 text-emerald-100">
+          Giữ lại: MP4 cuối, phụ đề, log, QA report, manifest để sau này đăng video hoặc lên lịch.
+        </div>
+        <div className="rounded-md border border-slate-500/20 bg-slate-950/45 p-3">
+          Xóa khi an toàn: frame quét, crop OCR, bản copy source.mp4 trong output và audio trung gian.
+        </div>
+      </div>
+      {!autoCleanup ? (
+        <div className="rounded-md border border-amber-300/25 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
+          Chỉ nên tắt khi bạn đang debug lỗi render hoặc cần giữ toàn bộ file trung gian để kiểm tra sâu.
+        </div>
+      ) : null}
     </GlassCard>
   );
 }

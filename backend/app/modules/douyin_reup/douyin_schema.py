@@ -418,6 +418,8 @@ class DouyinOutputResult(BaseModel):
     durations: dict[str, float] = Field(default_factory=dict)
     retry_history: list[dict[str, str | None]] = Field(default_factory=list)
     final_output_qa: dict | None = None
+    publish_manifest_file: str | None = None
+    cleanup_report: dict[str, Any] | None = None
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
