@@ -473,6 +473,11 @@ class DouyinReupService:
                     ocr_detected_line_count=int(cached_output.get("ocr_detected_line_count") or 0),
                     ocr_average_confidence=float(cached_output.get("ocr_average_confidence") or 0.0),
                     ocr_region_mode=cached_output.get("ocr_region_mode"),
+                    subtitle_quality_score=float(cached_output.get("subtitle_quality_score") or 0.0),
+                    subtitle_quality_reasons=list(cached_output.get("subtitle_quality_reasons") or []),
+                    subtitle_quality_stats=dict(cached_output.get("subtitle_quality_stats") or {}),
+                    subtitle_rejected_sources=list(cached_output.get("subtitle_rejected_sources") or []),
+                    fallback_mode=cached_output.get("fallback_mode"),
                     warnings=["Dùng lại source SRT đã có từ lần chạy trước."],
                 )
                 warnings.extend(source_result.warnings)
@@ -580,6 +585,12 @@ class DouyinReupService:
                         context={
                             "reup_mode": "douyin_reup",
                             "settings_snapshot": settings.model_dump(mode="json"),
+                            "subtitle_content_quality": {
+                                "score": source_result.subtitle_quality_score,
+                                "reasons": list(source_result.subtitle_quality_reasons),
+                                "stats": dict(source_result.subtitle_quality_stats),
+                                "rejected_sources": list(source_result.subtitle_rejected_sources),
+                            },
                         },
                         auto_mark_low_quality_lines=settings.auto_mark_low_quality_lines,
                         enable_subtitle_rewrite_suggestions=settings.enable_subtitle_rewrite_suggestions,
@@ -608,6 +619,7 @@ class DouyinReupService:
                     ocr_average_confidence=source_result.ocr_average_confidence,
                     ocr_provider=settings.ocr_provider if source_result.source_type == "ocr_hardsub" else None,
                     ocr_region_mode=_ocr_region_mode(source_result, settings),
+                    **_subtitle_quality_output_fields(source_result),
                     log_file=str(log_path),
                     duration=video.duration,
                     durations=_round_durations(durations),
@@ -682,10 +694,18 @@ class DouyinReupService:
                 ocr_average_confidence=source_result.ocr_average_confidence,
                 ocr_provider=settings.ocr_provider if source_result.source_type == "ocr_hardsub" else None,
                 ocr_region_mode=_ocr_region_mode(source_result, settings),
+                **_subtitle_quality_output_fields(source_result),
                 duration=render_payload.get("duration"),
                 durations=_round_durations(durations),
                 retry_history=retry_history,
-                final_output_qa=_final_qa_summary(final_qa_report),
+                final_output_qa={
+                    **_final_qa_summary(final_qa_report),
+                    "subtitle_content_quality": {
+                        "score": source_result.subtitle_quality_score,
+                        "reasons": list(source_result.subtitle_quality_reasons),
+                        "rejected_sources": list(source_result.subtitle_rejected_sources),
+                    },
+                },
                 warnings=_dedupe(warnings),
                 errors=_dedupe(errors),
             )
@@ -713,6 +733,7 @@ class DouyinReupService:
                 ocr_average_confidence=source_result.ocr_average_confidence if source_result else 0.0,
                 ocr_provider=settings.ocr_provider if source_result and source_result.source_type == "ocr_hardsub" else None,
                 ocr_region_mode=_ocr_region_mode(source_result, settings),
+                **_subtitle_quality_output_fields(source_result),
                 failed_step=failed_step or "process_video",
                 error_message=error_message,
                 can_retry=True,
@@ -740,6 +761,16 @@ class DouyinReupService:
                     "retry_history": retry_history,
                     "warnings": _dedupe(warnings),
                     "errors": _dedupe(errors),
+                    "subtitle_source": source_result.source_type if source_result else None,
+                    "subtitle_quality_score": source_result.subtitle_quality_score if source_result else 0.0,
+                    "subtitle_quality_reasons": list(source_result.subtitle_quality_reasons) if source_result else [],
+                    "subtitle_quality_stats": dict(source_result.subtitle_quality_stats) if source_result else {},
+                    "subtitle_content_quality": {
+                        "score": source_result.subtitle_quality_score if source_result else 0.0,
+                        "reasons": list(source_result.subtitle_quality_reasons) if source_result else [],
+                    },
+                    "subtitle_rejected_sources": list(source_result.subtitle_rejected_sources) if source_result else [],
+                    "fallback_mode": source_result.fallback_mode if source_result else None,
                 }
                 if errors:
                     payload.update(
@@ -976,6 +1007,7 @@ class DouyinReupService:
                 silent_strategy=plan.strategy,
                 speech_score=plan.speech_score,
                 caption_source=caption_source,
+                fallback_mode="music_only_safe" if plan.recommended_audio_mode == "music_only_safe" else None,
                 silent_plan_file=render_result.plan_path,
                 silent_caption_generation=plan.caption_generation.model_dump(mode="json"),
                 silent_visual_tagging=plan.visual_tagging.model_dump(mode="json"),
@@ -1466,6 +1498,24 @@ def _ocr_region_mode(source_result: SubtitleSourceResult | None, settings: Douyi
     if not source_result or source_result.source_type != "ocr_hardsub":
         return None
     return source_result.ocr_region_mode or settings.ocr_region_mode
+
+
+def _subtitle_quality_output_fields(source_result: SubtitleSourceResult | None) -> dict[str, Any]:
+    if source_result is None:
+        return {
+            "subtitle_quality_score": 0.0,
+            "subtitle_quality_reasons": [],
+            "subtitle_quality_stats": {},
+            "subtitle_rejected_sources": [],
+            "fallback_mode": None,
+        }
+    return {
+        "subtitle_quality_score": source_result.subtitle_quality_score,
+        "subtitle_quality_reasons": list(source_result.subtitle_quality_reasons),
+        "subtitle_quality_stats": dict(source_result.subtitle_quality_stats),
+        "subtitle_rejected_sources": list(source_result.subtitle_rejected_sources),
+        "fallback_mode": source_result.fallback_mode,
+    }
 
 
 def _progress(

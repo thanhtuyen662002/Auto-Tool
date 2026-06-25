@@ -20,7 +20,7 @@ class DouyinReupSettings(BaseModel):
     subtitle_position: str = "bottom_overlay"
     translation_provider: str = "gemini"
     subtitle_source_priority: list[str] = Field(
-        default_factory=lambda: ["sidecar_srt", "embedded_subtitle", "asr", "ocr_hardsub"]
+        default_factory=lambda: ["sidecar_srt", "embedded_subtitle", "ocr_hardsub", "asr"]
     )
     use_sidecar_srt: bool = True
     use_embedded_subtitle: bool = True
@@ -28,7 +28,7 @@ class DouyinReupSettings(BaseModel):
     asr_provider: str = "faster_whisper"
     asr_model_size: str = "medium"
     asr_device: str = "auto"
-    asr_vad_filter: bool = False
+    asr_vad_filter: bool = True
     asr_max_audio_seconds: int = Field(default=180, ge=0, le=7200)
     asr_subprocess_isolation: bool = True
     asr_timeout_seconds: int = Field(default=1200, ge=60, le=24 * 60 * 60)
@@ -50,6 +50,12 @@ class DouyinReupSettings(BaseModel):
     ocr_max_duration_ms: int = Field(default=6000, ge=500, le=30_000)
     ocr_filter_watermarks: bool = True
     ocr_watermark_terms: list[str] = Field(default_factory=lambda: ["\u5c0f\u7c73\u540c\u5b66", "\u5c0f\u7c73\u540c\u5b78"])
+    subtitle_quality_gate_enabled: bool = True
+    asr_quality_min_blocks: int = Field(default=3, ge=1, le=20)
+    asr_quality_min_chars: int = Field(default=24, ge=1, le=500)
+    ocr_quality_min_blocks: int = Field(default=2, ge=1, le=20)
+    ocr_quality_min_chars: int = Field(default=16, ge=1, le=500)
+    subtitle_quality_min_coverage: float = Field(default=0.18, ge=0, le=1)
     prefer_ocr_over_asr_when_text_visible: bool = False
     visual_style_preset_id: str = "clean_review_light"
     burn_subtitle: bool = True
@@ -127,7 +133,10 @@ class DouyinReupSettings(BaseModel):
     use_visual_segments_for_silent_video: bool = True
     silent_segment_duration_min: float = Field(default=1.2, gt=0, le=30)
     silent_segment_duration_max: float = Field(default=4.0, gt=0, le=60)
-    generate_visual_captions: bool = True
+    generate_visual_captions: bool = False
+    silent_visual_caption_min_product_confidence: float = Field(default=0.75, ge=0, le=1)
+    silent_visual_caption_min_segments: int = Field(default=3, ge=1, le=20)
+    silent_voiceover_max_duration_ratio: float = Field(default=0.85, ge=0.2, le=1.2)
     visual_caption_language: str = "vi"
     visual_caption_style: str = "natural_short"
     silent_caption_tone: Literal["natural", "cute", "clean_review", "sales_light", "chill"] = "natural"
@@ -359,6 +368,11 @@ class SubtitleSourceResult(BaseModel):
     ocr_detected_line_count: int = 0
     ocr_average_confidence: float = 0.0
     ocr_region_mode: str | None = None
+    subtitle_quality_score: float = 0.0
+    subtitle_quality_reasons: list[str] = Field(default_factory=list)
+    subtitle_quality_stats: dict[str, Any] = Field(default_factory=dict)
+    subtitle_rejected_sources: list[dict[str, Any]] = Field(default_factory=list)
+    fallback_mode: str | None = None
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
@@ -411,6 +425,11 @@ class DouyinOutputResult(BaseModel):
     ocr_average_confidence: float = 0.0
     ocr_provider: str | None = None
     ocr_region_mode: str | None = None
+    subtitle_quality_score: float = 0.0
+    subtitle_quality_reasons: list[str] = Field(default_factory=list)
+    subtitle_quality_stats: dict[str, Any] = Field(default_factory=dict)
+    subtitle_rejected_sources: list[dict[str, Any]] = Field(default_factory=list)
+    fallback_mode: str | None = None
     failed_step: str | None = None
     error_message: str | None = None
     can_retry: bool = False

@@ -1,5 +1,21 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.59
+
+### Highlights
+
+- Added a shared ASR/OCR subtitle quality gate so noisy lines such as `Giảm cân`, `Đi, đi, đi`, and `《Phim》` are rejected before translation/rendering.
+- Moved subtitle source priority to safer ordering: sidecar, embedded subtitle, OCR if quality passes, ASR if quality passes, otherwise `music_only_safe`.
+- Hardened ASR against music/noise hallucination with no-speech, log-probability, compression-ratio, VAD, and segment-level filters.
+- Made Silent Mode conservative by default: no generated Vietnamese captions or voiceover unless OCR, product detection, and visual context are reliable enough.
+- Added subtitle content quality metadata to output logs/reports, including rejected sources, reasons, score, stats, and fallback mode.
+- Fixed a circular import that could break standalone batch stress checks.
+
+### QA
+
+- Backend test suite passed: `540 passed`.
+- Frontend production build passed.
+
 ## v1.0.58
 
 ### Highlights

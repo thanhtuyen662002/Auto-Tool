@@ -7,7 +7,7 @@ from typing import Any, Callable
 from app.adapters.ffmpeg_adapter import FFmpegError, run_ffmpeg
 from app.modules.douyin_reup.asr_service import ASRService
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem, SubtitleSourceResult
-from app.modules.douyin_reup.subtitle_timing_guard import parse_srt_blocks
+from app.modules.douyin_reup.subtitle_quality_gate import SubtitleQualityResult, evaluate_srt_quality
 from app.modules.hardsub_ocr import HardSubOCRService
 from app.modules.hardsub_ocr.hardsub_ocr_schema import HardSubOCRResult
 from app.utils.file_utils import ensure_dir
@@ -30,6 +30,8 @@ class SubtitleSourceDetector:
         target_dir = ensure_dir(work_dir)
         warnings: list[str] = []
         errors: list[str] = []
+        rejected_sources: list[dict[str, Any]] = []
+        attempted_ocr = False
 
         for source_type in settings.subtitle_source_priority:
             if source_type == "sidecar_srt" and settings.use_sidecar_srt:
@@ -47,47 +49,40 @@ class SubtitleSourceDetector:
                         source_type="embedded_subtitle",
                         source_srt_path=path,
                         language=settings.source_language,
+                        subtitle_quality_score=1.0,
                     )
                 except (FFmpegError, OSError, ValueError) as exc:
                     warnings.append(f"Không thể trích xuất subtitle nhúng từ {video.filename}: {_compact_worker_error(exc)}")
 
-            if source_type == "asr" and settings.use_asr_if_no_subtitle:
-                ocr_priority_reason = _ocr_priority_reason(settings)
-                if ocr_priority_reason:
-                    ocr_result = self._try_ocr(video, settings, target_dir, ocr_priority_reason, errors)
-                    if ocr_result:
-                        return ocr_result
-                try:
-                    asr_payload = self._run_asr(video, settings, target_dir, progress_callback)
-                    path = asr_payload["path"]
-                    asr_result = SubtitleSourceResult(
-                        video_path=video.path,
-                        source_type="asr",
-                        source_srt_path=path,
-                        language=settings.source_language,
-                        warnings=[*warnings, *asr_payload.get("warnings", [])],
-                    )
-                    if settings.prefer_ocr_over_asr_when_text_visible:
-                        ocr_result = self._try_ocr(video, settings, target_dir, "OCR được ưu tiên hơn ASR theo cấu hình.", errors)
-                        if ocr_result:
-                            return ocr_result
-                    asr_line_count = _srt_line_count(path)
-                    if settings.use_ocr_if_asr_failed and asr_line_count < 2:
-                        ocr_result = self._try_ocr(video, settings, target_dir, "ASR tạo quá ít dòng, thử OCR hard-sub.", errors)
-                        if ocr_result and ocr_result.ocr_detected_line_count > asr_line_count:
-                            return ocr_result
-                    return asr_result
-                except Exception as exc:
-                    errors.append(f"ASR thất bại cho {video.filename}: {_compact_worker_error(exc)}")
-                    if settings.use_ocr_if_asr_failed:
-                        ocr_result = self._try_ocr(video, settings, target_dir, "ASR lỗi nên thử OCR hard-sub.", errors)
-                        if ocr_result:
-                            return ocr_result.model_copy(update={"warnings": [*warnings, *ocr_result.warnings]})
-
-            if source_type == "ocr_hardsub" and settings.use_ocr_if_no_subtitle:
-                ocr_result = self._try_ocr(video, settings, target_dir, "Không có nguồn subtitle trước bước OCR fallback.", errors)
+            if source_type == "ocr_hardsub" and settings.use_ocr_if_no_subtitle and not attempted_ocr:
+                attempted_ocr = True
+                ocr_result = self._try_ocr(
+                    video,
+                    settings,
+                    target_dir,
+                    "Thử OCR chữ dính trên video trước ASR.",
+                    errors,
+                    rejected_sources,
+                )
                 if ocr_result:
                     return ocr_result.model_copy(update={"warnings": [*warnings, *ocr_result.warnings]})
+
+            if source_type == "asr" and settings.use_asr_if_no_subtitle:
+                asr_result = self._try_asr(video, settings, target_dir, progress_callback, warnings, errors, rejected_sources)
+                if asr_result:
+                    return asr_result
+                if settings.use_ocr_if_asr_failed and not attempted_ocr:
+                    attempted_ocr = True
+                    ocr_result = self._try_ocr(
+                        video,
+                        settings,
+                        target_dir,
+                        "ASR lỗi hoặc bị loại nên thử OCR chữ dính trên video.",
+                        errors,
+                        rejected_sources,
+                    )
+                    if ocr_result:
+                        return ocr_result.model_copy(update={"warnings": [*warnings, *ocr_result.warnings]})
 
         return SubtitleSourceResult(
             video_path=video.path,
@@ -95,7 +90,9 @@ class SubtitleSourceDetector:
             source_srt_path=None,
             language=settings.source_language,
             warnings=warnings,
-            errors=_dedupe_messages(errors) or [f"Không tìm thấy subtitle cho video {video.filename}."],
+            errors=_dedupe_messages(errors) or [f"Không tìm thấy nguồn phụ đề đủ tin cậy cho {video.filename}."],
+            subtitle_rejected_sources=rejected_sources,
+            fallback_mode="music_only_safe" if rejected_sources else None,
         )
 
     def _copy_sidecar(
@@ -116,6 +113,7 @@ class SubtitleSourceDetector:
             source_type="sidecar_srt",
             source_srt_path=str(target),
             language=settings.source_language,
+            subtitle_quality_score=1.0,
         )
 
     def _extract_embedded(self, video: DouyinVideoItem, target_dir: Path) -> str:
@@ -134,6 +132,53 @@ class SubtitleSourceDetector:
             raise RuntimeError("File subtitle nhúng sau khi trích xuất bị rỗng.")
         return str(target)
 
+    def _try_asr(
+        self,
+        video: DouyinVideoItem,
+        settings: DouyinReupSettings,
+        target_dir: Path,
+        progress_callback: Callable[[dict[str, Any]], None] | None,
+        warnings: list[str],
+        errors: list[str],
+        rejected_sources: list[dict[str, Any]],
+    ) -> SubtitleSourceResult | None:
+        try:
+            asr_payload = self._run_asr(video, settings, target_dir, progress_callback)
+        except Exception as exc:
+            errors.append(f"ASR thất bại cho {video.filename}: {_compact_worker_error(exc)}")
+            return None
+
+        path = asr_payload["path"]
+        quality = _evaluate_source_quality(path, source_type="asr", video=video, settings=settings)
+        if not quality.ok:
+            rejected_sources.append(_quality_rejection("asr", quality))
+            errors.append(_quality_warning(video.filename, "ASR", quality))
+            return None
+
+        if settings.prefer_ocr_over_asr_when_text_visible:
+            ocr_result = self._try_ocr(
+                video,
+                settings,
+                target_dir,
+                "OCR được ưu tiên hơn ASR theo cấu hình hiện tại.",
+                errors,
+                rejected_sources,
+            )
+            if ocr_result:
+                return ocr_result.model_copy(update={"warnings": [*warnings, *ocr_result.warnings]})
+
+        return SubtitleSourceResult(
+            video_path=video.path,
+            source_type="asr",
+            source_srt_path=path,
+            language=settings.source_language,
+            warnings=[*warnings, *asr_payload.get("warnings", [])],
+            subtitle_quality_score=quality.score,
+            subtitle_quality_reasons=quality.reasons,
+            subtitle_quality_stats=quality.stats,
+            subtitle_rejected_sources=list(rejected_sources),
+        )
+
     def _try_ocr(
         self,
         video: DouyinVideoItem,
@@ -141,6 +186,7 @@ class SubtitleSourceDetector:
         target_dir: Path,
         reason: str,
         error_sink: list[str] | None = None,
+        rejected_sources: list[dict[str, Any]] | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> SubtitleSourceResult | None:
         progress_callback = progress_callback or getattr(self, "_progress_callback", None)
@@ -148,12 +194,27 @@ class SubtitleSourceDetector:
             result = self._run_ocr(video, settings, target_dir, progress_callback)
         except Exception as exc:
             if error_sink is not None:
-                error_sink.append(f"OCR hard-sub thất bại cho {video.filename}: {_compact_worker_error(exc)}")
+                error_sink.append(f"OCR chữ dính trên video thất bại cho {video.filename}: {_compact_worker_error(exc)}")
             return None
         if not result.source_srt_path or result.detected_line_count <= 0:
             if error_sink is not None:
-                error_sink.extend(_dedupe_messages(result.errors or [f"OCR hard-sub không nhận diện được phụ đề cho {video.filename}."]))
+                error_sink.extend(_dedupe_messages(result.errors or [f"OCR không tìm thấy phụ đề cho {video.filename}."]))
             return None
+
+        quality = _evaluate_source_quality(
+            result.source_srt_path,
+            source_type="ocr_hardsub",
+            video=video,
+            settings=settings,
+            ocr_confidence=result.average_confidence,
+        )
+        if not quality.ok:
+            if rejected_sources is not None:
+                rejected_sources.append(_quality_rejection("ocr_hardsub", quality))
+            if error_sink is not None:
+                error_sink.append(_quality_warning(video.filename, "OCR hard-sub", quality))
+            return None
+
         return SubtitleSourceResult(
             video_path=video.path,
             source_type="ocr_hardsub",
@@ -164,9 +225,13 @@ class SubtitleSourceDetector:
             ocr_detected_line_count=result.detected_line_count,
             ocr_average_confidence=result.average_confidence,
             ocr_region_mode=result.region_mode,
+            subtitle_quality_score=quality.score,
+            subtitle_quality_reasons=quality.reasons,
+            subtitle_quality_stats=quality.stats,
+            subtitle_rejected_sources=list(rejected_sources or []),
             warnings=[
                 reason,
-                "Phụ đề nguồn được nhận diện bằng OCR từ chữ dính trên video. Vui lòng kiểm tra kỹ vì OCR có thể nhận sai chữ.",
+                "Phụ đề nguồn được đọc bằng OCR từ chữ dính trên video; hãy kiểm tra kỹ trước khi render hàng loạt.",
                 *result.warnings,
             ],
             errors=_dedupe_messages(result.errors),
@@ -244,21 +309,38 @@ class SubtitleSourceDetector:
         )
 
 
-def _srt_line_count(path: str) -> int:
-    try:
-        return len(parse_srt_blocks(path))
-    except Exception:
-        return 0
+def _evaluate_source_quality(
+    path: str,
+    *,
+    source_type: str,
+    video: DouyinVideoItem,
+    settings: DouyinReupSettings,
+    ocr_confidence: float | None = None,
+) -> SubtitleQualityResult:
+    if not settings.subtitle_quality_gate_enabled:
+        return SubtitleQualityResult(ok=True, score=1.0, reasons=[], stats={"gate_enabled": False})
+    return evaluate_srt_quality(
+        path,
+        source_type=source_type,
+        video_duration=video.duration,
+        ocr_confidence=ocr_confidence,
+        min_blocks=settings.asr_quality_min_blocks if source_type == "asr" else settings.ocr_quality_min_blocks,
+        min_chars=settings.asr_quality_min_chars if source_type == "asr" else settings.ocr_quality_min_chars,
+        min_coverage=settings.subtitle_quality_min_coverage,
+    )
 
 
-def _ocr_priority_reason(settings: DouyinReupSettings) -> str | None:
-    if not (settings.use_ocr_if_no_subtitle or settings.use_ocr_if_asr_failed):
-        return None
-    if settings.prefer_ocr_over_asr_when_text_visible:
-        return "OCR được ưu tiên hơn ASR theo cấu hình vì video có chữ trên màn hình."
-    if (settings.ocr_region_mode or "").strip().lower() == "full_frame":
-        return "Đã chọn OCR toàn bộ video nên ưu tiên đọc chữ trên màn hình trước khi nghe thoại."
-    return None
+def _quality_rejection(source: str, quality: SubtitleQualityResult) -> dict[str, Any]:
+    return {
+        "source": source,
+        "score": quality.score,
+        "reasons": quality.reasons,
+        "stats": quality.stats,
+    }
+
+
+def _quality_warning(filename: str, label: str, quality: SubtitleQualityResult) -> str:
+    return f"{label} bị loại cho {filename}: {', '.join(quality.reasons)}"
 
 
 def _compact_worker_error(exc: Exception) -> str:
@@ -266,10 +348,10 @@ def _compact_worker_error(exc: Exception) -> str:
     for marker in ("Traceback (most recent call last):", "Traceback"):
         if marker in text:
             text = text.split(marker, 1)[0].strip()
-    if "ASR không nhận diện được subtitle từ video" in text:
-        return "ASR không nhận diện được phụ đề từ audio của video."
-    if "OCR không nhận diện được" in text:
-        return "OCR không nhận diện được phụ đề tiếng Trung đủ tin cậy."
+    if "ASR" in text and "subtitle" in text:
+        return "ASR không nhận diện được phụ đề đủ tin cậy từ audio của video."
+    if "OCR" in text:
+        return "OCR không nhận diện được phụ đề dính trên video đủ tin cậy."
     return text[:700] if len(text) > 700 else text
 
 

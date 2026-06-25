@@ -11,6 +11,8 @@ def test_silent_presets_have_expected_settings():
 
     assert chill.silent_mode_strategy == "chill_immersive"
     assert chill.generate_voiceover_for_silent_video is False
+    assert chill.generate_visual_captions is False
+    assert chill.silent_review_before_render is True
     assert voice.generate_voiceover_for_silent_video is True
     assert voice.silent_voiceover_voice == "vi-VN-HoaiMyNeural"
     assert sales.silent_mode_strategy == "sales_recut"

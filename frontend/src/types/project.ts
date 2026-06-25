@@ -155,6 +155,12 @@ export interface DouyinReupSettings {
   ocr_max_duration_ms: number;
   ocr_filter_watermarks: boolean;
   ocr_watermark_terms: string[];
+  subtitle_quality_gate_enabled: boolean;
+  asr_quality_min_blocks: number;
+  asr_quality_min_chars: number;
+  ocr_quality_min_blocks: number;
+  ocr_quality_min_chars: number;
+  subtitle_quality_min_coverage: number;
   prefer_ocr_over_asr_when_text_visible: boolean;
   visual_style_preset_id: string;
   burn_subtitle: boolean;
@@ -233,6 +239,9 @@ export interface DouyinReupSettings {
   silent_segment_duration_min: number;
   silent_segment_duration_max: number;
   generate_visual_captions: boolean;
+  silent_visual_caption_min_product_confidence: number;
+  silent_visual_caption_min_segments: number;
+  silent_voiceover_max_duration_ratio: number;
   visual_caption_language: string;
   visual_caption_style: string;
   silent_caption_tone: 'natural' | 'cute' | 'clean_review' | 'sales_light' | 'chill' | string;
@@ -639,6 +648,11 @@ export interface DouyinOutputResult {
   ocr_average_confidence?: number;
   ocr_provider?: string | null;
   ocr_region_mode?: string | null;
+  subtitle_quality_score?: number;
+  subtitle_quality_reasons?: string[];
+  subtitle_quality_stats?: Record<string, unknown>;
+  subtitle_rejected_sources?: Array<Record<string, unknown>>;
+  fallback_mode?: string | null;
   failed_step?: string | null;
   error_message?: string | null;
   can_retry?: boolean;
@@ -726,6 +740,7 @@ export interface FinalOutputQASummary {
   score: number;
   report_path?: string | null;
   issues: FinalOutputQAIssue[];
+  subtitle_content_quality?: Record<string, unknown>;
 }
 
 export interface FinalOutputQAReport extends FinalOutputQASummary {

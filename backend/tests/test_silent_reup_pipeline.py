@@ -4,7 +4,12 @@ from pathlib import Path
 
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
 from app.modules.silent_immersive_reup.silent_reup_pipeline import SilentReupPipeline
-from app.modules.silent_immersive_reup.silent_schema import SilentVisualSegment, SpeechPresenceResult, VisualSegmentType
+from app.modules.silent_immersive_reup.silent_schema import (
+    SilentProductDetectionReport,
+    SilentVisualSegment,
+    SpeechPresenceResult,
+    VisualSegmentType,
+)
 from app.schemas.media_schema import MediaFile
 
 
@@ -24,15 +29,29 @@ class FakeAnalyzer:
     def analyze_video(self, video_path, settings, output_dir):
         return [
             SilentVisualSegment(
-                id="seg_001",
+                id=f"seg_{index:03d}",
                 video_path=video_path,
-                start=0,
-                end=2,
+                start=(index - 1) * 2,
+                end=index * 2,
                 duration=2,
                 segment_type=VisualSegmentType.product_reveal,
                 visual_score=0.8,
             )
+            for index in range(1, 4)
         ]
+
+
+class FakeProductDetector:
+    def detect(self, video_path, segments, visual_tag_report, product_context=None, gemini_api_keys=None):
+        return SilentProductDetectionReport(
+            video_path=video_path,
+            provider="heuristic_fallback",
+            status="detected",
+            candidates=[],
+            average_confidence=0.9,
+            warnings=[],
+            created_at="2026-06-25T00:00:00",
+        )
 
 
 class FakeRenderPipeline:
@@ -51,9 +70,18 @@ class FakeRenderPipeline:
 def test_silent_pipeline_builds_plan_and_writes_srt(tmp_path):
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"fake")
-    settings = DouyinReupSettings(enabled=True, preset_id="silent_chill_immersive", use_ocr_if_no_subtitle=False)
+    settings = DouyinReupSettings(
+        enabled=True,
+        preset_id="silent_chill_immersive",
+        use_ocr_if_no_subtitle=False,
+        generate_visual_captions=True,
+    )
 
-    pipeline = SilentReupPipeline(speech_detector=FakeDetector(), visual_analyzer=FakeAnalyzer())
+    pipeline = SilentReupPipeline(
+        speech_detector=FakeDetector(),
+        visual_analyzer=FakeAnalyzer(),
+        product_detector=FakeProductDetector(),
+    )
     plan = pipeline.build_plan(str(video), settings, str(tmp_path / "work"), {"product_name": "Kệ bếp"})
     srt_path = pipeline.write_caption_srt(plan, str(tmp_path / "work"), "caption.srt")
 
@@ -83,6 +111,7 @@ def test_silent_pipeline_render_from_plan_uses_existing_renderer(tmp_path, monke
         enabled=True,
         preset_id="silent_chill_immersive",
         use_ocr_if_no_subtitle=False,
+        generate_visual_captions=True,
         review_subtitles_before_render=False,
         auto_render_after_translation=True,
     )
@@ -91,6 +120,7 @@ def test_silent_pipeline_render_from_plan_uses_existing_renderer(tmp_path, monke
         speech_detector=FakeDetector(),
         visual_analyzer=FakeAnalyzer(),
         render_pipeline=FakeRenderPipeline(),
+        product_detector=FakeProductDetector(),
     )
     plan = pipeline.build_plan(str(video), settings, str(tmp_path / "work"), None)
     result = pipeline.render_from_plan(plan, settings, str(tmp_path / "render"))
@@ -116,15 +146,24 @@ def test_silent_pipeline_respects_disabled_visual_caption_generation(tmp_path):
     plan = pipeline.build_plan(str(video), settings, str(tmp_path / "work"), None)
 
     assert plan.captions == []
-    assert any("disabled" in warning for warning in plan.warnings)
+    assert any("No reliable OCR" in warning or "silent_safe_music_only" in warning for warning in plan.warnings)
 
 
 def test_silent_caption_does_not_prefix_product_name_with_colon(tmp_path):
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"fake")
-    settings = DouyinReupSettings(enabled=True, preset_id="silent_chill_immersive", use_ocr_if_no_subtitle=False)
+    settings = DouyinReupSettings(
+        enabled=True,
+        preset_id="silent_chill_immersive",
+        use_ocr_if_no_subtitle=False,
+        generate_visual_captions=True,
+    )
 
-    pipeline = SilentReupPipeline(speech_detector=FakeDetector(), visual_analyzer=FakeAnalyzer())
+    pipeline = SilentReupPipeline(
+        speech_detector=FakeDetector(),
+        visual_analyzer=FakeAnalyzer(),
+        product_detector=FakeProductDetector(),
+    )
     plan = pipeline.build_plan(str(video), settings, str(tmp_path / "work"), {"product_name": "Ke bep"})
 
     assert plan.captions

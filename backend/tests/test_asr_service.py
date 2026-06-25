@@ -9,18 +9,23 @@ from app.modules.douyin_reup.asr_service import ASRService, _asr_audio_limit_sec
 from app.schemas.media_schema import MediaFile
 
 
+CHINESE_HELLO = "\u4f60\u597d"
+
+
 def test_faster_whisper_dependency_is_available():
     assert importlib.util.find_spec("faster_whisper") is not None
 
 
-def test_asr_uses_no_vad_by_default_for_better_dialogue_coverage():
+def test_asr_uses_hallucination_guard_options():
     class FakeModel:
         def __init__(self) -> None:
             self.calls: list[bool] = []
+            self.kwargs = None
 
         def transcribe(self, audio_path, **kwargs):
             self.calls.append(kwargs["vad_filter"])
-            return [SimpleNamespace(start=0.0, end=1.0, text="你好")], None
+            self.kwargs = kwargs
+            return [SimpleNamespace(start=0.0, end=1.0, text=CHINESE_HELLO)], None
 
     service = ASRService()
     model = FakeModel()
@@ -28,7 +33,11 @@ def test_asr_uses_no_vad_by_default_for_better_dialogue_coverage():
     segments = service._transcribe_with_vad_fallback(model, "audio.wav", "zh")
 
     assert model.calls == [False]
-    assert segments[0].text == "你好"
+    assert segments[0].text == CHINESE_HELLO
+    assert model.kwargs["condition_on_previous_text"] is False
+    assert model.kwargs["no_speech_threshold"] == 0.6
+    assert model.kwargs["log_prob_threshold"] == -1.0
+    assert model.kwargs["compression_ratio_threshold"] == 2.4
 
 
 def test_asr_retries_without_vad_when_silero_asset_is_missing():
@@ -43,7 +52,7 @@ def test_asr_retries_without_vad_when_silero_asset_is_missing():
                     "[ONNXRuntimeError] : 3 : NO_SUCHFILE : "
                     "Load model faster_whisper/assets/silero_vad_v6.onnx failed. File doesn't exist"
                 )
-            return [SimpleNamespace(start=0.0, end=1.0, text="你好")], None
+            return [SimpleNamespace(start=0.0, end=1.0, text=CHINESE_HELLO)], None
 
     service = ASRService()
     model = FakeModel()
@@ -51,7 +60,7 @@ def test_asr_retries_without_vad_when_silero_asset_is_missing():
     segments = service._transcribe_with_vad_fallback(model, "audio.wav", "zh", vad_filter=True)
 
     assert model.calls == [True, False]
-    assert segments[0].text == "你好"
+    assert segments[0].text == CHINESE_HELLO
     assert service.warnings
 
 
@@ -64,7 +73,7 @@ def test_asr_retries_without_vad_when_vad_returns_no_segments(tmp_path, monkeypa
             self.calls.append(kwargs["vad_filter"])
             if kwargs["vad_filter"]:
                 return [], None
-            return [SimpleNamespace(start=0.0, end=1.0, text="你好")], None
+            return [SimpleNamespace(start=0.0, end=1.0, text=CHINESE_HELLO)], None
 
     output = tmp_path / "asr.srt"
     audio_outputs: list[Path] = []
@@ -93,7 +102,7 @@ def test_asr_retries_without_vad_when_vad_returns_no_segments(tmp_path, monkeypa
 
     assert result == str(output)
     assert model.calls == [True, False]
-    assert "你好" in output.read_text(encoding="utf-8")
+    assert CHINESE_HELLO in output.read_text(encoding="utf-8")
     assert audio_outputs
 
 

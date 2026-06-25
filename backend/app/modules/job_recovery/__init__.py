@@ -16,7 +16,6 @@ from app.modules.job_recovery.job_recovery_schema import (
     ResumeJobResult,
     VideoStepCheckpoint,
 )
-from app.modules.job_recovery.job_recovery_service import JobRecoveryService
 
 __all__ = [
     "JobCheckpoint",
@@ -41,6 +40,10 @@ __all__ = [
 
 
 def __getattr__(name: str):
+    if name == "JobRecoveryService":
+        from app.modules.job_recovery.job_recovery_service import JobRecoveryService
+
+        return JobRecoveryService
     if name == "JobResumeService":
         from app.modules.job_recovery.job_resume_service import JobResumeService
 

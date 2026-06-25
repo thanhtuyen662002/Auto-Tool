@@ -105,4 +105,4 @@ def test_douyin_review_mode_creates_document_and_skips_render(tmp_path: Path, mo
 
     documents = SubtitleReviewService().list_documents(job_id="job-review")
     assert len(documents) == 1
-    assert documents[0].lines[0].translated_text == "Xin chao"
+    assert documents[0].lines[0].translated_text == "Xin chao."

@@ -143,7 +143,9 @@ def _preset_summary(settings: Any) -> dict[str, str | None]:
     }
 
 
-def _subtitle_quality_summary(outputs: list[DouyinOutputResult]) -> dict[str, int | float]:
+def _subtitle_quality_summary(outputs: list[DouyinOutputResult]) -> dict[str, Any]:
+    gate_scores = [output.subtitle_quality_score for output in outputs if output.subtitle_quality_score > 0]
+    rejected = [item for output in outputs for item in output.subtitle_rejected_sources]
     document_ids = [
         output.subtitle_review_document_id
         for output in outputs
@@ -154,6 +156,9 @@ def _subtitle_quality_summary(outputs: list[DouyinOutputResult]) -> dict[str, in
             "average_score": 0.0,
             "documents_with_critical": 0,
             "total_flagged_lines": 0,
+            "average_source_quality_score": round(sum(gate_scores) / len(gate_scores), 4) if gate_scores else 0.0,
+            "rejected_source_count": len(rejected),
+            "rejected_source_breakdown": dict(Counter(str(item.get("source") or "unknown") for item in rejected)),
         }
     try:
         from app.modules.subtitle_quality.subtitle_quality_repository import SubtitleQualityRepository
@@ -165,6 +170,9 @@ def _subtitle_quality_summary(outputs: list[DouyinOutputResult]) -> dict[str, in
         "average_score": round(sum(report.average_score for report in reports) / len(reports), 4) if reports else 0.0,
         "documents_with_critical": sum(1 for report in reports if report.critical_count > 0),
         "total_flagged_lines": sum(report.needs_review_count for report in reports),
+        "average_source_quality_score": round(sum(gate_scores) / len(gate_scores), 4) if gate_scores else 0.0,
+        "rejected_source_count": len(rejected),
+        "rejected_source_breakdown": dict(Counter(str(item.get("source") or "unknown") for item in rejected)),
     }
 
 

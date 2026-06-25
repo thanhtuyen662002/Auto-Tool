@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.adapters.ffmpeg_adapter import probe_video, run_ffmpeg
+from app.modules.douyin_reup.subtitle_quality_gate import segment_is_low_quality
 from app.modules.douyin_reup.subtitle_timing_guard import SubtitleBlock, write_srt_blocks
 from app.utils.file_utils import ensure_dir
 from app.utils.logger import get_logger
@@ -147,16 +148,25 @@ class ASRService:
             vad_filter=vad_filter,
             beam_size=5,
             best_of=5,
-            condition_on_previous_text=True,
+            condition_on_previous_text=False,
+            no_speech_threshold=0.6,
+            log_prob_threshold=-1.0,
+            compression_ratio_threshold=2.4,
         )
         return list(segments)
 
-    @staticmethod
-    def _segments_to_blocks(segments: list[Any]) -> list[SubtitleBlock]:
+    def _segments_to_blocks(self, segments: list[Any]) -> list[SubtitleBlock]:
         blocks: list[SubtitleBlock] = []
         for segment in segments:
             text = " ".join(str(segment.text or "").split())
-            if not text:
+            is_low_quality, reasons = segment_is_low_quality(
+                text,
+                no_speech_prob=_float_attr(segment, "no_speech_prob"),
+                avg_logprob=_float_attr(segment, "avg_logprob"),
+                compression_ratio=_float_attr(segment, "compression_ratio"),
+            )
+            if is_low_quality:
+                self.warnings.append(f"ASR bỏ qua một đoạn nghi nhiễu: {', '.join(reasons)}")
                 continue
             start = max(0.0, float(segment.start))
             end = max(start + 0.1, float(segment.end))
@@ -200,6 +210,16 @@ def _is_missing_vad_asset_error(exc: Exception) -> bool:
         or ("vad" in message and "file doesn't exist" in message)
         or ("vad" in message and "file does not exist" in message)
     )
+
+
+def _float_attr(segment: Any, name: str) -> float | None:
+    value = getattr(segment, name, None)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _progress(

@@ -10,6 +10,7 @@ from typing import Any, Callable
 from app.adapters.ffmpeg_adapter import probe_video
 from app.modules.douyin_reup.douyin_render_pipeline import DouyinRenderPipeline
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem
+from app.modules.douyin_reup.subtitle_quality_gate import evaluate_srt_quality
 from app.modules.douyin_reup.subtitle_timing_guard import SubtitleBlock, parse_srt_blocks, write_srt_blocks
 from app.modules.douyin_reup.subtitle_translator import SubtitleTranslator
 from app.modules.hardsub_ocr import HardSubOCRService
@@ -181,7 +182,8 @@ class SilentReupPipeline:
         if settings.visual_caption_language.casefold() not in {"vi", "vi-vn"}:
             warnings.append("Visual caption templates are Vietnamese; visual_caption_language was normalized to vi.")
         _progress(progress_callback, "caption_generation", 84)
-        if ocr_translated_srt_path or settings.generate_visual_captions:
+        visual_caption_allowed = _visual_caption_allowed(settings, product_detection, segments)
+        if ocr_translated_srt_path or visual_caption_allowed:
             captions = self.caption_generator.generate_captions(
                 video_path=video_path,
                 segments=segments,
@@ -196,7 +198,9 @@ class SilentReupPipeline:
             )
         else:
             captions = []
-            warnings.append("Visual caption generation is disabled and OCR did not produce translated text.")
+            warnings.append(
+                "silent_safe_music_only: Không có OCR phụ đề đủ tin cậy hoặc ngữ cảnh sản phẩm/khung hình đủ chắc để tạo caption."
+            )
         voiceover_script = None
         generate_voiceover = bool(settings.generate_voiceover_for_silent_video)
         music_only_reason = _music_only_fallback_reason(
@@ -205,6 +209,8 @@ class SilentReupPipeline:
             speech=speech,
             product_detection=product_detection,
             ocr_average_confidence=self.last_ocr_average_confidence,
+            visual_caption_allowed=visual_caption_allowed,
+            has_ocr_source=bool(ocr_translated_srt_path),
         )
         if music_only_reason:
             warnings.append(f"silent_safe_music_only: {music_only_reason}")
@@ -229,7 +235,8 @@ class SilentReupPipeline:
             )
             voice_duration = estimate_voice_duration(voiceover_script, settings.target_language)
             available_duration = _plan_duration_from(captions, segments)
-            if voice_duration > max(available_duration * 1.1, available_duration + 1.0):
+            max_voice_duration = available_duration * float(settings.silent_voiceover_max_duration_ratio)
+            if voice_duration > max_voice_duration:
                 warnings.append(
                     "silent_safe_music_only: Voiceover du kien dai hon timeline video/sub, "
                     "nen chi thay nhac de tranh tieng Viet lech phu de."
@@ -682,6 +689,18 @@ class SilentReupPipeline:
         if not ocr_result.source_srt_path or ocr_result.detected_line_count <= 0:
             warnings.extend(ocr_result.errors)
             return None
+        quality = evaluate_srt_quality(
+            ocr_result.source_srt_path,
+            source_type="ocr_hardsub",
+            video_duration=probe_video(video_path).duration,
+            ocr_confidence=ocr_result.average_confidence,
+            min_blocks=settings.ocr_quality_min_blocks,
+            min_chars=settings.ocr_quality_min_chars,
+            min_coverage=settings.subtitle_quality_min_coverage,
+        )
+        if not quality.ok:
+            warnings.append(f"silent_safe_music_only: OCR phụ đề bị loại: {', '.join(quality.reasons)}")
+            return None
         translated_path = target_dir / "silent_ocr_vi.srt"
         try:
             translation = self.translator.translate_srt(
@@ -890,6 +909,8 @@ def _music_only_fallback_reason(
     speech,
     product_detection: SilentProductDetectionReport | None,
     ocr_average_confidence: float,
+    visual_caption_allowed: bool,
+    has_ocr_source: bool,
 ) -> str | None:
     if speech.has_speech and float(speech.speech_score or 0.0) >= 0.45:
         return "Phat hien dau hieu loi thoai nhung chua du chac de tu dich/sub/voice an toan."
@@ -897,6 +918,8 @@ def _music_only_fallback_reason(
         return "Khong co caption Viet du tin cay."
 
     sources = {str(caption.source or "") for caption in captions}
+    if not has_ocr_source and not visual_caption_allowed:
+        return "Không có nguồn phụ đề hoặc ngữ cảnh sản phẩm/khung hình đủ tin cậy để tạo caption."
     avg_quality = sum(float(caption.quality_score or 1.0) for caption in captions) / max(1, len(captions))
     display_duration = _caption_display_duration(captions)
     text_chars = _caption_text_chars(captions)
@@ -917,6 +940,21 @@ def _music_only_fallback_reason(
     if product_detection and product_detection.status == "detected" and product_detection.average_confidence < 0.45:
         return "AI vision nhan dien san pham chua du chac."
     return None
+
+
+def _visual_caption_allowed(
+    settings: DouyinReupSettings,
+    product_detection: SilentProductDetectionReport | None,
+    segments: list[SilentVisualSegment],
+) -> bool:
+    if not settings.generate_visual_captions:
+        return False
+    reliable_segments = [segment for segment in segments if float(segment.visual_score or 0.0) >= 0.45]
+    if len(reliable_segments) < int(settings.silent_visual_caption_min_segments):
+        return False
+    if not product_detection or product_detection.status != "detected":
+        return False
+    return float(product_detection.average_confidence or 0.0) >= float(settings.silent_visual_caption_min_product_confidence)
 
 
 def _stable_output_stem(target_dir: Path) -> str:
