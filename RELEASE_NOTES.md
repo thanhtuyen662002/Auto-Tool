@@ -1,5 +1,25 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.64
+
+### Highlights
+
+- **Smart Chinese Subtitle Detection & Cover Logic Improvements**:
+  - Automatically disabled subtitle cover (removed background box and blur) when no Chinese text (CJK) is detected in clean videos, keeping the visual presentation 100% clean and professional.
+  - Falls back gracefully to manual/default subtitle positions for Vietnamese subtitles when covering is disabled.
+  - Introduced an advanced **Gemini AI Vision Fallback** mechanism: when OCR positioning is uncertain (confidence is low or falls back to bottom), the system analyzes 3-4 key frames of the video via Gemini Vision to calculate precise vertical (Y) coordinates for the cover box, avoiding incorrect covering coordinates.
+- **Enhanced Configuration & UI Controls**:
+  - Added two new user-friendly toggle switches in Douyin Reup Advanced Settings: "Chỉ che khi thấy chữ Trung" (Only cover if Chinese detected) and "Gọi AI nếu vị trí không rõ" (Call Gemini Vision AI if position is unclear).
+  - Designed all properties to be fully backwards-compatible.
+
+### QA
+
+- Verified all 6 subtitle cover detector tests pass.
+- Verified 14 douyin render pipeline tests pass.
+- Verified 9 douyin reup service tests pass.
+- Verified 5 silent reup pipeline tests pass.
+
+
 ## v1.0.63
 
 ### Highlights
