@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 from app.adapters.ffmpeg_adapter import FFmpegError, probe_video
+from app.modules.douyin_reup.asr_service import _is_asr_hardware_error, _mark_gpu_unavailable
 from app.modules.douyin_reup.subtitle_timing_guard import clean_subtitle_text, parse_srt_blocks
 from app.modules.silent_immersive_reup.silent_schema import SpeechPresenceResult
 from app.utils.dependency_manager import DependencyError, resolve_tool
@@ -57,14 +58,36 @@ class SpeechPresenceDetector:
                 speech_score = asr_score
                 method = "asr_fast_detect"
             except Exception as exc:
-                speech_score = 0.0
-                method = "asr_unavailable"
-                warnings.append(f"ASR speech detect failed, keep video in silent mode to avoid mistaking music or operation sounds for speech: {exc}")
+                if _is_asr_hardware_error(exc):
+                    # Lỗi phần cứng GPU/CUDA — thử lại bằng CPU trước khi bỏ cuộc
+                    try:
+                        speech_segments_count = self._asr_segment_count(video_path, force_cpu=True)
+                        asr_score = min(1.0, speech_segments_count / 4.0)
+                        speech_score = asr_score
+                        method = "asr_fast_detect_cpu"
+                        warnings.append(
+                            "ASR GPU không khả dụng (lỗi phần cứng); đã thử lại bằng CPU thành công."
+                        )
+                    except Exception as cpu_exc:
+                        # CPU cũng fail — ghi rõ nguyên nhân, KHÔNG kết luận "không có thoại"
+                        speech_score = 0.0
+                        method = "asr_hardware_error"
+                        warnings.append(
+                            f"ASR GPU và CPU đều thất bại (lỗi phần cứng): {cpu_exc}"
+                        )
+                else:
+                    speech_score = 0.0
+                    method = "asr_unavailable"
+                    warnings.append(
+                        f"ASR speech detect failed, keep video in silent mode to avoid mistaking "
+                        f"music or operation sounds for speech: {exc}"
+                    )
 
         if method == "audio_energy_heuristic":
             speech_score = 0.0
             warnings.append(
-                "Only audio energy was available, so this is not treated as confirmed speech. The video stays in silent mode unless ASR confirms speech."
+                "Only audio energy was available, so this is not treated as confirmed speech. "
+                "The video stays in silent mode unless ASR confirms speech."
             )
 
         return SpeechPresenceResult(
@@ -137,35 +160,54 @@ class SpeechPresenceDetector:
         return max(0.0, min(1.0, (mean_db + 55.0) / 35.0))
 
     @staticmethod
-    def _asr_segment_count(video_path: str) -> int:
+    def _asr_segment_count(video_path: str, force_cpu: bool = False) -> int:
         if os.getenv("AUTO_TOOL_SILENT_SPEECH_ASR_ISOLATION", "1").strip().lower() not in {"0", "false", "no", "off"}:
             timeout_seconds = _env_int("AUTO_TOOL_SILENT_SPEECH_TIMEOUT_SECONDS", 300)
             return int(
                 run_in_isolated_process(
                     _speech_asr_worker,
                     video_path,
+                    force_cpu,
                     timeout_seconds=timeout_seconds,
                     stage_name=f"ASR speech detect {Path(video_path).name}",
                 )
             )
-        return _speech_asr_worker(video_path)
+        return _speech_asr_worker(video_path, force_cpu)
 
 
-def _speech_asr_worker(video_path: str) -> int:
-    from app.modules.douyin_reup.asr_service import ASRService
+def _speech_asr_worker(video_path: str, force_cpu: bool = False) -> int:
+    from app.modules.douyin_reup.asr_service import ASRService  # noqa: PLC0415
 
+    device = "cpu" if force_cpu else os.getenv("AUTO_TOOL_SILENT_SPEECH_DEVICE", "auto")
     with tempfile.TemporaryDirectory(prefix="autotool_speech_detect_") as temp_dir:
         output_path = Path(temp_dir) / "speech_detect.srt"
-        ASRService().transcribe_to_srt(
-            video_path,
-            str(output_path),
-            language="zh",
-            provider="faster_whisper",
-            model_size=os.getenv("AUTO_TOOL_SILENT_SPEECH_MODEL", "tiny"),
-            device=os.getenv("AUTO_TOOL_SILENT_SPEECH_DEVICE", "auto"),
-            vad_filter=True,
-            max_audio_seconds=_env_int("AUTO_TOOL_SILENT_SPEECH_MAX_AUDIO_SECONDS", 30),
-        )
+        try:
+            ASRService().transcribe_to_srt(
+                video_path,
+                str(output_path),
+                language="zh",
+                provider="faster_whisper",
+                model_size=os.getenv("AUTO_TOOL_SILENT_SPEECH_MODEL", "tiny"),
+                device=device,
+                vad_filter=True,
+                max_audio_seconds=_env_int("AUTO_TOOL_SILENT_SPEECH_MAX_AUDIO_SECONDS", 30),
+            )
+        except Exception as exc:
+            if _is_asr_hardware_error(exc) and not force_cpu:
+                # GPU fail — đánh dấu toàn cục và thử lại CPU ngay trong worker này
+                _mark_gpu_unavailable()
+                ASRService().transcribe_to_srt(
+                    video_path,
+                    str(output_path),
+                    language="zh",
+                    provider="faster_whisper",
+                    model_size=os.getenv("AUTO_TOOL_SILENT_SPEECH_MODEL", "tiny"),
+                    device="cpu",
+                    vad_filter=True,
+                    max_audio_seconds=_env_int("AUTO_TOOL_SILENT_SPEECH_MAX_AUDIO_SECONDS", 30),
+                )
+            else:
+                raise
         try:
             return _count_reliable_asr_speech_segments(str(output_path))
         except (OSError, FFmpegError):

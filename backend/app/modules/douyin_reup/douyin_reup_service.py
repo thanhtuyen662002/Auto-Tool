@@ -585,6 +585,9 @@ class DouyinReupService:
                         context={
                             "reup_mode": "douyin_reup",
                             "settings_snapshot": settings.model_dump(mode="json"),
+                            # ocr_debug_json_path duoc luu lai de khi render lai
+                            # tu dong dat nen che dung vi tri sub Trung goc tren video
+                            "ocr_debug_json_path": source_result.ocr_debug_json_path,
                             "subtitle_content_quality": {
                                 "score": source_result.subtitle_quality_score,
                                 "reasons": list(source_result.subtitle_quality_reasons),

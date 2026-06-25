@@ -136,6 +136,17 @@ class DouyinRenderPipeline:
             fps=media.fps,
             has_audio=media.has_audio,
         )
+        # Đọc ocr_debug_json_path từ context được lưu khi tạo review document.
+        # Nếu có → _subtitle_cover_options() đặt nền che đúng vị trí sub Trung;
+        # nếu không có hoặc file đã xóa → dùng fallback tự động.
+        doc_context = document.context or {}
+        _ocr_path_candidate = doc_context.get("ocr_debug_json_path")
+        source_ocr_debug_path: str | None = (
+            str(_ocr_path_candidate)
+            if _ocr_path_candidate and Path(str(_ocr_path_candidate)).exists()
+            else None
+        )
+
         result = self._render_video_with_subtitle(
             video=video,
             subtitle_srt_path=document.corrected_srt_path or document.translated_srt_path,
@@ -146,7 +157,7 @@ class DouyinRenderPipeline:
             output_name=f"{Path(document.video_path).stem}_reviewed.mp4",
             voiceover_path=voiceover_path,
             tts_settings=tts_settings,
-            source_ocr_debug_path=None,
+            source_ocr_debug_path=source_ocr_debug_path,
         )
         result.update(
             {
