@@ -1,5 +1,22 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.60
+
+### Highlights
+
+- Added proactive ASR health check on batch job initialization to automatically optimize settings (switches GPU/CUDA to CPU or falls back to OCR if ASR is completely broken).
+- Fixed subprocess isolation for ASR GPU-to-CPU fallback so subsequent batch videos skip GPU checks immediately after a failure, avoiding timeout delays.
+- Added Ultimate Fallbacks in subtitle source detection to guarantee both OCR and ASR are tried before failing any video.
+- Fixed subtitle cover and background position not updating during manual review re-renders by preserving `ocr_debug_json_path` in document context.
+- Untracked local junk files (*.log, *.db, .cache/) and hardened `.gitignore` for a cleaner repository.
+
+### QA
+
+- Verified ASR proactive check and CUDA fallback on CPU.
+- Verified Ultimate Fallback triggers OCR on mock failures.
+- Backend build and syntax checks passed.
+
+
 ## v1.0.59
 
 ### Highlights
