@@ -16,3 +16,18 @@ releases/
 
 # Vendor binaries downloaded at build time (FFmpeg, Piper)
 backend/vendor/
+
+# Local log files
+*.log
+
+# Python cache & testing
+.pytest_cache/
+.agents/
+.codex_tmp/
+
+# Cache directories
+.cache/
+**/.cache/
+
+# Local databases
+*.db
