@@ -26,11 +26,11 @@ class DouyinReupSettings(BaseModel):
     use_embedded_subtitle: bool = True
     use_asr_if_no_subtitle: bool = True
     asr_provider: str = "faster_whisper"
-    asr_model_size: str = "medium"
+    asr_model_size: str = "base"
     asr_device: str = "auto"
     asr_vad_filter: bool = True
     asr_max_audio_seconds: int = Field(default=180, ge=0, le=7200)
-    asr_subprocess_isolation: bool = True
+    asr_subprocess_isolation: bool = False
     asr_timeout_seconds: int = Field(default=1200, ge=60, le=24 * 60 * 60)
     asr_subtitle_offset_seconds: float = Field(default=-0.25, ge=-2.0, le=2.0)
     use_ocr_if_asr_failed: bool = True
@@ -38,9 +38,9 @@ class DouyinReupSettings(BaseModel):
     ocr_provider: str = "easyocr"
     ocr_language: str = "ch"
     ocr_sample_fps: float = Field(default=2.0, gt=0, le=10)
-    ocr_subprocess_isolation: bool = True
+    ocr_subprocess_isolation: bool = False
     ocr_timeout_seconds: int = Field(default=1200, ge=60, le=24 * 60 * 60)
-    ocr_region_mode: str = "bottom_auto"
+    ocr_region_mode: str = "full_frame"
     ocr_manual_region: dict | None = None
     ocr_min_confidence: float = Field(default=0.35, ge=0, le=1)
     ocr_dedupe_similarity: float = Field(default=0.86, ge=0, le=1)

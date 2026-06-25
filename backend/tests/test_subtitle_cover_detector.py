@@ -305,3 +305,88 @@ def test_detect_subtitle_cover_uses_bottom_fallback_for_noisy_midframe_ocr(tmp_p
     assert placement.height_ratio == 0.12
     assert placement.bottom_ratio == 0
     assert placement.segments == ()
+
+
+def test_detect_subtitle_cover_filters_out_static_text(tmp_path: Path) -> None:
+    debug_path = tmp_path / "ocr_debug_static.json"
+    debug_path.write_text(
+        json.dumps(
+            {
+                "frame_width": 1080,
+                "frame_height": 1920,
+                "region": {"x": 0, "y": 0, "width": 1080, "height": 1920},
+                "average_confidence": 0.85,
+                "frames": [
+                    {
+                        "timestamp_ms": 0,
+                        "raw_blocks": [
+                            # Dynamic subtitle block
+                            {
+                                "box": [[150, 1300], [930, 1300], [930, 1370], [150, 1370]],
+                                "text": "今天给大家介绍这款水壶",
+                                "confidence": 0.92,
+                            },
+                            # Static product brand/logo block
+                            {
+                                "box": [[400, 300], [680, 300], [680, 350], [400, 350]],
+                                "text": "超级品牌水壶",
+                                "confidence": 0.96,
+                            },
+                        ],
+                    },
+                    {
+                        "timestamp_ms": 1000,
+                        "raw_blocks": [
+                            # Dynamic subtitle block
+                            {
+                                "box": [[160, 1305], [920, 1305], [920, 1375], [160, 1375]],
+                                "text": "它采用双层不锈钢材质",
+                                "confidence": 0.90,
+                            },
+                            # Static product brand/logo block (same text and position)
+                            {
+                                "box": [[402, 302], [678, 302], [678, 352], [402, 352]],
+                                "text": "超级品牌水壶",
+                                "confidence": 0.95,
+                            },
+                        ],
+                    },
+                    {
+                        "timestamp_ms": 2000,
+                        "raw_blocks": [
+                            # Dynamic subtitle block
+                            {
+                                "box": [[180, 1295], [900, 1295], [900, 1365], [180, 1365]],
+                                "text": "保温效果超级棒",
+                                "confidence": 0.94,
+                            },
+                            # Static product brand/logo block (same text and position)
+                            {
+                                "box": [[398, 298], [682, 298], [682, 348], [398, 348]],
+                                "text": "超级品牌水壶",
+                                "confidence": 0.97,
+                            },
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    placement = detect_subtitle_cover_from_ocr_debug(
+        str(debug_path),
+        fallback_height_ratio=0.12,
+        fallback_bottom_ratio=0.0,
+        padding_ratio=0.03,
+    )
+
+    assert placement is not None
+    assert placement.source == "ocr_debug_timed_blocks"
+    # It should detect and cover the dynamic subtitle blocks (around y=1300)
+    # The bottom_ratio should correspond to the bottom of the subtitle blocks (~1370 / 1920 -> ~0.28 bottom_ratio)
+    assert 0.25 <= placement.bottom_ratio <= 0.32
+    assert placement.block_count == 3
+    # Ensure it did NOT cover the static text block at y=300 (top of the video)
+    # The segments should all be around y=1300 (top_ratio ~ 0.64)
+    assert all(0.60 <= segment.top_ratio <= 0.70 for segment in placement.segments)

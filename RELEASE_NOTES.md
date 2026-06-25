@@ -1,5 +1,24 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.0.62
+
+### Highlights
+
+- **Dynamic Subtitle Scanning & Flexible Positioning**: Removed strict bottom Y-limits, allowing subtitles located anywhere on the screen (including top or middle) to be scanned and covered out-of-the-box.
+- **Smart Static Text Filtering**: Implemented a robust static text detection algorithm. Any Chinese text appearing in the same vertical coordinate across 28%+ of frames (e.g. static brand logos, watermarks, product packaging labels) is automatically filtered out, ensuring it is never covered by mistake.
+- **Optimized Advanced Settings out-of-the-box**: Refined default settings to be the most optimal and stable for users:
+  - Changed default ASR model size to `"base"` for extremely fast CPU/GPU transcription.
+  - Disabled subprocess isolation by default for both ASR and OCR, enabling instant model caching and a 45x speedup for batch processing.
+  - Set default OCR region mode to `"full_frame"` to support scanning the entire video screen automatically.
+- **Enhanced Middle-Screen Subtitle Detection**: Allowed two-line subtitles in the middle/upper screen by expanding the height ratio limit to 0.11 while maintaining strict horizontal centrality requirements.
+
+### QA
+
+- Verified all 6 subtitle cover detector tests pass, including a new test for static text filtering.
+- Verified schema and frontend default configurations are fully aligned.
+- Verified backend compilation and syntax check passed.
+
+
 ## v1.0.61
 
 ### Highlights

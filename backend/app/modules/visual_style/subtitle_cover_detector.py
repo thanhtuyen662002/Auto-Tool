@@ -13,7 +13,7 @@ MIN_DYNAMIC_NON_CJK_CONFIDENCE = 0.2
 MIN_COVER_WIDTH_RATIO = 0.88
 MIN_SUBTITLE_TEXT_WIDTH_RATIO = 0.18
 MAX_DYNAMIC_VERTICAL_SPAN_RATIO = 0.12
-MIN_MID_SCREEN_SUBTITLE_BOTTOM_RATIO = 0.68
+MIN_MID_SCREEN_SUBTITLE_BOTTOM_RATIO = 0.05
 
 
 @dataclass(frozen=True)
@@ -150,12 +150,67 @@ def _collect_text_bounds(payload: dict[str, Any], *, frame_width: int, frame_hei
     ]
 
 
+def _identify_static_texts(
+    payload: dict[str, Any],
+    frame_width: int,
+    frame_height: int,
+) -> set[tuple[str, int]]:
+    frames = payload.get("frames") or []
+    if not frames:
+        return set()
+
+    total_frames = len(frames)
+    track_occurrences: dict[tuple[str, int], set[int]] = {}
+    default_region = _region_from(payload.get("region"))
+
+    for frame_idx, frame in enumerate(frames):
+        region = _region_from(frame.get("region")) or default_region
+        if not region:
+            continue
+        for block in frame.get("raw_blocks") or []:
+            text = str(block.get("text") or "").strip()
+            if not text:
+                continue
+            norm_text = "".join(c for c in text if c.isalnum() or "\u3400" <= c <= "\u9fff").lower()
+            if not norm_text:
+                continue
+            xs = _box_x_values(block.get("box"))
+            ys = _box_y_values(block.get("box"))
+            if not xs or not ys:
+                continue
+            top = region["y"] + min(ys)
+            bottom = region["y"] + max(ys)
+
+            y_center = (top + bottom) / 2.0
+            y_grid = round(y_center / max(1.0, frame_height * 0.04))
+
+            key = (norm_text, y_grid)
+            if key not in track_occurrences:
+                track_occurrences[key] = set()
+            track_occurrences[key].add(frame_idx)
+
+    static_keys = set()
+    for key, frame_indices in track_occurrences.items():
+        count = len(frame_indices)
+        is_static = False
+        if total_frames >= 6:
+            if count >= 3 and (count / total_frames) >= 0.28:
+                is_static = True
+        else:
+            if count >= 2:
+                is_static = True
+        if is_static:
+            static_keys.add(key)
+    return static_keys
+
+
 def _collect_frame_text_bounds(
     payload: dict[str, Any],
     *,
     frame_width: int,
     frame_height: int,
 ) -> list[_FrameTextBounds]:
+    static_keys = _identify_static_texts(payload, frame_width=frame_width, frame_height=frame_height)
     frame_bounds: list[_FrameTextBounds] = []
     default_region = _region_from(payload.get("region"))
     for frame in payload.get("frames") or []:
@@ -166,6 +221,17 @@ def _collect_frame_text_bounds(
         for block in frame.get("raw_blocks") or []:
             parsed = _block_bounds_from_raw(block, region=region, frame_width=frame_width, frame_height=frame_height)
             if parsed:
+                norm_text = "".join(c for c in parsed.text if c.isalnum() or "\u3400" <= c <= "\u9fff").lower()
+                y_center = (parsed.top + parsed.bottom) / 2.0
+                y_grid = round(y_center / max(1.0, frame_height * 0.04))
+
+                is_static = False
+                for dy in (0, -1, 1):
+                    if (norm_text, y_grid + dy) in static_keys:
+                        is_static = True
+                        break
+                if is_static:
+                    continue
                 blocks.append(parsed)
         if not blocks:
             continue
@@ -220,7 +286,7 @@ def _block_bounds_from_raw(
     block_height = bottom - top
     if block_width < 6 or block_height < 6:
         return None
-    if bottom < frame_height * 0.68:
+    if bottom < frame_height * 0.05:
         return None
     if block_height / frame_height > 0.18:
         return None
@@ -255,6 +321,17 @@ def _candidate_subtitle_blocks(
 
         if bottom_ratio < MIN_MID_SCREEN_SUBTITLE_BOTTOM_RATIO:
             continue
+
+        # Bộ lọc thông minh: Nếu chữ ở phần giữa/trên màn hình (bottom_ratio < 0.72),
+        # bắt buộc phải nằm sát trung tâm trục ngang (trục X) và có chiều cao vừa phải (height_ratio <= 0.11).
+        # Bộ lọc này giúp loại bỏ chữ in trên bao bì sản phẩm hoặc logo mà vẫn hỗ trợ
+        # quét phụ đề thực sự nằm ở giữa/trên màn hình (luôn được căn giữa).
+        if bottom_ratio < 0.72:
+            if centrality < 0.82:
+                continue
+            if height_ratio > 0.11:
+                continue
+
         if text_length <= 2 and width_ratio < 0.22:
             continue
         if width_ratio < MIN_SUBTITLE_TEXT_WIDTH_RATIO and centrality < 0.62:
@@ -318,7 +395,7 @@ def _cluster_score(cluster: list[_BlockBounds], *, frame_width: int, frame_heigh
         lane_bonus += 0.45
     if bottom_ratio >= 0.92 and width_ratio < 0.45:
         lane_bonus -= 2.0
-    if top_ratio < 0.28:
+    if top_ratio < 0.05:
         lane_bonus -= 1.6
     return (
         (0.9 if has_cjk else 0.0)
