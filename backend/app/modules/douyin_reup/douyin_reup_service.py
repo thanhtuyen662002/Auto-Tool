@@ -658,6 +658,9 @@ class DouyinReupService:
                 render_kwargs["tts_settings"] = config.tts
             if "source_ocr_debug_path" in inspect.signature(self.render_pipeline.render_video_with_translated_subtitle).parameters:
                 render_kwargs["source_ocr_debug_path"] = source_ocr_debug_path
+            if "gemini_api_keys" in inspect.signature(self.render_pipeline.render_video_with_translated_subtitle).parameters:
+                render_kwargs["gemini_api_keys"] = config.ai.gemini_api_keys
+                render_kwargs["gemini_model_name"] = config.ai.text_model
             render_payload = self.render_pipeline.render_video_with_translated_subtitle(**render_kwargs)
             durations["render_seconds"] = time.perf_counter() - render_started
             warnings.extend(render_payload.get("warnings") or [])
@@ -971,6 +974,9 @@ class DouyinReupService:
                 )
             if "tts_settings" in inspect.signature(self.silent_pipeline.render_from_plan).parameters:
                 render_kwargs["tts_settings"] = config.tts
+            if "gemini_api_keys" in inspect.signature(self.silent_pipeline.render_from_plan).parameters:
+                render_kwargs["gemini_api_keys"] = config.ai.gemini_api_keys
+                render_kwargs["gemini_model_name"] = config.ai.text_model
             render_result = self.silent_pipeline.render_from_plan(plan, settings, str(video_dir), **render_kwargs)
             durations["render_seconds"] = time.perf_counter() - render_started
             warnings.extend(render_result.warnings)

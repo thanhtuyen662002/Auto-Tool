@@ -69,6 +69,7 @@ def detect_subtitle_cover_from_ocr_debug(
     padding_ratio: float,
     min_height_ratio: float = 0.055,
     max_height_ratio: float = 0.16,
+    only_if_chinese_detected: bool = True,
 ) -> SubtitleCoverPlacement | None:
     if not debug_json_path:
         return None
@@ -96,6 +97,12 @@ def detect_subtitle_cover_from_ocr_debug(
     frame_bounds = _select_subtitle_lane(frame_bounds, frame_width=frame_width, frame_height=frame_height)
     if not frame_bounds:
         return None
+
+    # Nếu chỉ che khi thấy chữ Trung Quốc (tránh che nhầm logo, sticker hay video sạch)
+    if only_if_chinese_detected:
+        has_any_chinese = any(_contains_cjk(item.text) for item in frame_bounds)
+        if not has_any_chinese:
+            return None
 
     if _should_use_bottom_fallback(frame_bounds, frame_height=frame_height):
         height_ratio = max(min_height_ratio, min(float(fallback_height_ratio), BOTTOM_FALLBACK_HEIGHT_RATIO))

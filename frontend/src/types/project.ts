@@ -188,6 +188,8 @@ export interface DouyinReupSettings {
   subtitle_cover_opacity: number;
   subtitle_cover_auto_position: boolean;
   subtitle_cover_probe_if_no_ocr: boolean;
+  subtitle_cover_only_if_chinese_detected?: boolean;
+  subtitle_cover_ai_fallback_enabled?: boolean;
   subtitle_cover_probe_sample_fps: number;
   subtitle_cover_height_ratio: number;
   subtitle_cover_bottom_ratio: number;

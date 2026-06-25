@@ -91,6 +91,8 @@ class DouyinReupSettings(BaseModel):
     subtitle_cover_tail_seconds: float = Field(default=0.25, ge=0, le=3.0)
     subtitle_cover_radius_ratio: float = Field(default=0.035, ge=0, le=0.12)
     subtitle_cover_text_y_offset_ratio: float = Field(default=0.0, ge=-0.2, le=0.2)
+    subtitle_cover_only_if_chinese_detected: bool = True
+    subtitle_cover_ai_fallback_enabled: bool = True
     keep_original_audio: bool = True
     add_bgm: bool = True
     music_folder: str | None = None

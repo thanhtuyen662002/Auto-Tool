@@ -20,6 +20,7 @@ from app.modules.visual_style.custom_overlay_asset import build_custom_overlay_a
 from app.modules.visual_style.overlay_asset_builder import build_overlay_asset
 from app.modules.visual_style.style_schema import VisualStyleSettings
 from app.modules.visual_style.subtitle_cover_detector import detect_subtitle_cover_from_ocr_debug
+from app.modules.visual_style.ai_subtitle_detector import detect_subtitle_via_ai
 from app.modules.visual_style.subtitle_style_renderer import generate_ass_subtitle
 from app.modules.visual_style.visual_style_service import VisualStyleService, parse_resolution
 from app.modules.voice_generator.voice_generator import VoiceGenerator
@@ -67,6 +68,8 @@ class DouyinRenderPipeline:
         output_name: str,
         tts_settings: TTSSettings | None = None,
         source_ocr_debug_path: str | None = None,
+        gemini_api_keys: list[str] | None = None,
+        gemini_model_name: str = "gemini-3.1-flash-lite",
     ) -> dict:
         return self._render_video_with_subtitle(
             video=video,
@@ -79,6 +82,8 @@ class DouyinRenderPipeline:
             voiceover_path=None,
             tts_settings=tts_settings,
             source_ocr_debug_path=source_ocr_debug_path,
+            gemini_api_keys=gemini_api_keys,
+            gemini_model_name=gemini_model_name,
         )
 
     def render_video_with_srt(
@@ -92,6 +97,8 @@ class DouyinRenderPipeline:
         voiceover_path: str | None = None,
         tts_settings: TTSSettings | None = None,
         source_ocr_debug_path: str | None = None,
+        gemini_api_keys: list[str] | None = None,
+        gemini_model_name: str = "gemini-3.1-flash-lite",
     ) -> dict:
         return self._render_video_with_subtitle(
             video=video,
@@ -104,6 +111,8 @@ class DouyinRenderPipeline:
             voiceover_path=voiceover_path,
             tts_settings=tts_settings,
             source_ocr_debug_path=source_ocr_debug_path,
+            gemini_api_keys=gemini_api_keys,
+            gemini_model_name=gemini_model_name,
         )
 
     def render_from_review_document(
@@ -113,6 +122,8 @@ class DouyinRenderPipeline:
         output_dir: str,
         voiceover_path: str | None = None,
         tts_settings: TTSSettings | None = None,
+        gemini_api_keys: list[str] | None = None,
+        gemini_model_name: str = "gemini-3.1-flash-lite",
     ) -> dict:
         service = SubtitleReviewService()
         document = service.get_document(document_id)
@@ -158,6 +169,8 @@ class DouyinRenderPipeline:
             voiceover_path=voiceover_path,
             tts_settings=tts_settings,
             source_ocr_debug_path=source_ocr_debug_path,
+            gemini_api_keys=gemini_api_keys,
+            gemini_model_name=gemini_model_name,
         )
         result.update(
             {
@@ -181,6 +194,8 @@ class DouyinRenderPipeline:
         voiceover_path: str | None,
         tts_settings: TTSSettings | None,
         source_ocr_debug_path: str | None,
+        gemini_api_keys: list[str] | None = None,
+        gemini_model_name: str = "gemini-3.1-flash-lite",
     ) -> dict:
         target_dir = ensure_dir(output_dir)
         width, height = parse_resolution(settings.resolution)
@@ -286,6 +301,8 @@ class DouyinRenderPipeline:
                 video=video,
                 source_ocr_debug_path=source_ocr_debug_path,
                 warnings=warnings,
+                gemini_api_keys=gemini_api_keys,
+                gemini_model_name=gemini_model_name,
             )
             if settings.burn_subtitle and settings.subtitle_cover_enabled
             else None
@@ -500,6 +517,8 @@ class DouyinRenderPipeline:
         video: DouyinVideoItem,
         source_ocr_debug_path: str | None,
         warnings: list[str],
+        gemini_api_keys: list[str] | None = None,
+        gemini_model_name: str = "gemini-3.1-flash-lite",
     ) -> dict | None:
         height_ratio = settings.subtitle_cover_height_ratio
         bottom_ratio = settings.subtitle_cover_bottom_ratio
@@ -514,8 +533,67 @@ class DouyinRenderPipeline:
                 fallback_height_ratio=settings.subtitle_cover_height_ratio,
                 fallback_bottom_ratio=settings.subtitle_cover_bottom_ratio,
                 padding_ratio=settings.subtitle_cover_padding_ratio,
+                only_if_chinese_detected=settings.subtitle_cover_only_if_chinese_detected,
             )
-            if placement:
+
+            # Kích hoạt AI Fallback nếu vị trí không rõ ràng (bottom_fallback) hoặc không phát hiện thấy gì từ OCR
+            # nhưng người dùng bật tùy chọn AI fallback và đã cung cấp Gemini API Keys.
+            is_uncertain = (placement is None) or (placement and placement.source == "ocr_debug_bottom_fallback")
+
+            if is_uncertain and settings.subtitle_cover_ai_fallback_enabled and gemini_api_keys:
+                frame_dir = Path(source_ocr_debug_path).parent / "ocr_frames"
+                image_paths = []
+                if frame_dir.exists():
+                    image_files = sorted(
+                        [str(p) for p in frame_dir.glob("*") if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}]
+                    )
+                    if image_files:
+                        n = len(image_files)
+                        if n <= 4:
+                            image_paths = image_files
+                        else:
+                            indexes = [0, n // 3, (2 * n) // 3, n - 1]
+                            seen = set()
+                            for idx in indexes:
+                                if idx not in seen:
+                                    image_paths.append(image_files[idx])
+                                    seen.add(idx)
+
+                if image_paths:
+                    ai_result = detect_subtitle_via_ai(
+                        image_paths=image_paths,
+                        api_keys=gemini_api_keys,
+                        model_name=gemini_model_name,
+                    )
+                    if ai_result:
+                        if ai_result.get("has_chinese_subtitles"):
+                            y_min = ai_result["y_min_percent"]
+                            y_max = ai_result["y_max_percent"]
+                            height_ratio = max(0.05, min(0.45, (y_max - y_min) / 100.0))
+                            bottom_ratio = max(0.0, min(0.9, (100.0 - y_max) / 100.0))
+                            cover_segments = []  # Phủ toàn bộ video
+                            warnings.append(
+                                f"subtitle_cover_ai_position: OCR định vị không rõ; đã gọi Gemini AI Vision phân tích "
+                                f"và định vị lại phụ đề Trung Quốc chính xác (Y: {y_min:.1f}% - {y_max:.1f}%, confidence {ai_result['confidence']:.2f})."
+                            )
+                            # Đổi placement để không chạy vào logic fallback phía dưới
+                            placement = "gemini_ai_placement"  # type: ignore
+                        else:
+                            # AI Vision xác nhận KHÔNG có phụ đề tiếng Trung dính kèm
+                            if settings.subtitle_cover_only_if_chinese_detected:
+                                warnings.append(
+                                    "subtitle_cover_ai_skip: Gemini AI xác nhận video này không có phụ đề tiếng Trung; "
+                                    "đã tự động tắt che nền (xóa blur) và đưa phụ đề Việt về vị trí thủ công."
+                                )
+                                return None
+                            else:
+                                # Người dùng vẫn muốn che bừa ở đáy mặc dù không có phụ đề Trung Quốc
+                                pass
+
+            # Xử lý kết quả từ OCR (nếu không dùng AI hoặc AI không tìm thấy/lỗi)
+            if placement == "gemini_ai_placement":
+                pass
+            elif placement:
                 height_ratio = placement.height_ratio
                 bottom_ratio = placement.bottom_ratio
                 cover_segments = [asdict(segment) for segment in placement.segments]

@@ -453,6 +453,8 @@ class SilentReupPipeline:
         output_dir: str,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
         tts_settings: TTSSettings | None = None,
+        gemini_api_keys: list[str] | None = None,
+        gemini_model_name: str = "gemini-3.1-flash-lite",
     ) -> SilentReupResult:
         target_dir = ensure_dir(output_dir)
         warnings = list(plan.warnings)
@@ -507,8 +509,13 @@ class SilentReupPipeline:
                 "warnings": warnings,
                 "voiceover_path": voiceover_path,
             }
+            if "source_ocr_debug_path" in inspect.signature(self.render_pipeline.render_video_with_srt).parameters:
+                render_kwargs["source_ocr_debug_path"] = plan.ocr_debug_json_path
             if "tts_settings" in inspect.signature(self.render_pipeline.render_video_with_srt).parameters:
                 render_kwargs["tts_settings"] = tts_settings
+            if "gemini_api_keys" in inspect.signature(self.render_pipeline.render_video_with_srt).parameters:
+                render_kwargs["gemini_api_keys"] = gemini_api_keys
+                render_kwargs["gemini_model_name"] = gemini_model_name
             render_payload = self.render_pipeline.render_video_with_srt(**render_kwargs)
             result = SilentReupResult(
                 input_video_path=plan.video_path,
@@ -565,6 +572,8 @@ class SilentReupPipeline:
         settings: DouyinReupSettings,
         output_dir: str,
         tts_settings: TTSSettings | None = None,
+        gemini_api_keys: list[str] | None = None,
+        gemini_model_name: str = "gemini-3.1-flash-lite",
     ) -> dict:
         target_dir = ensure_dir(output_dir)
         context = document.context or {}
@@ -617,6 +626,9 @@ class SilentReupPipeline:
         }
         if "tts_settings" in inspect.signature(self.render_pipeline.render_from_review_document).parameters:
             render_kwargs["tts_settings"] = tts_settings
+        if "gemini_api_keys" in inspect.signature(self.render_pipeline.render_from_review_document).parameters:
+            render_kwargs["gemini_api_keys"] = gemini_api_keys
+            render_kwargs["gemini_model_name"] = gemini_model_name
         result = self.render_pipeline.render_from_review_document(**render_kwargs)
         result.update(
             {

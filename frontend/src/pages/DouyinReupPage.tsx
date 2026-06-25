@@ -2080,11 +2080,23 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 onChange={(value) => updateAdvancedSettings({ subtitle_cover_auto_position: value, subtitle_cover_probe_if_no_ocr: value ? true : settings.subtitle_cover_probe_if_no_ocr })}
               />
               {coverAutoPosition ? (
-                <Toggle
-                  label="Quét nhanh khi chưa có OCR"
-                  checked={settings.subtitle_cover_probe_if_no_ocr}
-                  onChange={(value) => updateAdvancedSettings({ subtitle_cover_probe_if_no_ocr: value })}
-                />
+                <>
+                  <Toggle
+                    label="Quét nhanh khi chưa có OCR"
+                    checked={settings.subtitle_cover_probe_if_no_ocr}
+                    onChange={(value) => updateAdvancedSettings({ subtitle_cover_probe_if_no_ocr: value })}
+                  />
+                  <Toggle
+                    label="Chỉ che khi thấy chữ Trung"
+                    checked={settings.subtitle_cover_only_if_chinese_detected ?? true}
+                    onChange={(value) => updateAdvancedSettings({ subtitle_cover_only_if_chinese_detected: value })}
+                  />
+                  <Toggle
+                    label="Gọi AI nếu vị trí không rõ"
+                    checked={settings.subtitle_cover_ai_fallback_enabled ?? true}
+                    onChange={(value) => updateAdvancedSettings({ subtitle_cover_ai_fallback_enabled: value })}
+                  />
+                </>
               ) : null}
               <SliderInput
                 label={`${coverAutoPosition ? 'Độ cao nền khi thấy sub Trung' : 'Chiều cao nền che thủ công'}: ${Math.round(settings.subtitle_cover_height_ratio * 100)}%`}

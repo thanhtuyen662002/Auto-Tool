@@ -3662,6 +3662,20 @@ def run_subtitle_review_render_job(
     if not job:
         return
 
+    gemini_api_keys: list[str] | None = None
+    gemini_model_name: str = "gemini-3.1-flash-lite"
+    project_id = job.get("project_id")
+    if project_id:
+        project = database.get_project(project_id)
+        if project and project.get("config"):
+            try:
+                from app.schemas.project_schema import ProjectConfig
+                project_config = ProjectConfig.model_validate(project.get("config"))
+                gemini_api_keys = project_config.ai.gemini_api_keys
+                gemini_model_name = project_config.ai.text_model
+            except Exception:
+                pass
+
     total = len(document_ids)
     output_root = ensure_dir(Path(output_folder) / f"subtitle-review-render-{uuid.uuid4().hex[:8]}")
     outputs: list[dict[str, Any]] = []
@@ -3715,6 +3729,8 @@ def run_subtitle_review_render_job(
                         document_settings,
                         str(document_dir),
                         tts_settings=tts_settings,
+                        gemini_api_keys=gemini_api_keys,
+                        gemini_model_name=gemini_model_name,
                     )
                     if is_silent
                     else pipeline.render_from_review_document(
@@ -3722,6 +3738,8 @@ def run_subtitle_review_render_job(
                         document_settings,
                         str(document_dir),
                         tts_settings=tts_settings,
+                        gemini_api_keys=gemini_api_keys,
+                        gemini_model_name=gemini_model_name,
                     )
                 )
                 qa_report = FinalOutputQAService().run_qa_for_output(
