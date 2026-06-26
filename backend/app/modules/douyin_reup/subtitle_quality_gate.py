@@ -100,7 +100,15 @@ def evaluate_srt_quality(
     unique_ratio = (len(unique_tokens) / total_tokens) if total_tokens else 0.0
 
     if len(blocks) < required_blocks:
-        reasons.append("too_few_blocks")
+        # Nếu số lượng blocks ít nhưng tổng số ký tự có nghĩa lớn (>= 24 ký tự)
+        # và độ phủ lớn (>= 0.35) thì vẫn chấp nhận vì đó là câu thoại dài liên tục.
+        is_high_quality_single_span = (
+            meaningful_chars >= 24
+            and coverage is not None
+            and coverage >= 0.35
+        )
+        if not is_high_quality_single_span:
+            reasons.append("too_few_blocks")
     if meaningful_chars < required_chars:
         reasons.append("too_few_meaningful_chars")
     if coverage is not None and coverage < required_coverage:
