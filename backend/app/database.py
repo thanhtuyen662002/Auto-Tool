@@ -337,6 +337,52 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_silent_segment_tag_overrides_plan
             ON silent_segment_tag_overrides(plan_id);
+
+            CREATE TABLE IF NOT EXISTS distribution_channels (
+                id TEXT PRIMARY KEY,
+                platform TEXT NOT NULL,
+                channel_name TEXT NOT NULL,
+                channel_avatar TEXT,
+                auth_data TEXT NOT NULL,
+                daily_limit INTEGER DEFAULT 5,
+                status TEXT DEFAULT 'active',
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS channel_time_slots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT NOT NULL,
+                posting_time TEXT NOT NULL,
+                active INTEGER DEFAULT 1,
+                FOREIGN KEY (channel_id) REFERENCES distribution_channels(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS product_affiliates (
+                id TEXT PRIMARY KEY,
+                product_name TEXT NOT NULL,
+                product_tag TEXT NOT NULL,
+                affiliate_link TEXT NOT NULL,
+                description TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS publishing_queue (
+                id TEXT PRIMARY KEY,
+                channel_id TEXT NOT NULL,
+                video_path TEXT NOT NULL,
+                title TEXT NOT NULL,
+                caption TEXT,
+                hashtags TEXT,
+                product_link TEXT,
+                scheduled_time TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (channel_id) REFERENCES distribution_channels(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_publishing_queue_scheduled_time
+            ON publishing_queue(scheduled_time);
             """
         )
         _ensure_column(conn, "projects", "latest_script_json", "TEXT")

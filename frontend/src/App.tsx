@@ -22,6 +22,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const SilentModePage = lazy(() => import('./pages/SilentModePage'));
 const SourceMediaManagerPage = lazy(() => import('./pages/SourceMediaManagerPage'));
 const SubtitleReviewPage = lazy(() => import('./pages/SubtitleReviewPage'));
+const FleetPage = lazy(() => import('./pages/FleetPage'));
 
 function screen(page: ReactNode) {
   return (
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="silent-mode" element={screen(<SilentModePage />)} />
         <Route path="subtitle-review" element={screen(<SubtitleReviewPage />)} />
         <Route path="subtitle-review/:documentId" element={screen(<SubtitleReviewPage />)} />
+        <Route path="fleet" element={screen(<FleetPage />)} />
         <Route path="settings" element={screen(<SettingsPage />)} />
         <Route path="help" element={screen(<HelpPage />)} />
         <Route path="onboarding" element={screen(<OnboardingPage />)} />

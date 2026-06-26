@@ -1,4 +1,4 @@
-import { Captions, Clapperboard, Download, FolderCheck, LayoutDashboard, RotateCcw, Settings, Sparkles, Waves, X, Inbox, FolderPlus } from 'lucide-react';
+import { Captions, Clapperboard, Download, FolderCheck, LayoutDashboard, RotateCcw, Settings, Sparkles, Waves, X, Inbox, FolderPlus, Share2 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import GlassBadge from '../glass/GlassBadge';
 
@@ -20,6 +20,7 @@ const studioItems: SidebarItem[] = [
   { to: '/silent-mode', label: 'Reup không thoại', helper: 'Xử lý hàng loạt không thoại', icon: Waves },
   { to: '/projects/new', label: 'Tạo Video Affiliate', helper: 'Tạo video sản phẩm từ link', icon: FolderPlus },
   { to: '/import-inbox', label: 'Nhập hộp thư Shopee', helper: 'Nhập sản phẩm từ inbox', icon: Inbox },
+  { to: '/fleet', label: 'Phân phối đa kênh', helper: 'Lập lịch & tự động đăng video', icon: Share2 },
   { to: '/results', label: 'Tác vụ & Kết quả', helper: 'Lịch sử và tiến trình render', icon: FolderCheck },
 ];
 

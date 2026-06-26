@@ -396,6 +396,11 @@ def create_app() -> FastAPI:
     queue_retry_service = QueueRetryService(queue_state_service)
     queue_watchdog_service = QueueWatchdogService(queue_state_service)
     douyin_downloader_service = DouyinDownloaderService()
+
+    # Fleet Publisher Orchestrator
+    from app.modules.fleet_publisher.publisher_orchestrator import PublisherOrchestrator
+    publisher_orchestrator = PublisherOrchestrator()
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_allowed_cors_origins(),
@@ -408,6 +413,7 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def _startup() -> None:
         database.init_db()
+        publisher_orchestrator.start()
         recoverable = job_recovery_service.mark_interrupted_jobs_on_startup()
         if recoverable:
             logger.warning("Marked %s interrupted job(s) as recoverable.", len(recoverable))
@@ -419,6 +425,10 @@ def create_app() -> FastAPI:
             ocr_provider=os.getenv("AUTO_TOOL_OCR_PROVIDER", DEFAULT_OCR_PROVIDER),
             warmup_ocr_models=True,
         )
+
+    @app.on_event("shutdown")
+    def _shutdown() -> None:
+        publisher_orchestrator.stop()
 
     @app.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
@@ -3003,6 +3013,305 @@ def create_app() -> FastAPI:
             for template in list_timeline_templates()
         ]
         return TimelineTemplatesResponse(templates=templates)
+
+    # ─── FLEET PUBLISHER API ROUTES ───────────────────────────────────────────
+    from app.modules.fleet_publisher.publisher_schema import (
+        ChannelCreateRequest,
+        ChannelResponse,
+        ProductAffiliateCreate,
+        ProductAffiliateResponse,
+        QueueItemResponse,
+        QueueItemUpdateRequest,
+        QueueReorderRequest,
+        QueueGenerateRequest,
+        TimeSlotModel,
+    )
+
+    @app.get("/api/fleet/channels", response_model=list[ChannelResponse])
+    def get_fleet_channels() -> list[ChannelResponse]:
+        channels = []
+        with database.get_connection() as conn:
+            rows = conn.execute("SELECT * FROM distribution_channels ORDER BY created_at DESC").fetchall()
+            for r in rows:
+                channel_id = r["id"]
+                slot_rows = conn.execute(
+                    "SELECT * FROM channel_time_slots WHERE channel_id = ? ORDER BY posting_time ASC",
+                    (channel_id,),
+                ).fetchall()
+                
+                slots = [
+                    TimeSlotModel(
+                        id=s["id"],
+                        channel_id=s["channel_id"],
+                        posting_time=s["posting_time"],
+                        active=s["active"]
+                    )
+                    for s in slot_rows
+                ]
+                
+                channels.append(
+                    ChannelResponse(
+                        id=r["id"],
+                        platform=r["platform"],
+                        channel_name=r["channel_name"],
+                        channel_avatar=r["channel_avatar"],
+                        auth_data=json.loads(r["auth_data"]),
+                        daily_limit=r["daily_limit"],
+                        status=r["status"],
+                        created_at=r["created_at"],
+                        time_slots=slots
+                    )
+                )
+        return channels
+
+    @app.post("/api/fleet/channels", response_model=ChannelResponse)
+    def create_fleet_channel(req: ChannelCreateRequest) -> ChannelResponse:
+        channel_id = req.id or str(uuid.uuid4())
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        with database.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO distribution_channels 
+                (id, platform, channel_name, channel_avatar, auth_data, daily_limit, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    channel_id,
+                    req.platform,
+                    req.channel_name,
+                    req.channel_avatar,
+                    json.dumps(req.auth_data, ensure_ascii=False),
+                    req.daily_limit,
+                    "active",
+                    now_str,
+                ),
+            )
+            
+            # Insert time slots
+            for slot in req.time_slots:
+                conn.execute(
+                    "INSERT INTO channel_time_slots (channel_id, posting_time, active) VALUES (?, ?, 1)",
+                    (channel_id, slot),
+                )
+                
+        # Return the created channel
+        channels = get_fleet_channels()
+        for c in channels:
+            if c.id == channel_id:
+                return c
+        raise HTTPException(status_code=500, detail="Không thể tạo hoặc truy vấn thông tin kênh.")
+
+    @app.delete("/api/fleet/channels/{id}")
+    def delete_fleet_channel(id: str) -> dict[str, bool | str]:
+        with database.get_connection() as conn:
+            # check if exists
+            exists = conn.execute("SELECT 1 FROM distribution_channels WHERE id = ?", (id,)).fetchone()
+            if not exists:
+                raise HTTPException(status_code=404, detail="Không tìm thấy kênh cần xóa.")
+            conn.execute("DELETE FROM distribution_channels WHERE id = ?", (id,))
+        return {"success": True, "message": "Đã xóa kênh liên kết thành công."}
+
+    @app.get("/api/fleet/products", response_model=list[ProductAffiliateResponse])
+    def get_fleet_products() -> list[ProductAffiliateResponse]:
+        products = []
+        with database.get_connection() as conn:
+            rows = conn.execute("SELECT * FROM product_affiliates ORDER BY created_at DESC").fetchall()
+            for r in rows:
+                products.append(
+                    ProductAffiliateResponse(
+                        id=r["id"],
+                        product_name=r["product_name"],
+                        product_tag=r["product_tag"],
+                        affiliate_link=r["affiliate_link"],
+                        description=r["description"],
+                        created_at=r["created_at"]
+                    )
+                )
+        return products
+
+    @app.post("/api/fleet/products", response_model=ProductAffiliateResponse)
+    def create_fleet_product(req: ProductAffiliateCreate) -> ProductAffiliateResponse:
+        prod_id = req.id or str(uuid.uuid4())
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        with database.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO product_affiliates 
+                (id, product_name, product_tag, affiliate_link, description, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    prod_id,
+                    req.product_name,
+                    req.product_tag,
+                    req.affiliate_link,
+                    req.description,
+                    now_str,
+                ),
+            )
+            
+        return ProductAffiliateResponse(
+            id=prod_id,
+            product_name=req.product_name,
+            product_tag=req.product_tag,
+            affiliate_link=req.affiliate_link,
+            description=req.description,
+            created_at=now_str
+        )
+
+    @app.put("/api/fleet/products/{id}", response_model=ProductAffiliateResponse)
+    def update_fleet_product(id: str, req: ProductAffiliateCreate) -> ProductAffiliateResponse:
+        with database.get_connection() as conn:
+            # check if exists
+            exists = conn.execute("SELECT created_at FROM product_affiliates WHERE id = ?", (id,)).fetchone()
+            if not exists:
+                raise HTTPException(status_code=404, detail="Không tìm thấy sản phẩm cần cập nhật.")
+            created_at = exists["created_at"]
+            
+            conn.execute(
+                """
+                UPDATE product_affiliates 
+                SET product_name = ?, product_tag = ?, affiliate_link = ?, description = ?
+                WHERE id = ?
+                """,
+                (req.product_name, req.product_tag, req.affiliate_link, req.description, id),
+            )
+            
+        return ProductAffiliateResponse(
+            id=id,
+            product_name=req.product_name,
+            product_tag=req.product_tag,
+            affiliate_link=req.affiliate_link,
+            description=req.description,
+            created_at=created_at
+        )
+
+    @app.delete("/api/fleet/products/{id}")
+    def delete_fleet_product(id: str) -> dict[str, bool | str]:
+        with database.get_connection() as conn:
+            exists = conn.execute("SELECT 1 FROM product_affiliates WHERE id = ?", (id,)).fetchone()
+            if not exists:
+                raise HTTPException(status_code=404, detail="Không tìm thấy sản phẩm cần xóa.")
+            conn.execute("DELETE FROM product_affiliates WHERE id = ?", (id,))
+        return {"success": True, "message": "Đã xóa liên kết sản phẩm thành công."}
+
+    @app.get("/api/fleet/queue", response_model=list[QueueItemResponse])
+    def get_fleet_queue() -> list[QueueItemResponse]:
+        queue = []
+        with database.get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT q.*, c.channel_name, c.platform
+                FROM publishing_queue q
+                JOIN distribution_channels c ON q.channel_id = c.id
+                ORDER BY q.scheduled_time ASC
+                """
+            ).fetchall()
+            for r in rows:
+                queue.append(
+                    QueueItemResponse(
+                        id=r["id"],
+                        channel_id=r["channel_id"],
+                        channel_name=r["channel_name"],
+                        platform=r["platform"],
+                        video_path=r["video_path"],
+                        title=r["title"],
+                        caption=r["caption"],
+                        hashtags=r["hashtags"],
+                        product_link=r["product_link"],
+                        scheduled_time=r["scheduled_time"],
+                        status=r["status"],
+                        error_message=r["error_message"],
+                        created_at=r["created_at"]
+                    )
+                )
+        return queue
+
+    @app.put("/api/fleet/queue/{id}", response_model=QueueItemResponse)
+    def update_fleet_queue_item(id: str, req: QueueItemUpdateRequest) -> QueueItemResponse:
+        with database.get_connection() as conn:
+            row = conn.execute("SELECT * FROM publishing_queue WHERE id = ?", (id,)).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Không tìm thấy mục hàng đợi cần cập nhật.")
+            
+            title = req.title if req.title is not None else row["title"]
+            caption = req.caption if req.caption is not None else row["caption"]
+            hashtags = req.hashtags if req.hashtags is not None else row["hashtags"]
+            product_link = req.product_link if req.product_link is not None else row["product_link"]
+            scheduled_time = req.scheduled_time if req.scheduled_time is not None else row["scheduled_time"]
+            status = req.status if req.status is not None else row["status"]
+
+            conn.execute(
+                """
+                UPDATE publishing_queue
+                SET title = ?, caption = ?, hashtags = ?, product_link = ?, scheduled_time = ?, status = ?, error_message = NULL
+                WHERE id = ?
+                """,
+                (title, caption, hashtags, product_link, scheduled_time, status, id),
+            )
+
+        # Retrieve updated
+        queue = get_fleet_queue()
+        for item in queue:
+            if item.id == id:
+                return item
+        raise HTTPException(status_code=500, detail="Không thể truy vấn thông tin hàng đợi sau khi cập nhật.")
+
+    @app.delete("/api/fleet/queue/{id}")
+    def delete_fleet_queue_item(id: str) -> dict[str, bool | str]:
+        with database.get_connection() as conn:
+            exists = conn.execute("SELECT 1 FROM publishing_queue WHERE id = ?", (id,)).fetchone()
+            if not exists:
+                raise HTTPException(status_code=404, detail="Không tìm thấy mục cần xóa khỏi hàng đợi.")
+            conn.execute("DELETE FROM publishing_queue WHERE id = ?", (id,))
+        return {"success": True, "message": "Đã xóa mục hàng đợi thành công."}
+
+    @app.post("/api/fleet/queue/reorder")
+    def reorder_fleet_queue(req: QueueReorderRequest) -> dict[str, bool | str]:
+        if not req.queue_ids:
+            return {"success": True, "message": "Hàng đợi rỗng."}
+
+        with database.get_connection() as conn:
+            # 1. Get all scheduled times of these specific queue items
+            placeholders = ",".join("?" for _ in req.queue_ids)
+            rows = conn.execute(
+                f"SELECT id, scheduled_time FROM publishing_queue WHERE id IN ({placeholders})",
+                req.queue_ids
+            ).fetchall()
+            
+            if len(rows) != len(req.queue_ids):
+                raise HTTPException(status_code=400, detail="Một số ID trong danh sách reorder không hợp lệ.")
+            
+            # 2. Extract and sort all original scheduled times
+            times = sorted([r["scheduled_time"] for r in rows])
+            
+            # 3. Re-assign sorted times in the exact order of the requested queue_ids
+            for i, qid in enumerate(req.queue_ids):
+                conn.execute(
+                    "UPDATE publishing_queue SET scheduled_time = ? WHERE id = ?",
+                    (times[i], qid)
+                )
+                
+        return {"success": True, "message": "Đã sắp xếp lại thứ tự hàng đợi thành công."}
+
+    @app.post("/api/fleet/queue/generate")
+    def generate_fleet_queue(req: QueueGenerateRequest) -> dict[str, Any]:
+        try:
+            created_ids = publisher_orchestrator.generate_schedule_for_folder(
+                folder_path=req.folder_path,
+                channel_ids=req.channel_ids,
+                tags=req.tags
+            )
+            return {
+                "success": True,
+                "created_count": len(created_ids),
+                "queue_ids": created_ids,
+                "message": f"Đã lập lịch thành công {len(created_ids)} tác vụ đăng video chéo kênh."
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
     _mount_frontend(app, static_frontend_service)
     return app

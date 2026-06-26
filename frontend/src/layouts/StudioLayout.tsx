@@ -28,6 +28,7 @@ const pageTitles: Array<[string, string]> = [
   ['/douyin-reup', 'Video có thoại'],
   ['/subtitle-review', 'Sửa phụ đề'],
   ['/results', 'Kết quả'],
+  ['/fleet', 'Phân phối đa kênh'],
   ['/import-inbox', 'Hòm thư sản phẩm'],
   ['/projects/new', 'Tạo dự án'],
   ['/projects/', 'Cài đặt dự án'],
