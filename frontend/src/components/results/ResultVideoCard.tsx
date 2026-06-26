@@ -244,44 +244,42 @@ function CardActions({
   onShowLog: (item: NormalizedResultItem) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 mt-2 border-t border-white/5 pt-3">
+    <div className="flex items-center gap-1.5 mt-2 border-t border-white/5 pt-3 w-full">
       {/* Primary Action Button (Xem) */}
-      <GlassButton
-        className="px-4 py-1.5 text-xs font-semibold bg-white/10 hover:bg-white/15 text-white hover:text-cyan-200 transition-colors"
+      <button
+        className="h-8 flex-1 flex items-center justify-center rounded bg-white/10 hover:bg-white/15 text-white hover:text-cyan-200 text-xs font-semibold transition-colors whitespace-nowrap focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed"
         disabled={!item.path}
         onClick={() => onPreview(item)}
       >
-        <Eye size={14} className="mr-1" />
+        <Eye size={13} className="mr-1 shrink-0" />
         Xem video
-      </GlassButton>
+      </button>
 
-      {/* Secondary Actions Row (Compact icons with tooltip descriptions) */}
-      <div className="flex items-center gap-1">
-        <IconButton
-          icon={<Clipboard size={14} />}
-          title="Sao chép đường dẫn file video"
-          disabled={!item.path}
-          onClick={() => onCopyPath(item)}
-        />
-        <IconButton
-          icon={<FolderOpen size={14} />}
-          title="Mở vị trí chứa file trên máy"
-          disabled={!item.path}
-          onClick={() => onRevealFile(item)}
-        />
-        <IconButton
-          icon={<Captions size={14} />}
-          title="Sao chép lời bình/caption tiếng Việt"
-          disabled={!hasCaption}
-          onClick={() => onCopyCaption(item)}
-        />
-        <IconButton
-          icon={<FileSearch size={14} />}
-          title="Xem nhật ký hệ thống chi tiết"
-          disabled={!item.logFile && !item.files.length}
-          onClick={() => onShowLog(item)}
-        />
-      </div>
+      {/* Secondary Actions Row */}
+      <IconButton
+        icon={<Clipboard size={13} />}
+        title="Sao chép đường dẫn file video"
+        disabled={!item.path}
+        onClick={() => onCopyPath(item)}
+      />
+      <IconButton
+        icon={<FolderOpen size={13} />}
+        title="Mở vị trí chứa file trên máy"
+        disabled={!item.path}
+        onClick={() => onRevealFile(item)}
+      />
+      <IconButton
+        icon={<Captions size={13} />}
+        title="Sao chép lời bình/caption tiếng Việt"
+        disabled={!hasCaption}
+        onClick={() => onCopyCaption(item)}
+      />
+      <IconButton
+        icon={<FileSearch size={13} />}
+        title="Xem nhật ký hệ thống chi tiết"
+        disabled={!item.logFile && !item.files.length}
+        onClick={() => onShowLog(item)}
+      />
     </div>
   );
 }
@@ -299,7 +297,7 @@ function IconButton({
 }) {
   return (
     <button
-      className="relative group flex items-center justify-center p-2 rounded bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 transition-all duration-200 disabled:opacity-30 disabled:hover:bg-white/5 disabled:hover:text-slate-400 disabled:cursor-not-allowed"
+      className="h-8 w-8 shrink-0 flex items-center justify-center rounded bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 transition-all duration-200 disabled:opacity-30 disabled:hover:bg-white/5 disabled:hover:text-slate-400 disabled:cursor-not-allowed"
       type="button"
       disabled={disabled}
       onClick={onClick}
