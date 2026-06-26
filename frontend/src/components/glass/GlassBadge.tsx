@@ -14,6 +14,24 @@ const styles: Record<GlassBadgeVariant, string> = {
   neutral: 'border-white/15 bg-white/7 text-slate-300',
 };
 
-export default function GlassBadge({ children, variant = 'neutral', className = '' }: { children: ReactNode; variant?: GlassBadgeVariant; className?: string }) {
-  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[variant]} ${className}`}>{children}</span>;
+export default function GlassBadge({
+  children,
+  variant = 'neutral',
+  size = 'md',
+  className = '',
+}: {
+  children: ReactNode;
+  variant?: GlassBadgeVariant;
+  size?: 'sm' | 'md';
+  className?: string;
+}) {
+  const sizeStyles = size === 'sm'
+    ? 'px-1.5 py-0.5 text-[10px] font-medium rounded'
+    : 'px-2.5 py-1 text-xs font-semibold rounded-full';
+
+  return (
+    <span className={`inline-flex items-center border ${sizeStyles} ${styles[variant]} ${className}`}>
+      {children}
+    </span>
+  );
 }

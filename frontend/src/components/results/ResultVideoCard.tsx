@@ -61,7 +61,7 @@ export default function ResultVideoCard({
   }
 
   return (
-    <GlassCard className={`flex flex-col overflow-hidden h-[420px] border border-white/10 transition-all duration-300 hover:-translate-y-1 hover:border-cyan-300/30 hover:shadow-[0_4px_20px_rgba(0,0,0,0.4)] ${selected ? 'border-cyan-400/50 bg-cyan-950/20 shadow-[0_0_20px_rgba(34,211,238,0.08)]' : ''}`} hover>
+    <GlassCard className={`flex flex-col overflow-hidden h-full border border-white/10 transition-all duration-300 hover:-translate-y-1 hover:border-cyan-300/30 hover:shadow-[0_4px_20px_rgba(0,0,0,0.4)] ${selected ? 'border-cyan-400/50 bg-cyan-950/20 shadow-[0_0_20px_rgba(34,211,238,0.08)]' : ''}`} hover>
       <PreviewTile item={item} onPreview={onPreview} selected={selected} selectionMode={selectionMode} selectable={selectable} onToggleSelected={onToggleSelected} />
       <div className="flex flex-col justify-between flex-1 p-4 gap-3 min-h-0">
         <CardBody item={item} />
@@ -252,7 +252,7 @@ function CardActions({
         onClick={() => onPreview(item)}
       >
         <Eye size={13} className="mr-1.5 shrink-0" />
-        Xem video
+        Xem
       </button>
 
       {/* Secondary Actions Row */}

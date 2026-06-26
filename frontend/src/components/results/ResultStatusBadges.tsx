@@ -14,18 +14,31 @@ export default function ResultStatusBadges({ item }: { item: NormalizedResultIte
             ? 'success'
             : 'neutral';
   const QAIcon = item.qaStatus === 'failed' ? ShieldX : item.qaStatus === 'passed' ? ShieldCheck : AlertTriangle;
+  
+  // Do not show the general health status badge ("Cảnh báo") if we are already showing the warning count badge
+  const showHealthBadge = !(
+    (item.health === 'warning' || item.health === 'needs_review') &&
+    item.warningCount > 0
+  );
 
   return (
-    <div className="flex flex-wrap gap-1.5">
-      <GlassBadge variant={healthVariant} className="gap-1.5">
-        {item.health === 'ready' ? <CheckCircle2 size={13} /> : item.health === 'processing' ? <Clock3 size={13} /> : <AlertTriangle size={13} />}
-        {statusLabel(item.health)}
-      </GlassBadge>
-      <GlassBadge variant={item.qaStatus === 'failed' ? 'failed' : item.qaStatus === 'passed' ? 'success' : item.qaStatus === 'warning' ? 'warning' : 'neutral'} className="gap-1.5">
-        <QAIcon size={13} />
+    <div className="flex flex-wrap gap-1">
+      {showHealthBadge && (
+        <GlassBadge variant={healthVariant} size="sm" className="gap-1">
+          {item.health === 'ready' ? <CheckCircle2 size={11} /> : item.health === 'processing' ? <Clock3 size={11} /> : <AlertTriangle size={11} />}
+          {statusLabel(item.health)}
+        </GlassBadge>
+      )}
+      <GlassBadge variant={item.qaStatus === 'failed' ? 'failed' : item.qaStatus === 'passed' ? 'success' : item.qaStatus === 'warning' ? 'warning' : 'neutral'} size="sm" className="gap-1">
+        <QAIcon size={11} />
         {qaLabel(item.qaStatus)}
       </GlassBadge>
-      {item.warningCount ? <GlassBadge variant="warning">{item.warningCount} cảnh báo</GlassBadge> : null}
+      {item.warningCount ? (
+        <GlassBadge variant="warning" size="sm" className="gap-1">
+          <AlertTriangle size={11} />
+          {item.warningCount} cảnh báo
+        </GlassBadge>
+      ) : null}
     </div>
   );
 }
