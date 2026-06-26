@@ -424,6 +424,7 @@ export default function ResultPage() {
 
       <ResultVideoPreviewModal
         item={previewItem}
+        items={visibleItems}
         selected={Boolean(previewItem && selectedIds.has(previewItem.id))}
         selectionMode={selectionMode}
         selectionLabel={isDouyinResult ? 'Chọn sửa lại' : 'Chọn xuất'}
@@ -434,6 +435,7 @@ export default function ResultPage() {
         onRevealFile={(item) => void revealResult(item)}
         onShowLog={showLog}
         onToggleSelected={toggleSelected}
+        onNavigate={setPreviewItem}
       />
       <ResultTechnicalLogDrawer
         item={logItem}
