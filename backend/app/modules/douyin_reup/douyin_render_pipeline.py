@@ -198,7 +198,24 @@ class DouyinRenderPipeline:
         gemini_model_name: str = "gemini-3.1-flash-lite",
     ) -> dict:
         target_dir = ensure_dir(output_dir)
-        width, height = parse_resolution(settings.resolution)
+        parsed_w, parsed_h = parse_resolution(settings.resolution)
+        mode = getattr(settings, "video_dimension_mode", "vertical")
+        if mode == "auto":
+            width = video.width
+            height = video.height
+        elif mode == "horizontal":
+            if parsed_w >= parsed_h:
+                width, height = parsed_w, parsed_h
+            else:
+                width, height = parsed_h, parsed_w
+        elif mode == "square":
+            sz = min(parsed_w, parsed_h)
+            width, height = sz, sz
+        else:  # "vertical"
+            if parsed_h >= parsed_w:
+                width, height = parsed_w, parsed_h
+            else:
+                width, height = parsed_h, parsed_w
         preset = VisualStyleService().resolve_preset(
             VisualStyleSettings(
                 preset_id=settings.visual_style_preset_id,
@@ -726,16 +743,33 @@ class DouyinRenderPipeline:
             voice_input_index = next_input_index
             args.extend(["-i", voiceover_path])
 
-        video_chain = (
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height}"
-        )
+        # Apply slowdown and basic formatting first to the source stream
+        src_chain = "[0:v]"
         if slowdown > 1.0 + MIN_VIDEO_SLOWDOWN_DELTA:
-            video_chain += f",setpts={slowdown:.6f}*PTS"
-        video_chain += f",fps={settings.fps},setsar=1[v0]"
-        video_filters = [
-            video_chain
-        ]
+            src_chain += f"setpts={slowdown:.6f}*PTS,"
+        src_chain += f"fps={settings.fps},setsar=1[v_src]"
+        
+        video_filters = [src_chain]
+        
+        # Calculate aspect ratios to determine if we need blurred padding
+        input_aspect = video.width / video.height
+        target_aspect = width / height
+        
+        if abs(input_aspect - target_aspect) < 0.05:
+            # Crop to fill (original behavior)
+            video_filters.append(
+                f"[v_src]scale={width}:{height}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height}[v0]"
+            )
+        else:
+            # Mismatched aspect ratio -> fit with blurred background
+            blur_radius = 30
+            video_filters.append(
+                f"[v_src]split=2[v_bg_in][v_fg_in];"
+                f"[v_bg_in]scale={width}:{height},boxblur=luma_radius={blur_radius}:luma_power=2:chroma_radius={blur_radius}:chroma_power=2[v_bg];"
+                f"[v_fg_in]scale={width}:{height}:force_original_aspect_ratio=decrease[v_fg];"
+                f"[v_bg][v_fg]overlay=(W-w)/2:(H-h)/2:format=rgb[v0]"
+            )
         current_label = "[v0]"
         if overlay_input_index is not None:
             video_filters.append(

@@ -209,6 +209,7 @@ export interface DouyinReupSettings {
   original_voice_reduction_fallback_volume: number;
   duck_bgm_when_voice: boolean;
   resolution: string;
+  video_dimension_mode?: 'vertical' | 'horizontal' | 'square' | 'auto' | string;
   fps: number;
   process_mode: 'all' | 'selected' | 'first_n' | string;
   max_videos?: number | null;

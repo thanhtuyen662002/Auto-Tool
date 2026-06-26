@@ -104,6 +104,7 @@ class DouyinReupSettings(BaseModel):
     original_voice_reduction_fallback_volume: float = Field(default=0.35, ge=0, le=1)
     duck_bgm_when_voice: bool = False
     resolution: str = "1080x1920"
+    video_dimension_mode: Literal["vertical", "horizontal", "square", "auto"] = "vertical"
     fps: int = Field(default=30, gt=0, le=120)
     process_mode: str = "all"
     max_videos: int | None = Field(default=None, gt=0)

@@ -733,6 +733,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   original_voice_reduction_fallback_volume: 0.35,
   duck_bgm_when_voice: false,
   resolution: '1080x1920',
+  video_dimension_mode: 'vertical',
   fps: 30,
   process_mode: 'all',
   max_videos: null,
@@ -1536,6 +1537,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
       batch_pause_on_repeated_failures: settings.batch_pause_on_repeated_failures,
       batch_max_consecutive_failures: settings.batch_max_consecutive_failures,
       keep_temp: settings.keep_temp,
+      video_dimension_mode: settings.video_dimension_mode,
     };
   }
 
@@ -2707,6 +2709,67 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
                 {visualStyles.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
               </select>
             </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-200">Kích thước video đầu ra</span>
+              <select className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" value={settings.video_dimension_mode ?? 'vertical'} onChange={(event) => updateAdvancedSettings({ video_dimension_mode: event.target.value })}>
+                <option value="vertical">Dọc (9:16 - Mặc định)</option>
+                <option value="horizontal">Ngang (16:9)</option>
+                <option value="square">Vuông (1:1)</option>
+                <option value="auto">Tự động (Theo video gốc)</option>
+              </select>
+            </label>
+
+            {/* Thẻ mô tả trực quan bằng hình ảnh mô phỏng CSS và Tiếng Việt */}
+            <div className="mt-1 rounded-md border border-slate-700/60 bg-slate-900/40 p-3.5 sm:col-span-2">
+              <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center">
+                {/* Bộ mô phỏng khung hình CSS trực quan */}
+                <div className="flex items-center justify-center bg-slate-950/60 p-2 rounded-md border border-white/5 w-24 h-24 shrink-0 mx-auto sm:mx-0 select-none">
+                  <div className={`relative border border-slate-500 bg-slate-800 transition-all duration-300 flex items-center justify-center overflow-hidden shadow-inner ${
+                    (settings.video_dimension_mode ?? 'vertical') === 'vertical' ? 'w-10 h-16 rounded' :
+                    (settings.video_dimension_mode ?? 'vertical') === 'horizontal' ? 'w-16 h-10 rounded' :
+                    (settings.video_dimension_mode ?? 'vertical') === 'square' ? 'w-12 h-12 rounded' :
+                    'w-14 h-14 border-dashed rounded-full'
+                  }`}>
+                    {(settings.video_dimension_mode ?? 'vertical') === 'vertical' && (
+                      <>
+                        <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/20 via-slate-800/50 to-cyan-500/20 blur-[1px]" />
+                        <div className="w-full h-6 bg-cyan-400/85 border-y border-cyan-300/30 z-10 flex items-center justify-center text-[6px] text-cyan-950 font-extrabold">16:9</div>
+                      </>
+                    )}
+                    {(settings.video_dimension_mode ?? 'vertical') === 'horizontal' && (
+                      <>
+                        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 via-slate-800/50 to-cyan-500/20 blur-[1px]" />
+                        <div className="w-6 h-full bg-cyan-400/85 border-x border-cyan-300/30 z-10 flex items-center justify-center text-[5px] text-cyan-950 font-extrabold">9:16</div>
+                      </>
+                    )}
+                    {(settings.video_dimension_mode ?? 'vertical') === 'square' && (
+                      <>
+                        <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/15 via-slate-800/50 to-cyan-500/15 blur-[1px]" />
+                        <div className="w-full h-7 bg-cyan-400/85 border-y border-cyan-300/30 z-10 flex items-center justify-center text-[5px] text-cyan-950 font-extrabold">16:9</div>
+                      </>
+                    )}
+                    {(settings.video_dimension_mode ?? 'vertical') === 'auto' && (
+                      <div className="text-[7px] text-slate-400 text-center font-semibold leading-tight">Mặc định<br/>gốc</div>
+                    )}
+                  </div>
+                </div>
+                {/* Nội dung mô tả chi tiết bằng Tiếng Việt */}
+                <div className="text-xs text-slate-300 space-y-1">
+                  <div className="font-semibold text-cyan-400 text-sm">
+                    {(settings.video_dimension_mode ?? 'vertical') === 'vertical' ? 'Định dạng Dọc (9:16)' :
+                     (settings.video_dimension_mode ?? 'vertical') === 'horizontal' ? 'Định dạng Ngang (16:9)' :
+                     (settings.video_dimension_mode ?? 'vertical') === 'square' ? 'Định dạng Vuông (1:1)' :
+                     'Giữ nguyên gốc'}
+                  </div>
+                  <p className="leading-relaxed text-slate-400">
+                    {(settings.video_dimension_mode ?? 'vertical') === 'vertical' ? 'Phù hợp đăng TikTok, Reels, Shorts. Nếu video gốc là ngang hoặc vuông, tool tự căn giữa và thêm dải mờ chuyển động ở đỉnh/đáy để vừa khung hình mà không bị mất hình.' :
+                     (settings.video_dimension_mode ?? 'vertical') === 'horizontal' ? 'Phù hợp đăng YouTube truyền thống. Nếu video gốc là dọc hoặc vuông, tool tự căn giữa và thêm dải mờ chuyển động ở hai bên.' :
+                     (settings.video_dimension_mode ?? 'vertical') === 'square' ? 'Định dạng hình vuông. Tự động thêm dải mờ chuyển động ở phần trống nếu tỷ lệ video gốc khác hình vuông.' :
+                     'Giữ nguyên kích thước và tỷ lệ gốc của từng video đầu vào, không thêm viền mờ.'}
+                  </p>
+                </div>
+              </div>
+            </div>
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-slate-200">Giới hạn số video</span>
               <input className="h-11 w-full rounded-md border border-white/15 bg-slate-950/80 px-3 text-sm text-white" type="number" min={1} value={settings.max_videos ?? ''} onChange={(event) => updateAdvancedSettings({ max_videos: event.target.value ? Number(event.target.value) : null })} />

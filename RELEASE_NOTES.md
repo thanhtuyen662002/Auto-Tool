@@ -1,5 +1,15 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.1.3
+
+### Highlights
+
+- **Video Aspect Ratio Optimization & Multi-Orientation Support**:
+  - Defaulted all reup output videos to a vertical (9:16) format across both voiced (standard) and unvoiced (silent) pipelines.
+  - Implemented automatic blurred background padding (`boxblur`) for aspect ratio mismatches, centering horizontal (16:9) and square (1:1) videos within the vertical canvas without cropping any visual content.
+  - Added a new configuration option `video_dimension_mode` supporting four modes: "Dọc (9:16 - Mặc định)", "Ngang (16:9)", "Vuông (1:1)", and "Tự động (Theo video gốc)".
+  - Built a dynamic visual layout simulator using pure CSS and detailed descriptive guides in Vietnamese directly in the reup settings card for a highly intuitive configuration experience.
+
 ## v1.1.2
 
 ### Highlights
