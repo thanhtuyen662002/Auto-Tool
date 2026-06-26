@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.database import get_connection
-from app.modules.fleet_publisher.ai_content_generator import suggest_content_for_video
+from app.modules.fleet_publisher.ai_content_generator import match_product_links, suggest_content_for_video
 from app.modules.fleet_publisher.meta_publisher import publish_to_meta
 from app.modules.fleet_publisher.tiktok_publisher import publish_to_tiktok
 from app.modules.fleet_publisher.youtube_publisher import publish_to_youtube
@@ -310,6 +310,118 @@ class PublisherOrchestrator:
                     title,
                     cid_data["channel_name"],
                     scheduled_time_str
+                )
+
+        return created_ids
+
+    def add_from_results(
+        self,
+        items: list[dict],
+        channel_ids: list[str],
+    ) -> list[str]:
+        """Đưa danh sách video từ tab Kết quả vào hàng đợi đăng bài trực tiếp.
+
+        Không cần quét folder hay gọi AI — dữ liệu caption/hashtag đã có sẵn
+        từ pipeline reup.
+
+        Args:
+            items: Danh sách dict gồm video_path, title, caption, hashtags.
+            channel_ids: Danh sách ID kênh đích.
+
+        Returns:
+            list[str]: Danh sách queue IDs đã tạo.
+        """
+        if not items:
+            return []
+
+        with get_connection() as conn:
+            channels_data = []
+            for cid in channel_ids:
+                chan = conn.execute("SELECT * FROM distribution_channels WHERE id = ?", (cid,)).fetchone()
+                if not chan:
+                    continue
+                slots = conn.execute(
+                    "SELECT posting_time FROM channel_time_slots WHERE channel_id = ? AND active = 1 ORDER BY posting_time ASC",
+                    (cid,),
+                ).fetchall()
+                channels_data.append({
+                    "id": cid,
+                    "platform": chan["platform"],
+                    "channel_name": chan["channel_name"],
+                    "daily_limit": chan["daily_limit"],
+                    "time_slots": [s["posting_time"] for s in slots],
+                })
+
+        if not channels_data:
+            raise ValueError("Không tìm thấy thông tin kênh hoặc cấu hình khung giờ cho các kênh được chọn.")
+
+        now = datetime.now()
+        created_ids = []
+
+        for cid_data in channels_data:
+            cid = cid_data["id"]
+            slots = cid_data["time_slots"] or ["11:30", "18:00", "20:30"]
+            daily_limit = cid_data["daily_limit"]
+
+            with get_connection() as conn:
+                last_row = conn.execute(
+                    """
+                    SELECT scheduled_time FROM publishing_queue
+                    WHERE channel_id = ? AND status IN ('pending', 'publishing', 'success')
+                    ORDER BY scheduled_time DESC LIMIT 1
+                    """,
+                    (cid,),
+                ).fetchone()
+
+            if last_row:
+                last_time = datetime.strptime(last_row["scheduled_time"], "%Y-%m-%d %H:%M:%S")
+                current_schedule_time = max(now + timedelta(minutes=15), last_time)
+            else:
+                current_schedule_time = now + timedelta(minutes=15)
+
+            for item in items:
+                video_path = item.get("video_path", "")
+                title = item.get("title", "")
+                caption = item.get("caption") or None
+                hashtags = item.get("hashtags") or None
+
+                # Thử khớp link sản phẩm từ hashtags / tên file
+                product_link = match_product_links(
+                    video_path,
+                    [t.strip("# ") for t in (hashtags or "").split() if t.startswith("#")],
+                )
+
+                scheduled_dt = self._calculate_next_slot(current_schedule_time, slots, daily_limit, cid)
+                scheduled_time_str = scheduled_dt.strftime("%Y-%m-%d %H:%M:%S")
+                current_schedule_time = scheduled_dt + timedelta(minutes=1)
+
+                queue_id = str(uuid.uuid4())
+                with get_connection() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO publishing_queue
+                        (id, channel_id, video_path, title, caption, hashtags, product_link, scheduled_time, status, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            queue_id,
+                            cid,
+                            video_path,
+                            title,
+                            caption,
+                            hashtags,
+                            product_link,
+                            scheduled_time_str,
+                            "pending",
+                            now.strftime("%Y-%m-%d %H:%M:%S"),
+                        ),
+                    )
+                created_ids.append(queue_id)
+                logger.info(
+                    "Đã lập lịch video từ Kết quả [%s] -> Kênh [%s] lúc %s",
+                    title,
+                    cid_data["channel_name"],
+                    scheduled_time_str,
                 )
 
         return created_ids

@@ -84,3 +84,19 @@ class QueueGenerateRequest(BaseModel):
     folder_path: str
     channel_ids: list[str]
     tags: list[str] | None = None
+
+
+class QueueItemFromResult(BaseModel):
+    """Một video từ tab Kết quả sẽ được đưa vào hàng đợi đăng bài."""
+
+    video_path: str
+    title: str
+    caption: str | None = None
+    hashtags: str | None = None  # Chuỗi hashtag phân cách bằng dấu cách
+
+
+class QueueAddFromResultsRequest(BaseModel):
+    """Request đưa nhiều video từ tab Kết quả vào hàng đợi Fleet."""
+
+    items: list[QueueItemFromResult]
+    channel_ids: list[str]

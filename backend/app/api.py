@@ -345,6 +345,8 @@ from app.modules.fleet_publisher.publisher_schema import (
     QueueItemUpdateRequest,
     QueueReorderRequest,
     QueueGenerateRequest,
+    QueueAddFromResultsRequest,
+    QueueItemFromResult,
     TimeSlotModel,
 )
 from app.utils.file_utils import ensure_dir, write_json
@@ -3309,6 +3311,39 @@ def create_app() -> FastAPI:
                 "created_count": len(created_ids),
                 "queue_ids": created_ids,
                 "message": f"Đã lập lịch thành công {len(created_ids)} tác vụ đăng video chéo kênh."
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/api/fleet/queue/add-from-results")
+    def add_results_to_fleet_queue(req: QueueAddFromResultsRequest) -> dict[str, Any]:
+        """Đưa danh sách video đã chọn từ tab Kết quả vào hàng đợi Fleet.
+
+        Caption và hashtags đã được pipeline tạo sẵn, không cần gọi AI thêm.
+        """
+        try:
+            items_dicts = [
+                {
+                    "video_path": item.video_path,
+                    "title": item.title,
+                    "caption": item.caption,
+                    "hashtags": item.hashtags,
+                }
+                for item in req.items
+            ]
+            created_ids = publisher_orchestrator.add_from_results(
+                items=items_dicts,
+                channel_ids=req.channel_ids,
+            )
+            return {
+                "success": True,
+                "created_count": len(created_ids),
+                "queue_ids": created_ids,
+                "message": (
+                    f"Đã đưa {len(created_ids)} video vào lịch đăng bài thành công."
+                    if created_ids
+                    else "Không có video nào được thêm vào hàng đợi."
+                ),
             }
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))

@@ -66,6 +66,10 @@ export default function FleetPage() {
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // Queue pagination
+  const QUEUE_PAGE_SIZE = 10;
+  const [queuePage, setQueuePage] = useState(1);
+
   // Modals state
   const [showAddChannel, setShowAddChannel] = useState(false);
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -107,6 +111,7 @@ export default function FleetPage() {
       setQueue(resQueue);
       setChannels(resChannels);
       setProducts(resProducts);
+      setQueuePage(1); // Reset pagination on refresh
     } catch (err) {
       showToast('Không thể tải dữ liệu từ server.', 'error');
     } finally {
@@ -387,7 +392,11 @@ export default function FleetPage() {
               </GlassCard>
             ) : (
               <div className="grid gap-4">
-                {queue.map((item, index) => (
+                {queue
+                  .slice((queuePage - 1) * QUEUE_PAGE_SIZE, queuePage * QUEUE_PAGE_SIZE)
+                  .map((item, index) => {
+                    const globalIndex = (queuePage - 1) * QUEUE_PAGE_SIZE + index;
+                    return (
                   <GlassCard 
                     key={item.id}
                     className={`border border-white/10 p-4 transition-all duration-300 hover:border-cyan-300/20 ${
@@ -474,16 +483,16 @@ export default function FleetPage() {
                           {item.status === 'pending' && (
                             <>
                               <button 
-                                onClick={() => handleMoveQueueItem(index, 'up')}
-                                disabled={index === 0}
+                                onClick={() => handleMoveQueueItem(globalIndex, 'up')}
+                                disabled={globalIndex === 0}
                                 className="p-1.5 rounded bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-25"
                                 title="Đẩy lịch lên trước"
                               >
                                 <ArrowUp size={14} />
                               </button>
                               <button 
-                                onClick={() => handleMoveQueueItem(index, 'down')}
-                                disabled={index === queue.length - 1}
+                                onClick={() => handleMoveQueueItem(globalIndex, 'down')}
+                                disabled={globalIndex === queue.length - 1}
                                 className="p-1.5 rounded bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-25"
                                 title="Đẩy lịch lùi sau"
                               >
@@ -516,8 +525,36 @@ export default function FleetPage() {
                       </div>
 
                     </div>
-                  </GlassCard>
-                ))}
+                    </GlassCard>
+                    );
+                  })}
+
+                {/* Queue Pagination */}
+                {queue.length > QUEUE_PAGE_SIZE && (
+                  <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-4 py-2.5">
+                    <span className="text-xs text-slate-400">
+                      Trang <span className="font-semibold text-white">{queuePage}</span>
+                      /{Math.ceil(queue.length / QUEUE_PAGE_SIZE)}
+                      <span className="ml-2 text-slate-500">· {queue.length} video</span>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setQueuePage((p) => Math.max(1, p - 1))}
+                        disabled={queuePage === 1}
+                        className="px-3 py-1 rounded-md text-xs font-medium border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        ← Trước
+                      </button>
+                      <button
+                        onClick={() => setQueuePage((p) => Math.min(Math.ceil(queue.length / QUEUE_PAGE_SIZE), p + 1))}
+                        disabled={queuePage === Math.ceil(queue.length / QUEUE_PAGE_SIZE)}
+                        className="px-3 py-1 rounded-md text-xs font-medium border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Tiếp →
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

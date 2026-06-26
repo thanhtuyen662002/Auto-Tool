@@ -1,4 +1,4 @@
-import { Clapperboard, RefreshCw, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Clapperboard, RefreshCw, Share2, SlidersHorizontal, Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -71,6 +71,13 @@ export default function ResultPage() {
   const [previewItem, setPreviewItem] = useState<NormalizedResultItem | null>(null);
   const [logItem, setLogItem] = useState<NormalizedResultItem | null>(null);
   const [logOpen, setLogOpen] = useState(false);
+
+  // Fleet Queue state
+  const [showFleetModal, setShowFleetModal] = useState(false);
+  const [fleetChannels, setFleetChannels] = useState<{ id: string; channel_name: string; platform: string }[]>([]);
+  const [fleetSelectedChannels, setFleetSelectedChannels] = useState<string[]>([]);
+  const [fleetLoading, setFleetLoading] = useState(false);
+  const [fleetChannelsLoading, setFleetChannelsLoading] = useState(false);
 
   const loadResults = useCallback(
     async (quiet = false) => {
@@ -262,6 +269,54 @@ export default function ResultPage() {
     setActionMessage('Đã sao chép thư mục gói xuất bản.');
   }
 
+  async function openFleetModal() {
+    setShowFleetModal(true);
+    setFleetChannelsLoading(true);
+    try {
+      const res = await fetch('/api/fleet/channels');
+      const data = await res.json();
+      setFleetChannels(Array.isArray(data) ? data : []);
+      // Pre-select all channels
+      setFleetSelectedChannels(Array.isArray(data) ? data.map((c: any) => c.id) : []);
+    } catch {
+      setFleetChannels([]);
+    } finally {
+      setFleetChannelsLoading(false);
+    }
+  }
+
+  async function handleAddToFleet() {
+    if (!fleetSelectedChannels.length) return;
+    setFleetLoading(true);
+    try {
+      const eligibleSelected = selectedItems.filter((item) => item.exportEligible);
+      const payload = {
+        items: eligibleSelected.map((item) => ({
+          video_path: item.path,
+          title: item.filename.replace(/\.[^.]+$/, ''),
+          caption: item.caption || null,
+          hashtags: item.hashtags.join(' ') || null,
+        })),
+        channel_ids: fleetSelectedChannels,
+      };
+      const res = await fetch('/api/fleet/queue/add-from-results', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Lỗi khi đưa vào Fleet.');
+      setActionMessage(data.message || `Đã lên lịch ${eligibleSelected.length} video thành công.`);
+      setShowFleetModal(false);
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      setError(err.message || 'Không thể đưa video vào lịch đăng.');
+      setShowFleetModal(false);
+    } finally {
+      setFleetLoading(false);
+    }
+  }
+
   async function handleRetryFailed() {
     if (!jobId) return;
     setBusyAction('retry');
@@ -304,6 +359,16 @@ export default function ResultPage() {
           {isDouyinResult ? <LinkButton to={reupAdjustUrl} label="Chỉnh/render lại" icon={<SlidersHorizontal size={16} />} /> : null}
           {projectId && !isDouyinResult ? <LinkButton to={`/projects/${projectId}/content`} label="Lời bình" /> : null}
           {projectId && !isDouyinResult ? <LinkButton to={`/projects/${projectId}/review`} label="Đánh giá" /> : null}
+          {selectedExportCount > 0 ? (
+            <GlassButton
+              variant="primary"
+              loading={fleetLoading}
+              onClick={() => void openFleetModal()}
+            >
+              <Share2 size={16} className="mr-1 text-slate-950" />
+              Đưa vào Fleet ({selectedExportCount} video)
+            </GlassButton>
+          ) : null}
           <LinkButton to="/douyin-reup" label="Lô mới" icon={<Clapperboard size={16} />} />
           <GlassButton variant="secondary" loading={loading} onClick={() => void loadResults()}>
             <RefreshCw size={16} />
@@ -446,6 +511,24 @@ export default function ResultPage() {
           setLogItem(null);
         }}
       />
+
+      {/* Fleet Queue Modal */}
+      {showFleetModal && (
+        <FleetQueueModal
+          channels={fleetChannels}
+          selectedChannels={fleetSelectedChannels}
+          videoCount={selectedExportCount}
+          loading={fleetLoading}
+          channelsLoading={fleetChannelsLoading}
+          onToggleChannel={(id) =>
+            setFleetSelectedChannels((prev) =>
+              prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+            )
+          }
+          onConfirm={() => void handleAddToFleet()}
+          onClose={() => setShowFleetModal(false)}
+        />
+      )}
     </ResultsLayout>
   );
 }
@@ -531,4 +614,137 @@ function formatStatus(status: string): string {
     cancelled: 'Đã hủy',
   };
   return labels[status.toLowerCase()] ?? status;
+}
+
+function FleetQueueModal({
+  channels,
+  selectedChannels,
+  videoCount,
+  loading,
+  channelsLoading,
+  onToggleChannel,
+  onConfirm,
+  onClose,
+}: {
+  channels: { id: string; channel_name: string; platform: string }[];
+  selectedChannels: string[];
+  videoCount: number;
+  loading: boolean;
+  channelsLoading: boolean;
+  onToggleChannel: (id: string) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const platformIcon = (platform: string) => {
+    if (platform === 'youtube') return '📺';
+    if (platform === 'tiktok') return '🎵';
+    return '🌐';
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+        role="presentation"
+      />
+
+      {/* Modal */}
+      <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl shadow-black/50 backdrop-blur-md">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-400/10 border border-cyan-400/20">
+              <Share2 className="text-cyan-400" size={18} />
+            </div>
+            <div>
+              <h2 className="font-semibold text-white text-sm">Đưa vào lịch đăng Fleet</h2>
+              <p className="text-xs text-slate-400">{videoCount} video được chọn</p>
+            </div>
+          </div>
+          <button
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+            onClick={onClose}
+            type="button"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-4">
+          <p className="text-sm text-slate-300 mb-4">
+            Chọn kênh để đưa <strong className="text-white">{videoCount} video</strong> vào hàng đợi đăng bài. 
+            Hệ thống sẽ tự động phân bố theo khung giờ đã cấu hình.
+          </p>
+
+          {channelsLoading ? (
+            <div className="flex items-center justify-center py-8 text-slate-400 text-sm gap-2">
+              <div className="h-4 w-4 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />
+              Đang tải danh sách kênh...
+            </div>
+          ) : channels.length === 0 ? (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
+              ⚠️ Chưa có kênh nào được liên kết. Vui lòng vào tab Fleet → Kênh liên kết để thêm kênh trước.
+            </div>
+          ) : (
+            <div className="grid gap-2 max-h-52 overflow-y-auto pr-1">
+              {channels.map((ch) => {
+                const checked = selectedChannels.includes(ch.id);
+                return (
+                  <button
+                    key={ch.id}
+                    type="button"
+                    onClick={() => onToggleChannel(ch.id)}
+                    className={`flex items-center gap-3 w-full rounded-lg border px-3 py-2.5 text-left transition-all ${
+                      checked
+                        ? 'border-cyan-400/40 bg-cyan-400/10 text-white'
+                        : 'border-white/10 bg-white/3 text-slate-300 hover:border-white/20 hover:bg-white/8'
+                    }`}
+                  >
+                    <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+                      checked ? 'border-cyan-400 bg-cyan-400' : 'border-slate-600 bg-transparent'
+                    }`}>
+                      {checked && <span className="text-slate-950 text-xs font-bold">✓</span>}
+                    </div>
+                    <span className="text-base">{platformIcon(ch.platform)}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{ch.channel_name}</p>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider">{ch.platform}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 border-t border-white/10 px-6 py-4">
+          <button
+            type="button"
+            className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+            onClick={onClose}
+          >
+            Huỷ
+          </button>
+          <button
+            type="button"
+            disabled={loading || selectedChannels.length === 0 || channels.length === 0}
+            onClick={onConfirm}
+            className="flex items-center gap-2 rounded-lg bg-cyan-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <div className="h-4 w-4 rounded-full border-2 border-slate-950 border-t-transparent animate-spin" />
+            ) : (
+              <Share2 size={14} />
+            )}
+            {loading ? 'Đang lập lịch...' : `Lập lịch cho ${selectedChannels.length} kênh`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

@@ -1,5 +1,22 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.1.4
+
+### Highlights
+
+- **Đưa video vào lịch đăng Fleet trực tiếp từ tab Kết quả**:
+  - Thêm nút **"Đưa vào Fleet"** xuất hiện ngay trên thanh header khi người dùng chọn ≥1 video hợp lệ trong tab Kết quả.
+  - Modal chọn kênh hiện ra với danh sách kênh đã liên kết, tất cả được tích sẵn — người dùng chỉ cần bỏ tích những kênh không muốn đăng.
+  - Sử dụng **caption, hashtag đã có sẵn từ pipeline reup** (lưu trong DB) thay vì template cứng — mỗi video có nội dung riêng biệt phù hợp với sản phẩm thực tế.
+  - Tự động tìm link sản phẩm affiliate từ hashtags và tên file video.
+  - Endpoint mới: `POST /api/fleet/queue/add-from-results`.
+
+- **Phân trang danh sách hàng đợi Fleet**:
+  - Danh sách Queue giờ hiển thị **10 video mỗi trang** thay vì render toàn bộ.
+  - Thanh phân trang ở cuối danh sách hiển thị số trang hiện tại, tổng số video.
+  - Nút điều hướng `← Trước` / `Tiếp →` tự động disable ở trang đầu/cuối.
+  - Reset về trang 1 tự động khi dữ liệu được làm mới.
+
 ## v1.1.3
 
 ### Highlights
