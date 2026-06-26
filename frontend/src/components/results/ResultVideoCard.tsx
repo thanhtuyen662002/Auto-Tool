@@ -244,14 +244,14 @@ function CardActions({
   onShowLog: (item: NormalizedResultItem) => void;
 }) {
   return (
-    <div className="flex items-center gap-1.5 mt-2 border-t border-white/5 pt-3 w-full">
+    <div className="flex items-center gap-1.5 mt-2 border-t border-white/5 pt-3 w-full justify-start">
       {/* Primary Action Button (Xem) */}
       <button
-        className="h-8 flex-1 flex items-center justify-center rounded bg-white/10 hover:bg-white/15 text-white hover:text-cyan-200 text-xs font-semibold transition-colors whitespace-nowrap focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed"
+        className="h-8 px-3.5 flex items-center justify-center rounded bg-white/10 hover:bg-white/15 text-white hover:text-cyan-200 text-xs font-semibold transition-colors whitespace-nowrap focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
         disabled={!item.path}
         onClick={() => onPreview(item)}
       >
-        <Eye size={13} className="mr-1 shrink-0" />
+        <Eye size={13} className="mr-1.5 shrink-0" />
         Xem video
       </button>
 
