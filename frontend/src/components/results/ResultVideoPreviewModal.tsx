@@ -116,6 +116,23 @@ export default function ResultVideoPreviewModal({
               </div>
             )}
 
+            {/* Floating Top-Right Selection Button */}
+            {selectionMode && (
+              <button
+                onClick={() => onToggleSelected(item)}
+                disabled={!canSelectItem(item)}
+                className={`absolute right-4 top-4 z-30 flex items-center gap-1.5 rounded border px-3 py-1.5 text-xs font-semibold shadow-lg transition-all duration-200 focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed ${
+                  selected 
+                    ? 'bg-cyan-400 text-slate-950 border-cyan-300 hover:bg-cyan-300' 
+                    : 'bg-black/75 text-slate-300 border-white/10 hover:bg-white/10 hover:text-white'
+                }`}
+                type="button"
+              >
+                {selected ? <CheckSquare size={14} className="shrink-0" /> : <Square size={14} className="shrink-0" />}
+                {selected ? `Đã chọn` : selectionLabel}
+              </button>
+            )}
+
             {/* Floating Left/Right Navigation Chevrons */}
             {hasPrev && (
               <button
@@ -174,39 +191,48 @@ export default function ResultVideoPreviewModal({
           </div>
 
           {/* Action Footer & Keyboard Shortcuts Tip */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/5 pt-4">
-            <div className="flex flex-wrap gap-2">
-              {selectionMode && (
-                <GlassButton
-                  variant={selected ? 'primary' : 'secondary'}
-                  disabled={!canSelectItem(item)}
-                  onClick={() => onToggleSelected(item)}
-                  className="px-4 py-2"
-                >
-                  {selected ? <CheckSquare size={16} className="mr-1.5" /> : <Square size={16} className="mr-1.5" />}
-                  {selected ? `Đã chọn (${selectionLabel.toLowerCase()})` : selectionLabel}
-                </GlassButton>
-              )}
-              <GlassButton variant="secondary" disabled={!item.path} onClick={() => onCopyPath(item)}>
-                <Clipboard size={16} className="mr-1.5" />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-t border-white/5 pt-4">
+            {/* Action Buttons Row on a Single Line */}
+            <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto whitespace-nowrap scrollbar-none py-1 min-w-0">
+              <button
+                disabled={!item.path}
+                onClick={() => onCopyPath(item)}
+                className="h-8 px-3 flex items-center justify-center rounded bg-white/10 hover:bg-white/15 text-white hover:text-cyan-200 text-xs font-semibold border border-white/5 transition-colors whitespace-nowrap focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                type="button"
+              >
+                <Clipboard size={13} className="mr-1.5 shrink-0" />
                 Copy đường dẫn
-              </GlassButton>
-              <GlassButton variant="secondary" disabled={!item.path} onClick={() => onRevealFile(item)}>
-                <FolderOpen size={16} className="mr-1.5" />
-                Mở vị trí file
-              </GlassButton>
-              <GlassButton variant="ghost" disabled={!hasCaption} onClick={() => onCopyCaption(item)}>
-                <Captions size={16} className="mr-1.5" />
+              </button>
+              <button
+                disabled={!item.path}
+                onClick={() => onRevealFile(item)}
+                className="h-8 px-3 flex items-center justify-center rounded bg-white/10 hover:bg-white/15 text-white hover:text-cyan-200 text-xs font-semibold border border-white/5 transition-colors whitespace-nowrap focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                type="button"
+              >
+                <FolderOpen size={13} className="mr-1.5 shrink-0" />
+                Mở vị trí
+              </button>
+              <button
+                disabled={!hasCaption}
+                onClick={() => onCopyCaption(item)}
+                className="h-8 px-3 flex items-center justify-center rounded bg-white/10 hover:bg-white/15 text-white hover:text-cyan-200 text-xs font-semibold border border-white/5 transition-colors whitespace-nowrap focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                type="button"
+              >
+                <Captions size={13} className="mr-1.5 shrink-0" />
                 Copy lời bình
-              </GlassButton>
-              <GlassButton variant="ghost" onClick={() => onShowLog(item)}>
-                <FileSearch size={16} className="mr-1.5" />
-                Xem log chi tiết
-              </GlassButton>
+              </button>
+              <button
+                onClick={() => onShowLog(item)}
+                className="h-8 px-3 flex items-center justify-center rounded bg-white/10 hover:bg-white/15 text-white hover:text-cyan-200 text-xs font-semibold border border-white/5 transition-colors whitespace-nowrap focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                type="button"
+              >
+                <FileSearch size={13} className="mr-1.5 shrink-0" />
+                Xem nhật ký
+              </button>
             </div>
 
             {/* Keyboard Shortcuts Help */}
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-950/50 border border-white/5 rounded-md px-2.5 py-1.5 shadow-inner">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-950/50 border border-white/5 rounded-md px-2.5 py-1.5 shadow-inner shrink-0">
               <Keyboard size={13} className="text-slate-400" />
               <span>Phím tắt:</span>
               <kbd className="bg-white/10 px-1 rounded text-white font-mono text-[9px] border border-white/5">A / ←</kbd>

@@ -31,7 +31,7 @@ export default function ResultsLayout({
         {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
       </header>
       {summary}
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className="min-w-0">{children}</section>
         {sidePanel ? <aside className="min-w-0">{sidePanel}</aside> : null}
       </div>
