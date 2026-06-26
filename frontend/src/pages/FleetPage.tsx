@@ -7,6 +7,7 @@ import {
 import GlassCard from '../components/glass/GlassCard';
 import GlassButton from '../components/glass/GlassButton';
 import GlassModal from '../components/glass/GlassModal';
+import { browsePath } from '../api/client';
 
 // Types matching backend Pydantic schemas
 interface TimeSlot {
@@ -709,9 +710,9 @@ export default function FleetPage() {
               onChange={(e) => setNewChannel({ ...newChannel, platform: e.target.value })}
               className="bg-slate-900 border border-white/10 rounded-md p-2.5 text-sm text-white focus:outline-none focus:border-cyan-400"
             >
-              <option value="youtube">YouTube (Official API)</option>
-              <option value="meta">Facebook Page (Meta Reels API)</option>
-              <option value="tiktok">TikTok (Playwright Browser Automation)</option>
+              <option value="youtube">YouTube (Tải lên chính thức)</option>
+              <option value="meta">Facebook Page (Đăng Reels tự động)</option>
+              <option value="tiktok">TikTok (Đăng tự động qua trình duyệt)</option>
             </select>
           </div>
 
@@ -747,12 +748,44 @@ export default function FleetPage() {
             />
           </div>
 
+          {/* Dynamic User-Friendly Instructions Guide */}
+          <div className="rounded-md border border-cyan-500/20 bg-cyan-950/30 p-3.5 text-xs text-cyan-200 leading-relaxed">
+            <h4 className="font-bold text-white mb-2 flex items-center gap-1">
+              <Sparkles size={13} className="text-cyan-400" />
+              Hướng dẫn lấy thông tin xác thực:
+            </h4>
+            {newChannel.platform === 'youtube' && (
+              <ol className="list-decimal list-inside space-y-1 text-slate-300">
+                <li>Truy cập <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="text-cyan-400 underline inline-flex items-center gap-0.5">Google Cloud Console <ExternalLink size={10} /></a> và tạo dự án.</li>
+                <li>Kích hoạt dịch vụ <strong>YouTube Data API v3</strong> trong thư viện API.</li>
+                <li>Tại mục <strong>Credentials</strong>, tạo <strong>OAuth Client ID</strong> (chọn loại ứng dụng là <i>Desktop App</i>).</li>
+                <li>Tải tệp mật JSON (client_secret.json) vừa tạo về máy tính.</li>
+                <li>Mở tệp JSON đó bằng Notepad, sao chép toàn bộ nội dung và dán vào ô bên dưới.</li>
+              </ol>
+            )}
+            {newChannel.platform === 'meta' && (
+              <ol className="list-decimal list-inside space-y-1 text-slate-300">
+                <li>Truy cập trang <a href="https://developers.facebook.com/" target="_blank" rel="noreferrer" className="text-cyan-400 underline inline-flex items-center gap-0.5">Facebook Developers <ExternalLink size={10} /></a> và tạo ứng dụng doanh nghiệp.</li>
+                <li>Kích hoạt sản phẩm <strong>Page Reels Publishing</strong> trong trang quản trị ứng dụng.</li>
+                <li>Sử dụng công cụ Graph API Explorer để tạo mã <strong>Access Token dài hạn</strong> (Page Token) của trang.</li>
+                <li>Đảm bảo mã Token có đủ các quyền: <code className="text-[10px] bg-black/40 px-1 py-0.5 rounded text-amber-400">pages_show_list, pages_read_engagement, pages_manage_posts</code>.</li>
+                <li>Dán mã token vào ô bên dưới dưới định dạng: <code className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded text-cyan-300 select-all">{`{"access_token": "mã_token_của_bạn"}`}</code>.</li>
+              </ol>
+            )}
+            {newChannel.platform === 'tiktok' && (
+              <ol className="list-decimal list-inside space-y-1 text-slate-300">
+                <li>Sử dụng Chrome cài đặt tiện ích mở rộng miễn phí <strong>Cookie-Editor</strong> từ Chrome Web Store.</li>
+                <li>Đăng nhập tài khoản của bạn tại trang quản trị <a href="https://suatban.tiktok.com/" target="_blank" rel="noreferrer" className="text-cyan-400 underline inline-flex items-center gap-0.5">TikTok Studio <ExternalLink size={10} /></a>.</li>
+                <li>Nhấp biểu tượng tiện ích <strong>Cookie-Editor</strong> trên thanh công cụ trình duyệt.</li>
+                <li>Nhấn nút <strong>Export</strong> và chọn định dạng <strong>JSON</strong> để sao chép danh sách Cookies vào bộ nhớ tạm.</li>
+                <li>Dán trực tiếp đoạn mã Cookies vừa sao chép vào ô cấu hình bên dưới.</li>
+              </ol>
+            )}
+          </div>
+
           <div className="grid gap-1.5">
-            <label className="text-xs font-semibold text-slate-400 flex items-center justify-between">
-              <span>Xác thực & Bảo mật (Cấu hình dạng JSON)</span>
-              <span className="text-[10px] text-slate-500 font-normal">
-                {newChannel.platform === 'tiktok' ? 'TikTok Cookies JSON' : 'OAuth Token & Client Credentials'}
-              </span>
+            <label className="text-xs font-semibold text-slate-400">
+              Thông tin đăng nhập & Xác thực
             </label>
             <textarea
               rows={6}
@@ -841,13 +874,35 @@ export default function FleetPage() {
           
           <div className="grid gap-1.5">
             <label className="text-xs font-semibold text-slate-400">Đường dẫn thư mục video kết quả (.mp4)</label>
-            <input
-              type="text"
-              value={generateConfig.folder_path}
-              onChange={(e) => setGenerateConfig({ ...generateConfig, folder_path: e.target.value })}
-              placeholder="ví dụ: D:\Data\Auto-Tool\Output\douyin_reup_xxx"
-              className="bg-slate-900 border border-white/10 rounded-md p-2.5 text-sm text-white focus:outline-none focus:border-cyan-400"
-            />
+            <div className="grid gap-2 grid-cols-[1fr_auto]">
+              <input
+                type="text"
+                value={generateConfig.folder_path}
+                onChange={(e) => setGenerateConfig({ ...generateConfig, folder_path: e.target.value })}
+                placeholder="ví dụ: D:\Data\Auto-Tool\Output\douyin_reup_xxx"
+                className="bg-slate-900 border border-white/10 rounded-md p-2.5 text-sm text-white focus:outline-none focus:border-cyan-400 w-full"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const response = await browsePath({
+                      mode: 'folder',
+                      title: 'Chọn thư mục video kết quả',
+                      initial_path: generateConfig.folder_path || null,
+                    });
+                    if (!response.cancelled && response.path) {
+                      setGenerateConfig({ ...generateConfig, folder_path: response.path });
+                    }
+                  } catch (err) {
+                    showToast('Không thể mở hộp thoại chọn thư mục.', 'error');
+                  }
+                }}
+                className="bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-md px-3 text-xs text-white font-semibold transition duration-150 focus:outline-none cursor-pointer"
+              >
+                Chọn thư mục
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-1.5">
