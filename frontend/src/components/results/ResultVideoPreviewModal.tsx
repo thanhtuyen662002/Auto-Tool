@@ -98,13 +98,13 @@ export default function ResultVideoPreviewModal({
   return (
     <GlassModal open={Boolean(item)} title={modalTitle} onClose={onClose}>
       {item ? (
-        <div className="grid gap-5">
+        <div className="flex flex-col gap-5 min-w-0 w-full pb-2">
           {/* Video Player and Side Controls */}
           <div className="relative overflow-hidden rounded-lg border border-white/10 bg-black shadow-2xl">
             {item.path ? (
               <video
                 key={item.path} // Re-mount video when path changes
-                className="max-h-[60vh] w-full bg-black object-contain"
+                className="max-h-[48vh] w-full bg-black object-contain"
                 controls
                 autoPlay
                 preload="metadata"
@@ -175,7 +175,7 @@ export default function ResultVideoPreviewModal({
             </div>
 
             {/* Path details */}
-            <div className="grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
+            <div className="grid gap-2 text-sm text-slate-300 sm:grid-cols-2 min-w-0 w-full">
               <PathLine label="Video" value={item.path} />
               <PathLine label="Phụ đề Việt" value={item.subtitleFile} />
               <PathLine label="Giọng đọc (TTS)" value={item.voiceFile} />
@@ -191,9 +191,9 @@ export default function ResultVideoPreviewModal({
           </div>
 
           {/* Action Footer & Keyboard Shortcuts Tip */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-t border-white/5 pt-4">
-            {/* Action Buttons Row on a Single Line */}
-            <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto whitespace-nowrap scrollbar-none py-1 min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/5 pt-4">
+            {/* Action Buttons Row */}
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               <button
                 disabled={!item.path}
                 onClick={() => onCopyPath(item)}
@@ -256,7 +256,7 @@ export default function ResultVideoPreviewModal({
 function PathLine({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
-    <div className="min-w-0 rounded border border-white/5 bg-white/2 px-3 py-1.5">
+    <div className="min-w-0 rounded border border-white/5 bg-white/2 px-3 py-1.5 overflow-hidden">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
       <div className="mt-0.5 truncate text-xs text-slate-300 select-all" title={value}>
         {value}
