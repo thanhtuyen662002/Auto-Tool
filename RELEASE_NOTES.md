@@ -1,5 +1,13 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.1.2
+
+### Highlights
+
+- **Fix API Route Parameter Resolution**:
+  - Fixed a critical bug in channel saving, product creation, and queue updates where FastAPI incorrectly interpreted the request body as query parameters. This was caused by local namespace imports inside `create_app()` failing to resolve under `from __future__ import annotations`.
+  - Moved all Fleet Publisher schema imports to the module global level to ensure correct OpenAPI schema generation and body parsing.
+
 ## v1.0.64
 
 ### Highlights

@@ -336,6 +336,17 @@ from app.schemas.api_schema import (
     VideoPromptPackResponse,
 )
 from app.schemas.project_schema import ProjectConfig
+from app.modules.fleet_publisher.publisher_schema import (
+    ChannelCreateRequest,
+    ChannelResponse,
+    ProductAffiliateCreate,
+    ProductAffiliateResponse,
+    QueueItemResponse,
+    QueueItemUpdateRequest,
+    QueueReorderRequest,
+    QueueGenerateRequest,
+    TimeSlotModel,
+)
 from app.utils.file_utils import ensure_dir, write_json
 from app.utils.app_paths import app_data_dir
 from app.utils.dependency_manager import (
@@ -3015,17 +3026,6 @@ def create_app() -> FastAPI:
         return TimelineTemplatesResponse(templates=templates)
 
     # ─── FLEET PUBLISHER API ROUTES ───────────────────────────────────────────
-    from app.modules.fleet_publisher.publisher_schema import (
-        ChannelCreateRequest,
-        ChannelResponse,
-        ProductAffiliateCreate,
-        ProductAffiliateResponse,
-        QueueItemResponse,
-        QueueItemUpdateRequest,
-        QueueReorderRequest,
-        QueueGenerateRequest,
-        TimeSlotModel,
-    )
 
     @app.get("/api/fleet/channels", response_model=list[ChannelResponse])
     def get_fleet_channels() -> list[ChannelResponse]:
