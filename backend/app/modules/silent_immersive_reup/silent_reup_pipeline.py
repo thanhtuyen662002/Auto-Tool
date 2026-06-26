@@ -228,6 +228,7 @@ class SilentReupPipeline:
                     generate_voiceover=True,
                     voiceover_script=None,
                     recommended_audio_mode="voiceover_plus_original_audio_plus_bgm",
+                    ocr_debug_json_path=self.last_ocr_debug_json_path,
                     warnings=warnings,
                 ),
                 product_context=effective_product_context,
@@ -297,6 +298,7 @@ class SilentReupPipeline:
             ),
             visual_tag_report=visual_tag_report,
             product_detection=product_detection,
+            ocr_debug_json_path=self.last_ocr_debug_json_path,
             warnings=_dedupe(warnings),
         )
         self.recent_caption_texts.extend(caption.text for caption in captions)
@@ -778,6 +780,7 @@ class SilentReupPipeline:
             captions=[],
             generate_voiceover=False,
             recommended_audio_mode=str(context.get("recommended_audio_mode") or "original_audio_plus_bgm"),
+            ocr_debug_json_path=context.get("ocr_debug_json_path"),
             warnings=[],
         )
 

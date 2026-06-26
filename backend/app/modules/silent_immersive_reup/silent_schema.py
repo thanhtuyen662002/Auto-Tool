@@ -177,7 +177,9 @@ class SilentReupPlan(BaseModel):
     visual_tagging: SilentVisualTaggingMetadata = Field(default_factory=SilentVisualTaggingMetadata)
     visual_tag_report: VideoVisualTagReport | None = None
     product_detection: SilentProductDetectionReport | None = None
+    ocr_debug_json_path: str | None = None
     warnings: list[str] = Field(default_factory=list)
+
 
 
 class SilentReupResult(BaseModel):
