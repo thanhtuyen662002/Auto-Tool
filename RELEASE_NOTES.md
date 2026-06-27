@@ -1,5 +1,15 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.1.5
+
+### Highlights
+
+- **Khắc phục triệt để lỗi tải video Douyin bằng CDP Network Interception**:
+  - Tự động bắt URL stream CDN thực tế (`v*.douyinvod.com`) từ trình duyệt Chrome thông qua CDP Performance Logging khi phát video.
+  - Bypass hoàn toàn API chi tiết của Douyin (`/aweme/v1/web/aweme/detail/`) - nơi thường xuyên chặn request thiếu chữ ký số (`_signature` / `X-Bogus`).
+  - Giải quyết lỗi 52/176 video bị báo lỗi "Fresh cookies (not necessarily logged in) are needed".
+  - Đảm bảo an toàn 100% cho tài khoản người dùng: Chỉ đọc log mạng nội bộ của Chrome, không thay đổi session hay cookies.
+
 ## v1.1.4
 
 ### Highlights

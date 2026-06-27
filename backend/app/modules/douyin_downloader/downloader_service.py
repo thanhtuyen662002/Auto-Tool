@@ -33,6 +33,24 @@ DOWNLOAD_HISTORY_LIMIT = 20000
 SCANNED_CHANNEL_HISTORY_LIMIT = 60
 SCANNED_LINKS_PER_CHANNEL_LIMIT = 10000
 DOUYIN_VIDEO_URL_PATTERN = re.compile(r"(?:https?://(?:www\.)?douyin\.com)?/video/(\d+)")
+
+# CDP: các domain CDN video của Douyin/ByteDance mà Chrome request khi phát video
+_DOUYIN_VIDEO_CDN_PATTERN = re.compile(
+    r"https?://[^/]*(?:douyinvod\.com|bytevc1\.com|bytecdn\.cn|bytecdntp\.com"
+    r"|pstatp\.com|douyinpic\.com|snssdk\.com|tiktokcdn\.com|tiktokcdn-us\.com"
+    r"|tiktok-static\.com|musical\.ly)",
+    re.IGNORECASE,
+)
+# MIME types được coi là video stream hợp lệ
+_VIDEO_MIME_TYPES = frozenset({
+    "video/mp4",
+    "video/webm",
+    "video/x-flv",
+    "video/quicktime",
+    "video/x-msvideo",
+    "video/3gpp",
+    "video/mpeg",
+})
 CHANNEL_SCROLL_SCRIPT = """
 const amount = Math.max(1800, Math.floor((window.innerHeight || 900) * 1.9));
 const blockedSelector = [
@@ -374,6 +392,12 @@ class DouyinDownloaderService:
             options.add_argument("--disable-blink-features=AutomationControlled")
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
             options.add_experimental_option("useAutomationExtension", False)
+            # Bật CDP Performance Logging để bắt URL video CDN từ network requests
+            # An toàn: chỉ đọc log nội bộ Chrome, không gửi thêm request hay thay đổi session
+            try:
+                options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+            except Exception:
+                pass
 
             driver_path = self.get_chromedriver_path()
             service = Service(driver_path) if driver_path else Service()
@@ -737,8 +761,12 @@ class DouyinDownloaderService:
                     }
 
         mp4_url = resolved.get("mp4_url")
+        url_source = resolved.get("source", "dom")  # "cdp" | "dom"
         if mp4_url and not str(mp4_url).startswith("blob:"):
             output_path = output_dir / f"{safe_title}.mp4"
+            if job:
+                source_label = "CDP network capture" if url_source == "cdp" else "DOM <video src>"
+                job.log(f"Đã lấy URL video qua {source_label}, bắt đầu tải trực tiếp.")
             self._download_direct(str(mp4_url), output_path, resolved.get("cookies") or [], job)
             try:
                 self._validate_downloaded_video(output_path)
@@ -760,9 +788,11 @@ class DouyinDownloaderService:
                 "title": title,
                 "path": str(output_path),
                 "status": "success",
-                "message": f"Đã tải xong: {output_path.name}",
+                "message": f"Đã tải xong [{url_source.upper()}]: {output_path.name}",
             }
 
+        if job:
+            job.log("Không tìm được URL video từ CDP/DOM, chuyển sang yt-dlp.")
         output_path = self._download_with_ytdlp(link, output_dir, safe_title, resolved.get("cookies") or [])
         self._validate_downloaded_video(output_path)
         return {
@@ -773,20 +803,33 @@ class DouyinDownloaderService:
             "message": f"Đã tải xong: {output_path.name}",
         }
 
+
     def _resolve_video(self, link: str) -> dict[str, Any]:
         with self._browser_lock:
             driver = self._require_browser()
             original_handle = driver.current_window_handle
             cookies: list[dict[str, Any]] = []
             try:
+                # Drain performance logs cũ để không nhầm URL của video trước
+                self._drain_performance_logs(driver)
+
                 driver.execute_script("window.open(arguments[0], '_blank');", link)
                 driver.switch_to.window(driver.window_handles[-1])
                 self._wait_for_body(driver, timeout=20)
-                time.sleep(2)
+
+                # [Phương án 1] CDP: poll performance logs để bắt URL CDN video thực
+                # Chrome gửi request đến douyinvod.com khi phát video — ta chỉ đọc log đó
+                cdp_url = self._wait_and_capture_cdp_video_url(driver, timeout=9)
+
                 title = self._extract_title(driver)
-                mp4_url = self._extract_video_src(driver)
                 cookies = driver.get_cookies()
-                return {"title": title, "mp4_url": mp4_url, "cookies": cookies}
+
+                if cdp_url:
+                    return {"title": title, "mp4_url": cdp_url, "cookies": cookies, "source": "cdp"}
+
+                # [Phương án 2] Fallback: tìm <video src> trong DOM
+                mp4_url = self._extract_video_src(driver)
+                return {"title": title, "mp4_url": mp4_url, "cookies": cookies, "source": "dom"}
             finally:
                 try:
                     if len(driver.window_handles) > 1:
@@ -892,6 +935,125 @@ class DouyinDownloaderService:
             except Exception:
                 continue
         return None
+
+    # ------------------------------------------------------------------ #
+    #  CDP Network Interception helpers                                    #
+    # ------------------------------------------------------------------ #
+
+    def _drain_performance_logs(self, driver: Any) -> None:
+        """Xóa sạch performance log buffer của Chrome để tránh nhầm URL từ tab trước."""
+        try:
+            driver.get_log("performance")
+        except Exception:
+            pass
+
+    def _wait_and_capture_cdp_video_url(self, driver: Any, timeout: int = 9) -> str | None:
+        """
+        Poll CDP performance logs cho đến khi tìm được URL CDN video Douyin hoặc hết timeout.
+
+        An toàn:
+        - Chỉ đọc log nội bộ Chrome (tương đương mở DevTools > Network tab)
+        - Không gửi thêm bất kỳ request nào
+        - Không đọc, thêm hay thay đổi cookie/session
+        """
+        deadline = time.monotonic() + timeout
+        accumulated: list[Any] = []
+
+        while time.monotonic() < deadline:
+            try:
+                new_logs = driver.get_log("performance")
+                if new_logs:
+                    accumulated.extend(new_logs)
+            except Exception:
+                # CDP logging không khả dụng (ChromeDriver cũ hoặc capability chưa set)
+                return None
+
+            url = self._parse_cdp_logs_for_video_url(accumulated)
+            if url:
+                return url
+
+            time.sleep(0.5)
+
+        # Quét lần cuối với toàn bộ logs đã tích luỹ
+        return self._parse_cdp_logs_for_video_url(accumulated)
+
+    def _parse_cdp_logs_for_video_url(self, raw_logs: list[Any]) -> str | None:
+        """
+        Parse các CDP performance log entries để tìm URL CDN video tốt nhất.
+
+        Ưu tiên theo điểm số:
+        - MIME type là video/* → +100
+        - Content-Length lớn (>5MB) → +40
+        - URL chứa .mp4 → +15
+        - URL dài hơn (thường có nhiều param xác thực hơn) → +bonus nhỏ
+        """
+        best_url: str | None = None
+        best_score = -1
+
+        for entry in raw_logs:
+            try:
+                message = json.loads(entry.get("message", "{}"))
+                msg = message.get("message") or {}
+                method = msg.get("method", "")
+                params = msg.get("params") or {}
+
+                url = ""
+                mime_type = ""
+                content_length = 0
+
+                if method == "Network.responseReceived":
+                    response = params.get("response") or {}
+                    url = response.get("url") or ""
+                    mime_type = (response.get("mimeType") or "").lower()
+                    headers = response.get("headers") or {}
+                    for k, v in headers.items():
+                        if str(k).lower() == "content-length":
+                            try:
+                                content_length = int(v)
+                            except Exception:
+                                pass
+                elif method == "Network.requestWillBeSent":
+                    url = ((params.get("request") or {}).get("url")) or ""
+                else:
+                    continue
+
+                if not url or not _DOUYIN_VIDEO_CDN_PATTERN.search(url):
+                    continue
+                if url.startswith("blob:"):
+                    continue
+
+                # Loại bỏ thumbnail/ảnh
+                url_path = url.lower().split("?")[0]
+                if url_path.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg")):
+                    continue
+
+                # Tính điểm ưu tiên
+                score = 0
+                if mime_type in _VIDEO_MIME_TYPES:
+                    score += 100
+                elif "video" in mime_type:
+                    score += 60
+                if content_length > 10_000_000:   # > 10MB: gần chắc là video
+                    score += 50
+                elif content_length > 5_000_000:  # > 5MB
+                    score += 35
+                elif content_length > 1_000_000:  # > 1MB
+                    score += 15
+                if ".mp4" in url_path:
+                    score += 15
+                elif ".webm" in url_path or ".flv" in url_path:
+                    score += 10
+                # URL dài hơn thường chứa nhiều tham số xác thực hơn → ưu tiên nhẹ
+                score += min(10, len(url) // 120)
+
+                if score > best_score:
+                    best_score = score
+                    best_url = url
+            except Exception:
+                continue
+
+        # Chỉ trả về nếu đủ tự tin đây là video stream (score >= 0)
+        return best_url if best_score >= 0 else None
 
     def _write_cookie_file(self, cookies: list[dict[str, Any]]) -> Path:
         cookie_file = self.cookie_dir / "douyin_cookies.txt"
