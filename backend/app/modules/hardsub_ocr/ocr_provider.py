@@ -51,6 +51,8 @@ class PaddleOCRProvider(BaseOCRProvider):
         device_str = "gpu" if use_gpu else "cpu"
         try:
             self.ocr = PaddleOCR(
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
                 use_textline_orientation=True,
                 lang=language or "ch",
                 device=device_str,
@@ -335,7 +337,9 @@ def _average(values: list[float]) -> float:
 
 def _normalize_box(box: Any) -> list[list[float]]:
     points: list[list[float]] = []
-    for point in box or []:
+    if box is None:
+        return points
+    for point in box:
         try:
             points.append([float(point[0]), float(point[1])])
         except Exception:

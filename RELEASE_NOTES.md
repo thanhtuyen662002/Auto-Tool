@@ -1,5 +1,13 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.5
+
+### Highlights
+
+- **Sửa lỗi không nhận dạng được chữ và crash trong quá trình chạy OCR (Hotfix)**:
+  - **Sửa lỗi ValueError của NumPy**: Sửa lỗi `ValueError: The truth value of an array with more than one element is ambiguous` xảy ra trong quá trình chuẩn hóa tọa độ bounding box do PaddleOCR v3 trả về dạng NumPy array. Điều này khiến cả luồng OCR bị crash ngầm và trả về kết quả rỗng.
+  - **Tắt các tác vụ xử lý văn bản tài liệu chuyên sâu**: Tắt các chức năng `use_doc_orientation_classify` và `use_doc_unwarping` của PaddleOCR. Điều này giúp ngăn chặn việc làm biến dạng (distortion) khung hình video (nhằm unwarp giấy tờ), khôi phục hoàn toàn khả năng phát hiện chữ chính xác của mô hình và tăng tốc độ xử lý CPU.
+
 ## v1.3.4
 
 ### Highlights
