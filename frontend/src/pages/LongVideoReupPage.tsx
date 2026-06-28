@@ -603,7 +603,7 @@ export default function LongVideoReupPage() {
                 <p className="text-[10px] text-slate-500 mt-1">Hãy chọn thư mục nguồn rồi bấm "Quét thư mục" để hiển thị danh sách video.</p>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto max-h-[360px] space-y-2 pr-1 custom-scrollbar">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                 {videos.map((item, idx) => {
                   const isVeryLong = item.duration > 1800; // >30m
                   const isLong = item.duration > 900; // >15m

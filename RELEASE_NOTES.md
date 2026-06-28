@@ -1,5 +1,12 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.9
+
+### Highlights
+
+- **Tối ưu hóa bố cục Danh sách quét video phim (Hotfix)**:
+  - **Tự động giãn rộng theo chiều dọc**: Loại bỏ thuộc tính `max-h-[360px]` và bổ sung `min-h-0` trên container danh sách quét ở trang "Xử lý video dài & Phim" ([LongVideoReupPage.tsx](file:///D:/Projects/Auto-Tool/frontend/src/pages/LongVideoReupPage.tsx)). Giúp tận dụng toàn bộ khoảng trống còn dư phía dưới của cột bên phải, lấp đầy thẻ một cách cân đối thay vì bị bó hẹp chiều cao và tạo khoảng trống thừa lớn.
+
 ## v1.3.8
 
 ### Highlights
