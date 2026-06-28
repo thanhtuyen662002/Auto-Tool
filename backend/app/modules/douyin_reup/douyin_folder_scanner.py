@@ -40,6 +40,11 @@ class DouyinFolderScanner:
                 warnings: list[str] = []
                 if media.duration < 3:
                     warnings.append("Video ngắn hơn 3 giây, vẫn được giữ nhưng có thể không phù hợp để reup.")
+                elif media.duration > 1800:
+                    warnings.append("Cảnh báo: Video dài hơn 30 phút. Quá trình quét OCR, dịch thuật và render trên CPU cực kỳ nặng, dễ gây lỗi timeout hoặc đơ máy.")
+                elif media.duration > 900:
+                    warnings.append("Lưu ý: Video dài hơn 15 phút. Tiến trình xử lý trên CPU có thể tốn rất nhiều thời gian.")
+                
                 sidecar = find_sidecar_srt(path)
                 videos.append(
                     DouyinVideoItem(

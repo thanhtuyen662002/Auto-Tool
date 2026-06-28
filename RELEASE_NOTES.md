@@ -1,5 +1,15 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.1.9
+
+### Highlights
+
+- **Bổ sung cảnh báo thời lượng video dài trong bước quét thư mục** (`douyin_folder_scanner.py`):
+  - Tự động kiểm tra thời lượng video gốc khi quét nguồn.
+  - Thêm cảnh báo trực quan nếu video dài trên 15 phút: `"Lưu ý: Video dài hơn 15 phút. Tiến trình xử lý trên CPU có thể tốn rất nhiều thời gian."`
+  - Thêm cảnh báo nghiêm trọng nếu video dài trên 30 phút: `"Cảnh báo: Video dài hơn 30 phút. Quá trình quét OCR, dịch thuật và render trên CPU cực kỳ nặng, dễ gây lỗi timeout hoặc đơ máy."`
+  - Hiển thị trực tiếp cảnh báo này trong trường `warnings` của video item trên UI trước khi người dùng tạo job xử lý.
+
 ## v1.1.8
 
 ### Highlights
