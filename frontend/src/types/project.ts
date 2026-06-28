@@ -238,6 +238,13 @@ export interface DouyinReupSettings {
   auto_route_speech_to_voice_reup: boolean;
   auto_route_no_speech_to_silent_reup: boolean;
   auto_route_speech_threshold: number;
+
+  // Cấu hình video dài / phim
+  long_video_mode?: 'viet_sub' | 'dubbing';
+  isolate_ambient_sound?: boolean;
+  multi_speaker_enabled?: boolean;
+  speaker_voice_mapping?: Record<string, string>;
+
   use_visual_segments_for_silent_video: boolean;
   silent_segment_duration_min: number;
   silent_segment_duration_max: number;

@@ -806,6 +806,7 @@ class DouyinRenderPipeline:
             video_slowdown_factor=slowdown,
             reduce_original_voice=settings.reduce_original_voice,
             original_voice_reduction_strength=settings.original_voice_reduction_strength,
+            isolate_ambient_sound=getattr(settings, "isolate_ambient_sound", False),
         )
 
         filter_complex = ";".join(part for part in [*video_filters, audio_filter] if part)
@@ -847,13 +848,15 @@ class DouyinRenderPipeline:
         video_slowdown_factor: float = 1.0,
         reduce_original_voice: bool = False,
         original_voice_reduction_strength: float = 0.65,
+        isolate_ambient_sound: bool = False,
     ) -> tuple[str, str | None]:
         filters: list[str] = []
         labels: list[str] = []
         if has_original_audio:
             original_parts: list[str] = []
-            if reduce_original_voice:
-                strength = max(0.0, min(1.0, float(original_voice_reduction_strength)))
+            if reduce_original_voice or isolate_ambient_sound:
+                st = float(original_voice_reduction_strength) if reduce_original_voice else 0.88
+                strength = max(0.0, min(1.0, st))
                 original_parts.extend(
                     [
                         "aformat=channel_layouts=stereo",

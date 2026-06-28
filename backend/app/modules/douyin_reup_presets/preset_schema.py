@@ -17,6 +17,9 @@ class DouyinReupPresetMode(str, Enum):
     silent_chill_immersive = "silent_chill_immersive"
     silent_product_voiceover = "silent_product_voiceover"
     silent_sales_recut = "silent_sales_recut"
+    long_movie_sub_only = "long_movie_sub_only"
+    long_movie_dubbing = "long_movie_dubbing"
+
 
 
 class DouyinReupPreset(BaseModel):

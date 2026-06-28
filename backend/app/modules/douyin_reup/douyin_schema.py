@@ -159,6 +159,13 @@ class DouyinReupSettings(BaseModel):
     locked_industry: str | None = None
     locked_product_keywords: list[str] = Field(default_factory=list)
 
+    # Cấu hình độc lập cho video dài / phim
+    long_video_mode: Literal["viet_sub", "dubbing"] = "viet_sub"
+    isolate_ambient_sound: bool = True
+    multi_speaker_enabled: bool = False
+    speaker_voice_mapping: dict[str, str] = Field(default_factory=dict)
+
+
     @field_validator(
         "source_language",
         "target_language",

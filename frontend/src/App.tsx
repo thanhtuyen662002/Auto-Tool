@@ -20,6 +20,7 @@ const ResultPage = lazy(() => import('./pages/ResultPage'));
 const ResultsPage = lazy(() => import('./pages/ResultsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const SilentModePage = lazy(() => import('./pages/SilentModePage'));
+const LongVideoReupPage = lazy(() => import('./pages/LongVideoReupPage'));
 const SourceMediaManagerPage = lazy(() => import('./pages/SourceMediaManagerPage'));
 const SubtitleReviewPage = lazy(() => import('./pages/SubtitleReviewPage'));
 const FleetPage = lazy(() => import('./pages/FleetPage'));
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="douyin-download" element={screen(<DouyinDownloadPage />)} />
         <Route path="douyin-reup" element={screen(<DouyinReupPage initialWorkflow="douyin" />)} />
         <Route path="silent-mode" element={screen(<SilentModePage />)} />
+        <Route path="long-video-reup" element={screen(<LongVideoReupPage />)} />
         <Route path="subtitle-review" element={screen(<SubtitleReviewPage />)} />
         <Route path="subtitle-review/:documentId" element={screen(<SubtitleReviewPage />)} />
         <Route path="fleet" element={screen(<FleetPage />)} />

@@ -1,4 +1,4 @@
-import { Captions, Clapperboard, Download, FolderCheck, LayoutDashboard, RotateCcw, Settings, Sparkles, Waves, X, Inbox, FolderPlus, Share2 } from 'lucide-react';
+import { Captions, Clapperboard, Download, FolderCheck, LayoutDashboard, RotateCcw, Settings, Sparkles, Waves, X, Inbox, FolderPlus, Share2, Film } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import GlassBadge from '../glass/GlassBadge';
 
@@ -18,6 +18,7 @@ const studioItems: SidebarItem[] = [
   { to: '/douyin-download', label: 'Tải video Douyin', helper: 'Tải hàng loạt video Douyin', icon: Download },
   { to: '/douyin-reup', label: 'Reup có thoại', helper: 'Xử lý hàng loạt có thoại', icon: Clapperboard },
   { to: '/silent-mode', label: 'Reup không thoại', helper: 'Xử lý hàng loạt không thoại', icon: Waves },
+  { to: '/long-video-reup', label: 'Reup video dài/Phim', helper: 'Thuyết minh & sub Việt cho phim', icon: Film },
   { to: '/projects/new', label: 'Tạo Video Affiliate', helper: 'Tạo video sản phẩm từ link', icon: FolderPlus },
   { to: '/import-inbox', label: 'Nhập hộp thư Shopee', helper: 'Nhập sản phẩm từ inbox', icon: Inbox },
   { to: '/fleet', label: 'Phân phối đa kênh', helper: 'Lập lịch & tự động đăng video', icon: Share2 },

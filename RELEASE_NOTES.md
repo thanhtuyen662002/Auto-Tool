@@ -1,5 +1,15 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.2.0
+
+### Highlights
+
+- **Bổ sung tính năng Xử lý video dài & Phim độc lập** (Vlog, Phim dài):
+  - **Giao diện thuần Việt**: Thêm tab **"Reup video dài/Phim"** vào Sidebar điều hướng, liên kết riêng trang `LongVideoReupPage.tsx` dễ dùng cho người Việt, không rành công nghệ.
+  - **Cài đặt độc lập**: Cho phép cấu hình Việt Sub hoặc Thuyết minh lồng tiếng, tùy chỉnh âm lượng gốc của phim, bật/tắt nhạc nền (BGM) riêng để tránh chồng chéo lên cấu hình video ngắn.
+  - **Bộ lọc tách thoại gốc (Vocal Removal)**: Sử dụng thuật toán đảo pha của FFmpeg trên CPU (hoặc tự động chuyển qua GPU Nvidia CUDA nếu phát hiện có card đồ họa) để triệt tiêu lời thoại của nhân vật gốc, giữ nguyên vẹn âm thanh và tiếng động môi trường.
+  - **Phân vai giọng đọc thuyết minh (Multi-speaker)**: Cho phép chọn và lưu trữ giọng đọc riêng cho Người dẫn chuyện, Nhân vật Nam và Nhân vật Nữ (chuẩn bị cho lồng tiếng đa vai).
+
 ## v1.1.9
 
 ### Highlights
