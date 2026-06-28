@@ -37,6 +37,9 @@ export default function LongVideoReupPage() {
   const [narratorVoice, setNarratorVoice] = useState('vi-VN-HoaiMyNeural');
   const [maleVoice, setMaleVoice] = useState('vi-VN-NamMinhNeural');
   const [femaleVoice, setFemaleVoice] = useState('vi-VN-HoaiMyNeural');
+  
+  // Tỷ lệ khung hình xuất
+  const [dimensionMode, setDimensionMode] = useState<'vertical' | 'horizontal' | 'square' | 'auto'>('auto');
 
   // Lấy cấu hình gần nhất
   useEffect(() => {
@@ -92,6 +95,7 @@ export default function LongVideoReupPage() {
         original_audio_volume: originalVolume,
         add_bgm: addBgm,
         bgm_volume: bgmVolume,
+        video_dimension_mode: dimensionMode,
         
         // Tách vocal / giữ ambient
         reduce_original_voice: isolateAmbientSound,
@@ -233,6 +237,30 @@ export default function LongVideoReupPage() {
                       Tự động chuyển câu dịch sang giọng đọc AI tiếng Việt, đè khớp lên dòng thời gian phim.
                     </span>
                   </button>
+                </div>
+              </div>
+
+              {/* Lựa chọn khung hình */}
+              <div className="mt-4 sm:mt-0">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Khung hình xuất video
+                </label>
+                <div className="grid gap-2">
+                  <div>
+                    <select
+                      value={dimensionMode}
+                      onChange={(e) => setDimensionMode(e.target.value as any)}
+                      className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2.5 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
+                    >
+                      <option value="auto">Tự động (Giữ nguyên kích thước phim gốc)</option>
+                      <option value="vertical">Dọc (9:16 - Thêm viền mờ boxblur cho video ngang)</option>
+                      <option value="horizontal">Ngang (16:9 - Chuẩn định dạng phim/máy tính)</option>
+                      <option value="square">Vuông (1:1)</option>
+                    </select>
+                    <span className="mt-1.5 block text-[10px] text-slate-400">
+                      Mặc định: <strong>Giữ nguyên gốc</strong>. Nếu chọn Dọc, hệ thống tự động chèn blurred background (viền mờ) để khớp màn hình dọc điện thoại mà không cắt mất hình phim.
+                    </span>
+                  </div>
                 </div>
               </div>
 

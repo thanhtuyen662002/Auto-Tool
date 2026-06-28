@@ -1,5 +1,16 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.2.1
+
+### Highlights
+
+- **Bổ sung Tùy chọn Tỷ lệ Khung hình cho Video dài & Phim** (`LongVideoReupPage.tsx`):
+  - Thêm hộp lựa chọn định dạng khung hình xuất trực quan:
+    - **Tự động (Giữ nguyên kích thước phim gốc)**: Mặc định, giúp giữ nguyên độ phân giải gốc 16:9 hoặc 2.35:1 mà không bóp méo hình.
+    - **Dọc (9:16)**: Tự động chèn blurred background (viền mờ) xung quanh video ngang cũ để biến thành video dọc, cực kỳ tiện lợi để đăng nhanh lên TikTok/Reels.
+    - **Ngang (16:9)**: Ép về kích thước chuẩn màn hình rộng.
+    - **Vuông (1:1)**.
+
 ## v1.2.0
 
 ### Highlights
