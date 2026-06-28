@@ -1,5 +1,15 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.2
+
+### Highlights
+
+- **Sửa lỗi OCR đẩy iGPU lên 99% (Hotfix)**:
+  - **Nguyên nhân**: `PaddleOCR` khi khởi tạo không truyền tham số `use_gpu`, dẫn đến PaddlePaddle tự động phát hiện và sử dụng card đồ họa tích hợp **Intel Iris Xe (iGPU)** qua DirectML để chạy model nhận dạng chữ. Điều này khiến iGPU bị đẩy lên **99% liên tục** trong suốt quá trình xử lý video.
+  - **Cách khắc phục**: Cả `PaddleOCR` và `EasyOCR` giờ đây tự động kiểm tra sự hiện diện của card đồ họa rời **NVIDIA CUDA** thông qua `torch.cuda.is_available()` trước khi khởi tạo:
+    - ✅ **Máy có card NVIDIA CUDA**: Tự động bật tăng tốc GPU trên card rời.
+    - ✅ **Máy không có NVIDIA CUDA** (chỉ có iGPU Intel/AMD hoặc không có card rời): Ép chạy 100% bằng CPU, giải phóng hoàn toàn iGPU, máy không còn bị giật lag hay nóng máy.
+
 ## v1.3.1
 
 ### Highlights

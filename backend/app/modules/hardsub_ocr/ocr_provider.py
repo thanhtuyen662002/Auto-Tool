@@ -33,7 +33,17 @@ class PaddleOCRProvider(BaseOCRProvider):
             from paddleocr import PaddleOCR
         except ImportError as exc:
             raise RuntimeError("Không tìm thấy PaddleOCR. Hãy cài paddleocr hoặc đổi OCR provider.") from exc
-        self.ocr = PaddleOCR(use_angle_cls=True, lang=language or "ch", show_log=False)
+        
+        # Tự động phát hiện card đồ họa rời NVIDIA CUDA
+        use_gpu = False
+        try:
+            import torch
+            if torch.cuda.is_available():
+                use_gpu = True
+        except Exception:
+            pass
+
+        self.ocr = PaddleOCR(use_angle_cls=True, lang=language or "ch", show_log=False, use_gpu=use_gpu)
 
     def recognize(self, image_path: str, region: OCRRegion) -> OCRFrameResult:
         crop_path = crop_region(image_path, region)
@@ -73,10 +83,20 @@ class EasyOCRProvider(BaseOCRProvider):
         except ImportError as exc:
             raise RuntimeError("Không tìm thấy EasyOCR. Hãy cài easyocr hoặc đổi OCR provider.") from exc
         lang = "ch_sim" if language in {"ch", "zh", "zh-cn"} else language
+        
+        # Tự động phát hiện card đồ họa rời NVIDIA CUDA
+        use_gpu = False
+        try:
+            import torch
+            if torch.cuda.is_available():
+                use_gpu = True
+        except Exception:
+            pass
+
         with self._cache_lock:
             cached = self._reader_cache.get(lang)
             if cached is None:
-                cached = (easyocr.Reader([lang], gpu=False), threading.Lock())
+                cached = (easyocr.Reader([lang], gpu=use_gpu), threading.Lock())
                 self._reader_cache[lang] = cached
         self.reader, self._reader_lock = cached
 
