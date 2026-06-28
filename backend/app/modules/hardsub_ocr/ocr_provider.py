@@ -34,6 +34,10 @@ class PaddleOCRProvider(BaseOCRProvider):
         except ImportError as exc:
             raise RuntimeError("Không tìm thấy PaddleOCR. Hãy cài paddleocr hoặc đổi OCR provider.") from exc
         
+        # Tắt kiểm tra kết nối online đến host model Trung Quốc để tránh bị đơ/treo lúc khởi động
+        import os
+        os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+
         # Tự động phát hiện card đồ họa rời NVIDIA CUDA
         use_gpu = False
         try:
@@ -43,13 +47,44 @@ class PaddleOCRProvider(BaseOCRProvider):
         except Exception:
             pass
 
-        self.ocr = PaddleOCR(use_angle_cls=True, lang=language or "ch", show_log=False, use_gpu=use_gpu)
+        # Khởi tạo tương thích với cả PaddleOCR cũ (v2.x) và mới (v3.x / paddlex)
+        device_str = "gpu" if use_gpu else "cpu"
+        try:
+            self.ocr = PaddleOCR(
+                use_textline_orientation=True,
+                lang=language or "ch",
+                device=device_str,
+                enable_mkldnn=False  # Tránh lỗi oneDNN instruction crash trên Windows
+            )
+        except Exception:
+            try:
+                self.ocr = PaddleOCR(
+                    use_angle_cls=True,
+                    lang=language or "ch",
+                    show_log=False,
+                    use_gpu=use_gpu
+                )
+            except Exception as exc:
+                try:
+                    self.ocr = PaddleOCR(lang=language or "ch")
+                except Exception as final_exc:
+                    raise RuntimeError(f"Không thể khởi tạo PaddleOCR: {final_exc}") from final_exc
 
     def recognize(self, image_path: str, region: OCRRegion) -> OCRFrameResult:
         crop_path = crop_region(image_path, region)
         warnings: list[str] = []
         try:
-            raw = self.ocr.ocr(str(crop_path), cls=True)
+            try:
+                raw = self.ocr.ocr(str(crop_path), cls=True)
+            except Exception:
+                try:
+                    if hasattr(self.ocr, "predict"):
+                        raw = self.ocr.predict(str(crop_path))
+                    else:
+                        raw = self.ocr.ocr(str(crop_path))
+                except Exception as inner_exc:
+                    raise inner_exc
+
             blocks = _parse_paddle_blocks(raw)
             text = " ".join(block["text"] for block in blocks if block.get("text")).strip()
             confidence = _average([float(block.get("confidence", 0.0)) for block in blocks])
@@ -67,6 +102,49 @@ class PaddleOCRProvider(BaseOCRProvider):
             raw_blocks=blocks,
             warnings=warnings,
         )
+
+    def recognize_batch(self, image_paths: list[str], region: OCRRegion) -> list[OCRFrameResult]:
+        if not image_paths:
+            return []
+        
+        crop_paths = [crop_region(image_path, region) for image_path in image_paths]
+        warnings: list[str] = []
+        try:
+            if hasattr(self.ocr, "predict"):
+                raw_batch = self.ocr.predict([str(p) for p in crop_paths])
+            else:
+                try:
+                    raw_batch = [self.ocr.ocr(str(p), cls=True) for p in crop_paths]
+                except Exception:
+                    raw_batch = [self.ocr.ocr(str(p)) for p in crop_paths]
+        except Exception as exc:
+            # Fallback chạy tuần tự nếu batch lỗi
+            return [self.recognize(image_path, region) for image_path in image_paths]
+
+        results: list[OCRFrameResult] = []
+        for image_path, raw in zip(image_paths, raw_batch):
+            try:
+                blocks = _parse_paddle_blocks(raw)
+                text = " ".join(block["text"] for block in blocks if block.get("text")).strip()
+                confidence = _average([float(block.get("confidence", 0.0)) for block in blocks])
+            except Exception as exc:
+                blocks = []
+                text = ""
+                confidence = 0.0
+                warnings.append(f"OCR frame lỗi: {exc}")
+            
+            results.append(
+                OCRFrameResult(
+                    timestamp_ms=_timestamp_from_frame_name(image_path),
+                    frame_path=image_path,
+                    region=region,
+                    text=text,
+                    confidence=confidence,
+                    raw_blocks=blocks,
+                    warnings=list(warnings),
+                )
+            )
+        return results
 
 
 class EasyOCRProvider(BaseOCRProvider):
@@ -209,6 +287,24 @@ def _parse_paddle_blocks(raw: Any) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = []
     if not raw:
         return blocks
+
+    # Tương thích với PaddleOCR phiên bản mới (v3.x / paddlex) trả về list của OCRResult hoặc chính OCRResult
+    first_item = raw[0] if isinstance(raw, list) and len(raw) > 0 else raw
+    if first_item is not None and (hasattr(first_item, "rec_texts") or (isinstance(first_item, dict) and "rec_texts" in first_item)):
+        rec_polys = first_item.get("rec_polys", [])
+        rec_texts = first_item.get("rec_texts", [])
+        rec_scores = first_item.get("rec_scores", [])
+        for box, text, score in zip(rec_polys, rec_texts, rec_scores):
+            if isinstance(text, tuple):
+                text = text[0]
+            blocks.append({
+                "box": _normalize_box(box),
+                "text": str(text),
+                "confidence": float(score)
+            })
+        return blocks
+
+    # Tương thích với PaddleOCR phiên bản cũ (v2.x)
     candidates = raw[0] if len(raw) == 1 and isinstance(raw[0], list) else raw
     for item in candidates or []:
         try:

@@ -1,5 +1,15 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.3
+
+### Highlights
+
+- **Sửa triệt để lỗi treo/đơ và tăng tốc độ xử lý PaddleOCR (Hotfix)**:
+  - **Sửa lỗi oneDNN instruction crash trên Windows CPU**: Vô hiệu hóa tính năng MKLDNN (`enable_mkldnn=False`) khi chạy trên CPU nhằm tránh lỗi không tương thích tập lệnh deep learning trên Windows.
+  - **Tương thích toàn diện cấu trúc kết quả mới (v3.x / paddlex)**: Sửa đổi parser `_parse_paddle_blocks` để đọc chuẩn định dạng `rec_texts`/`rec_polys` của các phiên bản PaddleOCR mới, khắc phục lỗi không trả về kết quả chữ nào.
+  - **Tốc độ xử lý hàng loạt (Batch Processing)**: Triển khai phương thức `recognize_batch` trong `PaddleOCRProvider` để chạy 4 frame cùng lúc, giúp tăng tốc độ trích xuất phụ đề lên gấp nhiều lần.
+  - **Bỏ qua kiểm tra kết nối online**: Bật cấu hình `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK` tránh việc PaddlePaddle kết nối liên tục ra server nước ngoài kiểm tra cập nhật model gây treo ứng dụng.
+
 ## v1.3.2
 
 ### Highlights
