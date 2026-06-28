@@ -1,5 +1,12 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.8
+
+### Highlights
+
+- **Sửa lỗi crash giao diện khi quét thư mục video phim (Hotfix)**:
+  - **Khắc phục lỗi `x.map is not a function`**: Thay đổi cách gán kết quả quét từ hàm `scanDouyinFolder` trong màn hình "Xử lý video dài & Phim" (`LongVideoReupPage.tsx`). Bản gốc gán toàn bộ đối tượng phản hồi (`response`) làm mảng, dẫn đến lỗi React crash khi gọi `.map()`. Đã sửa thành lấy đúng trường dữ liệu danh sách video (`response.media`).
+
 ## v1.3.7
 
 ### Highlights

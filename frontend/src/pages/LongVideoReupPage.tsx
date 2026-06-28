@@ -70,7 +70,7 @@ export default function LongVideoReupPage() {
     setScanning(true);
     try {
       const response = await scanDouyinFolder(sourceFolder);
-      const items = (response as any).items || response || [];
+      const items = response.media || [];
       setVideos(items);
       emitNotification({ variant: 'success', message: `Đã quét được ${items.length} video trong thư mục` });
     } catch (err: any) {
