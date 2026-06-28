@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import multiprocessing as mp
-import queue
 import traceback
+import tempfile
+import json
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -32,57 +34,76 @@ def run_in_isolated_process(
 
     timeout = max(1.0, float(timeout_seconds))
     ctx = mp.get_context("spawn")
-    result_queue: mp.Queue = ctx.Queue(maxsize=1)
-    process = ctx.Process(
-        target=_isolated_process_entrypoint,
-        args=(worker, args, kwargs or {}, result_queue),
-        daemon=False,
-    )
-    process.start()
-    process.join(timeout)
-
-    if process.is_alive():
-        process.terminate()
-        process.join(5)
-        if process.is_alive() and hasattr(process, "kill"):
-            process.kill()
-            process.join(5)
-        raise IsolatedProcessTimeoutError(
-            f"{stage_name} quá thời gian {timeout:.0f} giây nên đã dừng tiến trình con để batch tiếp tục chạy."
-        )
-
+    
+    # Create a temporary JSON file to safely exchange result data without multiprocessing Queue deadlock
+    fd, temp_file_path = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
+    
     try:
-        status, payload = result_queue.get_nowait()
-    except queue.Empty as exc:
+        process = ctx.Process(
+            target=_isolated_process_entrypoint_file,
+            args=(worker, args, kwargs or {}, temp_file_path),
+            daemon=False,
+        )
+        process.start()
+        process.join(timeout)
+
+        if process.is_alive():
+            process.terminate()
+            process.join(5)
+            if process.is_alive() and hasattr(process, "kill"):
+                process.kill()
+                process.join(5)
+            raise IsolatedProcessTimeoutError(
+                f"{stage_name} quá thời gian {timeout:.0f} giây nên đã dừng tiến trình con để batch tiếp tục chạy."
+            )
+
         exit_code = process.exitcode
-        raise IsolatedProcessError(f"{stage_name} kết thúc nhưng không trả kết quả. Exit code: {exit_code}.") from exc
+        if not os.path.exists(temp_file_path) or os.path.getsize(temp_file_path) == 0:
+            raise IsolatedProcessError(f"{stage_name} kết thúc nhưng không trả kết quả. Exit code: {exit_code}.")
 
-    if status == "ok":
-        return payload
+        with open(temp_file_path, "r", encoding="utf-8") as f:
+            status, payload = json.load(f)
 
-    message = str(payload.get("message") or f"{stage_name} thất bại trong tiến trình con.")
-    detail = str(payload.get("traceback") or "").strip()
-    if detail:
-        message = f"{message}\n{detail}"
-    raise IsolatedProcessError(message)
+        if status == "ok":
+            return payload
+
+        message = str(payload.get("message") or f"{stage_name} thất bại trong tiến trình con.")
+        detail = str(payload.get("traceback") or "").strip()
+        if detail:
+            message = f"{message}\n{detail}"
+        raise IsolatedProcessError(message)
+        
+    finally:
+        try:
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+        except Exception:
+            pass
 
 
-def _isolated_process_entrypoint(
+def _isolated_process_entrypoint_file(
     worker: Callable[..., Any],
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
-    result_queue: mp.Queue,
+    temp_file_path: str,
 ) -> None:
     try:
-        result_queue.put(("ok", worker(*args, **kwargs)))
+        res = worker(*args, **kwargs)
+        with open(temp_file_path, "w", encoding="utf-8") as f:
+            json.dump(("ok", res), f, ensure_ascii=False)
     except BaseException as exc:  # noqa: BLE001 - child must report every failure to parent.
-        result_queue.put(
-            (
-                "error",
-                {
-                    "type": type(exc).__name__,
-                    "message": str(exc),
-                    "traceback": traceback.format_exc(limit=20),
-                },
+        with open(temp_file_path, "w", encoding="utf-8") as f:
+            json.dump(
+                (
+                    "error",
+                    {
+                        "type": type(exc).__name__,
+                        "message": str(exc),
+                        "traceback": traceback.format_exc(limit=20),
+                    },
+                ),
+                f,
+                ensure_ascii=False,
             )
-        )
+

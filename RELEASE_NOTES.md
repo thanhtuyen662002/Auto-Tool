@@ -1,5 +1,13 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.6
+
+### Highlights
+
+- **Sửa lỗi đơ/treo tiến trình ở mức 10% trong Silent Mode và hàng loạt (Hotfix)**:
+  - **Khắc phục lỗi deadlock của multiprocessing.Queue**: Thay đổi cơ chế truyền thông điệp kết quả xử lý từ tiến trình con cô lập (isolated subprocess) về tiến trình cha từ việc sử dụng `multiprocessing.Queue` sang dùng tệp tin JSON tạm thời (`tempfile`).
+  - **Lý do**: Khi dữ liệu kết quả phân tích video (bao gồm nhiều thông tin features, tagging, product candidate, QA reports) vượt quá dung lượng đệm của Pipe hệ điều hành, `multiprocessing.Queue.put()` sẽ bị chặn vĩnh viễn (deadlock) do tiến trình cha đang đợi `Process.join()` trước khi đọc Queue. Việc đổi sang ghi tệp tạm giúp loại bỏ hoàn toàn hiện tượng nghẽn luồng và đơ ở 10%.
+
 ## v1.3.5
 
 ### Highlights
