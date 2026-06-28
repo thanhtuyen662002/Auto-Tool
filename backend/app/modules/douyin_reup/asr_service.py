@@ -363,17 +363,16 @@ def check_asr_support_and_optimize_settings(settings: DouyinReupSettings) -> lis
                 elif _GPU_AVAILABLE is False:
                     gpu_works = False
                 else:
-                    # Tiến hành kiểm tra nhanh trên GPU
-                    _ = WhisperModel("tiny", device="cuda", compute_type="int8")
-                    _GPU_AVAILABLE = True
-                    gpu_works = True
-        except Exception as exc:
-            if _is_asr_hardware_error(exc):
-                _mark_gpu_unavailable()
-                gpu_works = False
-            else:
-                # Không phải lỗi phần cứng CUDA, coi như GPU khả dụng để chạy offline
-                gpu_works = True
+                    # Kiểm tra nhanh không tải model: dùng ctranslate2.get_cuda_device_count()
+                    import ctranslate2
+                    if ctranslate2.get_cuda_device_count() > 0:
+                        _GPU_AVAILABLE = True
+                        gpu_works = True
+                    else:
+                        _GPU_AVAILABLE = False
+                        gpu_works = False
+        except Exception:
+            gpu_works = False
 
         if not gpu_works:
             settings.asr_device = "cpu"
@@ -386,26 +385,10 @@ def check_asr_support_and_optimize_settings(settings: DouyinReupSettings) -> lis
             warnings.append(warning_msg)
             device = "cpu"
 
-    # 3. Kiểm tra xem ASR có chạy được trên CPU không (phòng trường hợp lỗi cài đặt thư viện triệt để)
+    # 3. Với CPU, cùi nhất là dùng ASR CPU luôn khả dụng nếu import được thư viện.
+    # Không cần thiết khởi tạo WhisperModel("tiny") giả lập gây tải online và treo máy.
     if device == "cpu" or settings.asr_device == "cpu":
         settings.asr_subprocess_isolation = False  # Tắt cô lập tiến trình trên CPU để dùng cache model
-        try:
-            _ = WhisperModel("tiny", device="cpu", compute_type="int8")
-        except Exception as exc:
-            exc_str = str(exc).lower()
-            is_network_error = any(
-                k in exc_str for k in ("connection", "timeout", "network", "unreachable", "http", "status code")
-            )
-            if not is_network_error:
-                warning_msg = (
-                    f"ASR lỗi nghiêm trọng không thể chạy trên CPU ({_short_hardware_error(exc)}). "
-                    "Tự động chuyển hoàn toàn sang chế độ OCR."
-                )
-                logger.warning(warning_msg)
-                warnings.append(warning_msg)
-                settings.use_asr_if_no_subtitle = False
-                settings.use_ocr_if_no_subtitle = True
-                settings.use_ocr_if_asr_failed = True
 
     return warnings
 

@@ -1,5 +1,16 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.4
+
+### Highlights
+
+- **Khắc phục lỗi treo/đơ ứng dụng khi bắt đầu chạy Task (Hotfix)**:
+  - **Nguyên nhân**: Khi bắt đầu chạy bất kỳ task reup nào, hàm kiểm tra `check_asr_support_and_optimize_settings` sẽ kiểm tra khả năng chạy của thư viện ASR (Whisper) bằng cách khởi tạo thử model `"tiny"` trên GPU và CPU. Nếu máy chưa có sẵn model `"tiny"` trong cache cục bộ, nó sẽ âm thầm tải model này từ Hugging Face. Việc tải model này qua mạng quốc tế thường bị nhà mạng Việt Nam chặn hoặc bóp băng thông, dẫn đến treo cứng ứng dụng lúc khởi động.
+  - **Cách khắc phục**:
+    1. Kiểm tra hỗ trợ GPU thông qua phương thức siêu tốc và không cần mạng `ctranslate2.get_cuda_device_count() > 0` thay vì load thử model `"tiny"`.
+    2. Loại bỏ hoàn toàn bước khởi tạo test model trên CPU (mặc định CPU luôn khả dụng nếu import được thư viện).
+    3. Giúp ứng dụng khởi động xử lý video ngay lập tức mà không bao giờ bị đơ/treo ở màn hình kiểm tra CUDA nữa.
+
 ## v1.3.3
 
 ### Highlights
