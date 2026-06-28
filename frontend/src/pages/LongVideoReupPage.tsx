@@ -582,8 +582,8 @@ export default function LongVideoReupPage() {
         </div>
 
         {/* Cột 3: Danh sách video & Nút xử lý */}
-        <div className="space-y-6">
-          <GlassCard className="p-6 flex flex-col h-full min-h-[500px]">
+        <div className="min-h-0 lg:h-full flex flex-col">
+          <GlassCard className="p-6 flex flex-col flex-1 min-h-0 min-h-[500px]">
             <h2 className="mb-4 text-base font-semibold text-white flex items-center justify-between">
               <span>Danh sách quét ({videos.length})</span>
               {videos.length > 0 && (

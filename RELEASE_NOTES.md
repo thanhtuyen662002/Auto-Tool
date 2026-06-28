@@ -1,5 +1,12 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.10
+
+### Highlights
+
+- **Khắc phục lỗi khoảng trống dọc bên cột cài đặt (Hotfix)**:
+  - **Giới hạn chiều cao và cố định scroll cho Cột 3**: Thêm cấu hình `min-h-0 lg:h-full flex flex-col` vào cột bên phải và `flex-1 min-h-0` vào `GlassCard` chứa danh sách quét video phim trong [LongVideoReupPage.tsx](file:///D:/Projects/Auto-Tool/frontend/src/pages/LongVideoReupPage.tsx). Điều này giúp chiều cao cột bên phải luôn luôn bằng chiều cao cột cài đặt bên trái, và danh sách video bên trong tự động hiển thị thanh cuộn (scroll) bên trong thẻ chứ không kéo giãn làm trống dọc màn hình bên trái.
+
 ## v1.3.9
 
 ### Highlights
