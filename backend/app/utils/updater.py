@@ -435,13 +435,14 @@ echo.
 echo Dang cho AutoTool tat...
 {wait_block}
 echo.
+echo Cuong buc dong cac tien trinh con cua AutoTool...
+taskkill /F /IM "{exe_name}" /T >nul 2>&1
+timeout /t 1 /nobreak > nul
+echo.
 echo Dang cap nhat AutoTool...
 xcopy /E /Y /I "{copy_from}\\*" "{exe_dir}\\" > nul
 if errorlevel 1 (
-    echo.
-    echo [LOI] Cap nhat that bai! Vui long thu lai thu cong.
-    echo  - Giai nen file ZIP vao thu muc: {exe_dir}
-    pause
+    echo [LOI] Ghi de file that bai. Co the do file dang bi khoa. > "{exe_dir}\\update_error.log"
     exit /b 1
 )
 echo.
@@ -453,6 +454,7 @@ timeout /t 2 /nobreak > nul
 start "" "{exe_dir}\\{exe_name}"
 (goto) 2>nul & del "%~f0"
 """
+
 
 def _updater_wait_block(exe_name: str, current_pid: int | None) -> str:
     if current_pid and current_pid > 0:

@@ -1,5 +1,13 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.7
+
+### Highlights
+
+- **Cải tiến độ tin cậy của tính năng Cập Nhật Tự Động (Hotfix)**:
+  - **Cưỡng bức đóng tiến trình con trước khi cập nhật**: Updater script (`_update.bat`) được bổ sung lệnh `taskkill /F /IM AutoTool.exe /T` để quét sạch toàn bộ tiến trình con chạy ngầm (nếu có) trước khi copy ghi đè file mới.
+  - **Khắc phục lỗi treo tiến trình cập nhật ngầm**: Loại bỏ lệnh `pause` trong script khi gặp lỗi copy đè (do file bị khóa). Thay vào đó, ghi chi tiết lỗi vào tệp `update_error.log` và tự động thoát để tránh treo tiến trình cập nhật ngầm mãi mãi.
+
 ## v1.3.6
 
 ### Highlights
