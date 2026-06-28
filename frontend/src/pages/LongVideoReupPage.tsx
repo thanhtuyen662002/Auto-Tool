@@ -4,7 +4,7 @@ import GlassCard from '../components/glass/GlassCard';
 import GlassButton from '../components/glass/GlassButton';
 import PathInput from '../components/PathInput';
 import SliderInput from '../components/SliderInput';
-import { scanDouyinFolder, startDouyinOneClick } from '../services/startWorkflowApi';
+import { scanDouyinFolder, startDouyinOneClick, getHealth } from '../services/startWorkflowApi';
 import { emitNotification } from '../components/notifications/NotificationProvider';
 import { getAppSettings } from '../api/client';
 import type { DouyinVideoItem, DouyinReupSettings } from '../types/project';
@@ -23,6 +23,9 @@ export default function LongVideoReupPage() {
   const [scanning, setScanning] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [videos, setVideos] = useState<DouyinVideoItem[]>([]);
+  
+  const [gpuAvailable, setGpuAvailable] = useState<boolean | null>(null);
+  const [gpuName, setGpuName] = useState<string | null>(null);
 
   // Cấu hình video dài (độc lập)
   const [mode, setMode] = useState<'viet_sub' | 'dubbing'>('viet_sub');
@@ -52,7 +55,7 @@ export default function LongVideoReupPage() {
   const [splitLabelBgColor, setSplitLabelBgColor] = useState('#000000');
   const [splitLabelBgOpacity, setSplitLabelBgOpacity] = useState(0.5);
 
-  // Lấy cấu hình gần nhất
+  // Lấy cấu hình gần nhất và check GPU
   useEffect(() => {
     getAppSettings()
       .then((settings: any) => {
@@ -60,6 +63,15 @@ export default function LongVideoReupPage() {
         if (settings.last_output_folder) setOutputFolder(settings.last_output_folder);
       })
       .catch(() => {});
+
+    getHealth()
+      .then((health) => {
+        setGpuAvailable(Boolean(health.gpu_available));
+        setGpuName(health.gpu_name || null);
+      })
+      .catch(() => {
+        setGpuAvailable(false);
+      });
   }, []);
 
   const handleScan = async () => {
@@ -173,9 +185,28 @@ export default function LongVideoReupPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-xs text-emerald-200">
-          <Cpu size={14} className="animate-pulse" />
-          <span>Trạng thái: <strong>Sẵn sàng chạy GPU</strong> (Tốc độ tối đa)</span>
+        <div className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs ${
+          gpuAvailable === null
+            ? 'border-white/10 bg-white/5 text-slate-300'
+            : gpuAvailable
+              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+              : 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+        }`}>
+          <Cpu size={14} className={gpuAvailable ? 'animate-pulse' : ''} />
+          <span>
+            Trạng thái:{' '}
+            {gpuAvailable === null ? (
+              <strong>Đang kiểm tra...</strong>
+            ) : gpuAvailable ? (
+              <>
+                Sẵn sàng chạy <strong>GPU</strong> ({gpuName || 'CUDA'})
+              </>
+            ) : (
+              <>
+                Chạy bằng <strong>CPU</strong> (Không phát hiện GPU CUDA)
+              </>
+            )}
+          </span>
         </div>
       </div>
 
@@ -582,8 +613,8 @@ export default function LongVideoReupPage() {
         </div>
 
         {/* Cột 3: Danh sách video & Nút xử lý */}
-        <div className="min-h-0 lg:h-full flex flex-col">
-          <GlassCard className="p-6 flex flex-col flex-1 min-h-0 min-h-[500px]">
+        <div className="lg:h-0 lg:min-h-full flex flex-col min-h-[500px]">
+          <GlassCard className="p-6 flex flex-col flex-1 min-h-0">
             <h2 className="mb-4 text-base font-semibold text-white flex items-center justify-between">
               <span>Danh sách quét ({videos.length})</span>
               {videos.length > 0 && (

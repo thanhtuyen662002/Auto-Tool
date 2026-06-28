@@ -1,5 +1,13 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.12
+
+### Highlights
+
+- **Hỗ trợ phát hiện phần cứng GPU/CPU động (Hotfix)**:
+  - **Phát hiện CUDA GPU từ Backend**: Bổ sung kiểm tra `torch.cuda.is_available()` và trả về thông tin `gpu_available`/`gpu_name` qua API [system_dependencies](file:///D:/Projects/Auto-Tool/backend/app/api.py#L462).
+  - **Hiển thị badge động trên Frontend**: Cập nhật trang [LongVideoReupPage.tsx](file:///D:/Projects/Auto-Tool/frontend/src/pages/LongVideoReupPage.tsx) hiển thị đúng trạng thái máy đang sử dụng CPU (màu vàng) hoặc GPU CUDA (màu xanh lá) thay vì hiển thị dòng chữ GPU cứng như trước.
+
 ## v1.3.11
 
 ### Highlights

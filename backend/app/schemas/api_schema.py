@@ -153,6 +153,8 @@ class SystemDependencyStatusResponse(BaseModel):
     ocr_provider: str | None = None
     ocr_available: bool = False
     ocr_message: str | None = None
+    gpu_available: bool = False
+    gpu_name: str | None = None
     warnings: list[str] = Field(default_factory=list)
 
 

@@ -407,6 +407,8 @@ export interface SystemDependencyStatusResponse {
   ocr_provider?: string | null;
   ocr_available: boolean;
   ocr_message?: string | null;
+  gpu_available?: boolean;
+  gpu_name?: string | null;
   warnings: string[];
 }
 

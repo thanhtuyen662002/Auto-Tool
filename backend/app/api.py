@@ -467,6 +467,16 @@ def create_app() -> FastAPI:
             ocr_provider=os.getenv("AUTO_TOOL_OCR_PROVIDER", DEFAULT_OCR_PROVIDER),
             warmup_ocr_models=False,
         )
+        gpu_available = False
+        gpu_name = None
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_available = True
+                gpu_name = torch.cuda.get_device_name(0)
+        except Exception:
+            pass
+
         return SystemDependencyStatusResponse(
             ffmpeg_path=report.ffmpeg_path,
             ffprobe_path=report.ffprobe_path,
@@ -476,6 +486,8 @@ def create_app() -> FastAPI:
             ocr_provider=report.ocr_provider,
             ocr_available=report.ocr_available,
             ocr_message=report.ocr_message,
+            gpu_available=gpu_available,
+            gpu_name=gpu_name,
             warnings=list(report.warnings),
         )
 
