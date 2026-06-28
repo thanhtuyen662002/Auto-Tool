@@ -41,6 +41,17 @@ export default function LongVideoReupPage() {
   // Tỷ lệ khung hình xuất
   const [dimensionMode, setDimensionMode] = useState<'vertical' | 'horizontal' | 'square' | 'auto'>('auto');
 
+  // Cấu hình chia tập nhỏ video
+  const [splitLongVideo, setSplitLongVideo] = useState(false);
+  const [splitMaxDuration, setSplitMaxDuration] = useState(55);
+  const [splitPartPrefix, setSplitPartPrefix] = useState('Phần');
+  const [splitLabelDurationMode, setSplitLabelDurationMode] = useState<'always' | 'intro_5s'>('always');
+  const [splitLabelPosition, setSplitLabelPosition] = useState<'top_center' | 'bottom_center' | 'top_left' | 'top_right'>('top_center');
+  const [splitLabelFontSize, setSplitLabelFontSize] = useState(48);
+  const [splitLabelFontColor, setSplitLabelFontColor] = useState('#ffffff');
+  const [splitLabelBgColor, setSplitLabelBgColor] = useState('#000000');
+  const [splitLabelBgOpacity, setSplitLabelBgOpacity] = useState(0.5);
+
   // Lấy cấu hình gần nhất
   useEffect(() => {
     getAppSettings()
@@ -112,7 +123,18 @@ export default function LongVideoReupPage() {
           "narrator": narratorVoice,
           "male": maleVoice,
           "female": femaleVoice
-        } : {}
+        } : {},
+
+        // Cấu hình chia nhỏ video
+        split_long_video: splitLongVideo,
+        split_max_duration: splitMaxDuration,
+        split_part_prefix: splitPartPrefix,
+        split_label_duration_mode: splitLabelDurationMode,
+        split_label_position: splitLabelPosition,
+        split_label_font_size: splitLabelFontSize,
+        split_label_font_color: splitLabelFontColor,
+        split_label_bg_color: splitLabelBgColor,
+        split_label_bg_opacity: splitLabelBgOpacity,
       };
 
       // Gọi API bắt đầu xử lý hàng loạt
@@ -418,6 +440,145 @@ export default function LongVideoReupPage() {
               </div>
             </GlassCard>
           )}
+
+          {/* Cấu hình chia nhỏ video dài thành các tập ngắn */}
+          <GlassCard className="p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                <Film size={18} className="text-cyan-300" />
+                3. Chia nhỏ video dài thành các tập ngắn (Shorts/Reels)
+              </h2>
+
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-cyan-200">
+                <input
+                  type="checkbox"
+                  checked={splitLongVideo}
+                  onChange={(e) => setSplitLongVideo(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-white/10 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+                />
+                <span>Kích hoạt tự động chia tập</span>
+              </label>
+            </div>
+
+            {splitLongVideo && (
+              <div className="space-y-6 pt-2 border-t border-white/5">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs text-slate-400">Thời lượng mỗi tập (giây)</label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={300}
+                      value={splitMaxDuration}
+                      onChange={(e) => setSplitMaxDuration(Number(e.target.value))}
+                      className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
+                    />
+                    <span className="mt-1 block text-[10px] text-slate-500">Mốc lý tưởng là 55s</span>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs text-slate-400">Tiền tố số tập (Chữ hiển thị)</label>
+                    <input
+                      type="text"
+                      value={splitPartPrefix}
+                      onChange={(e) => setSplitPartPrefix(e.target.value)}
+                      className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
+                    />
+                    <span className="mt-1 block text-[10px] text-slate-500">Ví dụ: Phần 1, Tập 1...</span>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs text-slate-400">Thời gian hiển thị số tập</label>
+                    <select
+                      value={splitLabelDurationMode}
+                      onChange={(e) => setSplitLabelDurationMode(e.target.value as any)}
+                      className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
+                    >
+                      <option value="always">Hiển thị xuyên suốt video</option>
+                      <option value="intro_5s">Chỉ hiển thị 5 giây đầu</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <h3 className="mb-3 text-xs font-semibold text-slate-300">Tùy biến hiển thị nhãn tập</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="mb-1.5 block text-xs text-slate-400">Vị trí hiển thị trên khung hình</label>
+                        <select
+                          value={splitLabelPosition}
+                          onChange={(e) => setSplitLabelPosition(e.target.value as any)}
+                          className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
+                        >
+                          <option value="top_center">Góc trên cùng - Ở giữa</option>
+                          <option value="bottom_center">Góc dưới cùng - Ở giữa</option>
+                          <option value="top_left">Góc trên cùng - Bên trái</option>
+                          <option value="top_right">Góc trên cùng - Bên phải</option>
+                        </select>
+                      </div>
+
+                      <SliderInput
+                        label="Cỡ chữ nhãn số tập"
+                        min={16}
+                        max={96}
+                        step={2}
+                        value={splitLabelFontSize}
+                        onChange={setSplitLabelFontSize}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="mb-3 text-xs font-semibold text-slate-300">Màu sắc & Hộp nền</h3>
+                    <div className="space-y-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1.5 block text-xs text-slate-400">Màu chữ nhãn</label>
+                          <div className="flex gap-2 items-center">
+                            <input
+                              type="color"
+                              value={splitLabelFontColor}
+                              onChange={(e) => setSplitLabelFontColor(e.target.value)}
+                              className="h-8 w-8 rounded border border-white/10 bg-slate-900"
+                            />
+                            <span className="font-mono text-xs text-slate-300">{splitLabelFontColor}</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-xs text-slate-400">Màu nền hộp</label>
+                          <div className="flex gap-2 items-center">
+                            <input
+                              type="color"
+                              value={splitLabelBgColor}
+                              onChange={(e) => setSplitLabelBgColor(e.target.value)}
+                              className="h-8 w-8 rounded border border-white/10 bg-slate-900"
+                            />
+                            <span className="font-mono text-xs text-slate-300">{splitLabelBgColor}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <SliderInput
+                        label="Độ mờ của hộp nền (%)"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={splitLabelBgOpacity}
+                        onChange={setSplitLabelBgOpacity}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-cyan-400/5 border border-cyan-400/10 p-3.5 text-xs text-cyan-200">
+                  <div className="font-bold mb-1">⚡ Thuật toán cắt thông minh tự động:</div>
+                  Hệ thống sẽ tự động quét file phụ đề sau khi dịch để tìm khoảng lặng kết thúc câu nói gần mốc {splitMaxDuration}s nhất để cắt video. Tránh tuyệt đối việc cắt đứt câu thoại dở dang của nhân vật!
+                </div>
+              </div>
+            )}
+          </GlassCard>
         </div>
 
         {/* Cột 3: Danh sách video & Nút xử lý */}

@@ -670,6 +670,32 @@ class DouyinReupService:
                 render_kwargs["gemini_model_name"] = config.ai.text_model
             render_payload = self.render_pipeline.render_video_with_translated_subtitle(**render_kwargs)
             durations["render_seconds"] = time.perf_counter() - render_started
+
+            # Tự động chia nhỏ video dài thành nhiều tập ngắn nếu bật cấu hình
+            if getattr(settings, "split_long_video", False):
+                split_started = time.perf_counter()
+                try:
+                    from app.modules.douyin_reup.video_splitter import split_and_overlay_parts
+                    split_dir = video_dir / "split_parts"
+                    logger.info(f"Bắt đầu chia nhỏ video thành các tập ngắn: {render_payload['path']}")
+                    parts = split_and_overlay_parts(
+                        video_path=str(render_payload["path"]),
+                        srt_path=fixed_srt or render_payload.get("render_subtitle_srt_file"),
+                        output_dir=str(split_dir),
+                        max_duration=getattr(settings, "split_max_duration", 55.0),
+                        part_prefix=getattr(settings, "split_part_prefix", "Phần"),
+                        label_duration_mode=getattr(settings, "split_label_duration_mode", "always"),
+                        position=getattr(settings, "split_label_position", "top_center"),
+                        font_size=getattr(settings, "split_label_font_size", 48),
+                        font_color=getattr(settings, "split_label_font_color", "#ffffff"),
+                        bg_color=getattr(settings, "split_label_bg_color", "#000000"),
+                        bg_opacity=getattr(settings, "split_label_bg_opacity", 0.5),
+                    )
+                    durations["split_seconds"] = time.perf_counter() - split_started
+                    logger.info(f"Đã hoàn thành chia nhỏ thành {len(parts)} tập ngắn. Thời gian: {durations['split_seconds']:.1f}s")
+                except Exception as split_exc:
+                    warnings.append(f"Không thể chia nhỏ video dài: {split_exc}")
+                    logger.error(f"Lỗi chia nhỏ video: {split_exc}", exc_info=True)
             warnings.extend(render_payload.get("warnings") or [])
             errors.extend(render_payload.get("errors") or [])
             steps["render"] = "ok"

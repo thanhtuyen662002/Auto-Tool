@@ -1,5 +1,15 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.0
+
+### Highlights
+
+- **Bổ sung tính năng Chia nhỏ Video dài thông minh (Shorts/Reels/Tiktok)**:
+  - **Thuật toán tìm điểm cắt thông minh (Subtitle-Aware Splitting)**: Phân tích file phụ đề tiếng Việt (SRT) sau khi render, tự động tìm khoảng lặng giữa các câu thoại gần giới hạn thời lượng nhất để cắt video. Tránh việc cắt cụt ngang lời nói của nhân vật cũ hoặc thuyết minh mới.
+  - **Tự động vẽ nhãn số tập (Part/Episode Label Overlay)**: Vẽ nhãn số tập đè lên video. Người dùng tùy ý cấu hình vị trí, cỡ chữ, màu sắc chữ, màu sắc hộp nền và độ mờ nền của nhãn đè.
+  - **Tự chọn thời lượng hiển thị nhãn tập**: Cho phép hiển thị xuyên suốt video hoặc chỉ hiện 5 giây đầu.
+  - **Tự động lưu**: File sau khi chia nhỏ sẽ được lưu riêng tại thư mục con `split_parts` của video thành phẩm.
+
 ## v1.2.1
 
 ### Highlights

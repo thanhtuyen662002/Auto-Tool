@@ -165,6 +165,18 @@ class DouyinReupSettings(BaseModel):
     multi_speaker_enabled: bool = False
     speaker_voice_mapping: dict[str, str] = Field(default_factory=dict)
 
+    # Cấu hình chia nhỏ video dài
+    split_long_video: bool = False
+    split_max_duration: float = Field(default=55.0, ge=10.0, le=300.0)
+    split_part_prefix: str = "Phần"
+    split_label_duration_mode: Literal["always", "intro_5s"] = "always"
+    split_label_position: Literal["top_center", "bottom_center", "top_left", "top_right"] = "top_center"
+    split_label_font_size: int = Field(default=48, ge=12, le=120)
+    split_label_font_color: str = "#ffffff"
+    split_label_bg_color: str = "#000000"
+    split_label_bg_opacity: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
 
     @field_validator(
         "source_language",

@@ -245,6 +245,18 @@ export interface DouyinReupSettings {
   multi_speaker_enabled?: boolean;
   speaker_voice_mapping?: Record<string, string>;
 
+  // Cấu hình chia nhỏ video dài
+  split_long_video?: boolean;
+  split_max_duration?: number;
+  split_part_prefix?: string;
+  split_label_duration_mode?: 'always' | 'intro_5s';
+  split_label_position?: 'top_center' | 'bottom_center' | 'top_left' | 'top_right';
+  split_label_font_size?: number;
+  split_label_font_color?: string;
+  split_label_bg_color?: string;
+  split_label_bg_opacity?: number;
+
+
   use_visual_segments_for_silent_video: boolean;
   silent_segment_duration_min: number;
   silent_segment_duration_max: number;
