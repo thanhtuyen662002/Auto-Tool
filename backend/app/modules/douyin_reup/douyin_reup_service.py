@@ -49,6 +49,13 @@ from app.utils.process_isolation import run_in_isolated_process
 ProgressCallback = Callable[[dict[str, Any]], None]
 LogCallback = Callable[[str, str], None]
 
+# Hằng số ước lượng thời gian OCR per-frame (EasyOCR trên CPU, conservative)
+_OCR_SECONDS_PER_FRAME_ESTIMATE: int = 12
+# Thời gian base cho các bước không phải OCR (scan + dịch + TTS + render)
+_OCR_ITEM_BASE_SECONDS: int = 600
+# Số frame tối đa ước lượng (khớp với max_frames mặc định của FrameSampler)
+_OCR_MAX_FRAMES_ESTIMATE: int = 240
+
 
 class DouyinReupService:
     def __init__(
@@ -389,7 +396,7 @@ class DouyinReupService:
         retry_steps: set[str],
         step_progress_callback: ProgressCallback | None,
     ) -> DouyinOutputResult:
-        timeout_seconds = int(settings.batch_item_timeout_seconds or 0)
+        timeout_seconds = _compute_item_timeout(video, settings)
         if not (job_id and self._allow_item_process_isolation and timeout_seconds > 0):
             return self._process_one_video(
                 index=index,
@@ -1711,6 +1718,27 @@ def _queue_video_index(video_id: str) -> int:
         return int(video_id.rsplit("_", 1)[-1])
     except (ValueError, IndexError):
         return 1
+
+
+def _compute_item_timeout(video: DouyinVideoItem, settings: DouyinReupSettings) -> int:
+    """Tính timeout linh động theo thời lượng video và fps OCR.
+
+    Công thức:
+        ocr_frames    = min(max_cap, video_duration × ocr_sample_fps)
+        dynamic       = ocr_frames × _OCR_SECONDS_PER_FRAME_ESTIMATE + _OCR_ITEM_BASE_SECONDS
+        timeout       = max(dynamic, batch_item_timeout_seconds)
+
+    Đảm bảo video dài không bị kill sai trong khi vẫn tôn trọng giới hạn cấu hình
+    của user (batch_item_timeout_seconds) làm sàn tối thiểu.
+    """
+    base_timeout = int(settings.batch_item_timeout_seconds or 0)
+    if base_timeout <= 0:
+        return 0  # isolation bị tắt, caller sẽ skip
+    video_duration = max(0.0, float(video.duration or 0))
+    fps = max(0.1, float(settings.ocr_sample_fps or 2.0))
+    ocr_frames = min(_OCR_MAX_FRAMES_ESTIMATE, int(video_duration * fps))
+    dynamic = ocr_frames * _OCR_SECONDS_PER_FRAME_ESTIMATE + _OCR_ITEM_BASE_SECONDS
+    return max(dynamic, base_timeout)
 
 
 def _queue_status_from_douyin_output(output: DouyinOutputResult) -> QueueItemStatus:

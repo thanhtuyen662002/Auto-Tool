@@ -511,7 +511,7 @@ class DouyinRenderPipeline:
             target_duration=target_duration,
             tts_settings=merged_tts_settings,
             allow_script_shortening=False,
-            lock_subtitle_timing=False,
+            lock_subtitle_timing=True,
         )
         if len(voiceover) < len(blocks):
             self.voice_generator.warnings.append(

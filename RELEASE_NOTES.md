@@ -1,6 +1,28 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.1.6
+
+### Highlights
+
+- **Fix: Voice / Subtitle đồng bộ chính xác theo timestamp sub Trung gốc** (`douyin_render_pipeline.py`):
+  - Bật `lock_subtitle_timing=True` trong `_generate_voiceover_from_srt` — voice giờ được đặt đúng vào khung giờ của từng dòng subtitle thay vì dồn liên tiếp vào nửa đầu video.
+  - Trước đây: `_compose_timed_audio_sequence` compress tất cả gaps > 0.28s → voice kết thúc ở giây ~34 trong video 76s → 42s cuối im lặng hoàn toàn.
+  - Sau khi sửa: silence thực sự được fill vào khoảng trống giữa các câu → người xem nghe voice đúng lúc cảnh nấu ăn tương ứng xuất hiện.
+
+- **Fix: Timeout kill video dựa trên thời lượng video + fps OCR thay vì cứng** (`douyin_reup_service.py`):
+  - Thêm hàm `_compute_item_timeout(video, settings)` tính timeout linh động: `min(240, duration × ocr_fps) × 12s + 600s`, lấy `max` với `batch_item_timeout_seconds` làm sàn tối thiểu.
+  - Video 90s / 2fps → timeout tự động là 2760s (thay vì 2400s cứng → bị kill sai trước đây).
+  - Video 120s / 2fps → 3480s; video 5 phút / 5fps → 3480s (capped 240 frames).
+  - Video ngắn ≤ 60s vẫn dùng timeout mặc định 2400s bình thường.
+
+- **Fix: Nền che subtitle (cover) vừa khít text thực tế, không còn che quá dày** (`subtitle_cover_detector.py`):
+  - `pad_y` giờ tỷ lệ theo chiều cao **thực tế của text block** (`text_height × 35%`) thay vì cứng theo frame height (`frame × 2.5% = 32px`).
+  - Sub 1 dòng (50px): nền che giảm từ **114px → 85px** (6.6% thay vì 8.9% frame).
+  - Sub nhỏ (30px): giảm từ **94px → 51px** (4.0% thay vì 7.3%).
+  - Giảm `min_height_ratio` mặc định từ `0.055` → `0.04` để tránh force-expand nền che khi text nhỏ.
+
 ## v1.1.5
+
 
 ### Highlights
 

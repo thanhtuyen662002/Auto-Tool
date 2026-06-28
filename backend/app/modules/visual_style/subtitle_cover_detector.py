@@ -14,6 +14,12 @@ MIN_COVER_WIDTH_RATIO = 0.88
 MIN_SUBTITLE_TEXT_WIDTH_RATIO = 0.18
 MAX_DYNAMIC_VERTICAL_SPAN_RATIO = 0.12
 MIN_MID_SCREEN_SUBTITLE_BOTTOM_RATIO = 0.05
+# pad_y tỷ lệ theo chiều cao THỰC của text block (không phải frame)
+# → sub 1 dòng có pad nhỏ, sub nhiều dòng có pad lớn hơn tương xứng
+_COVER_PAD_Y_TEXT_RATIO = 0.35
+# Giới hạn pad_y tối thiểu/tối đa tính bằng % frame_height
+_COVER_PAD_Y_MIN_RATIO = 0.005   # ≥ 0.5% frame (tránh che sát text)
+_COVER_PAD_Y_MAX_RATIO = 0.018   # ≤ 1.8% frame (tránh nền che quá dày)
 
 
 @dataclass(frozen=True)
@@ -67,7 +73,7 @@ def detect_subtitle_cover_from_ocr_debug(
     fallback_height_ratio: float,
     fallback_bottom_ratio: float,
     padding_ratio: float,
-    min_height_ratio: float = 0.055,
+    min_height_ratio: float = 0.04,
     max_height_ratio: float = 0.16,
     only_if_chinese_detected: bool = True,
 ) -> SubtitleCoverPlacement | None:
@@ -571,7 +577,15 @@ def _padded_rect(
     max_height_ratio: float,
 ) -> tuple[float, float, float, float]:
     safe_padding = max(0.0, min(0.12, float(padding_ratio)))
-    pad_y = max(8.0, min(frame_height * 0.025, frame_height * safe_padding))
+    # pad_y tỷ lệ theo chiều cao THỰC của text block:
+    #   pad_y = text_height × _COVER_PAD_Y_TEXT_RATIO
+    # Clamp vào [frame×0.5%, frame×1.8%] để không quá bé hoặc quá to.
+    text_height = max(1.0, bottom - top)
+    pad_y_by_text = text_height * _COVER_PAD_Y_TEXT_RATIO
+    pad_y = max(
+        frame_height * _COVER_PAD_Y_MIN_RATIO,
+        min(frame_height * _COVER_PAD_Y_MAX_RATIO, pad_y_by_text),
+    )
     pad_x = max(18.0, min(frame_width * 0.08, frame_width * safe_padding * 1.4))
     left = max(0.0, left - pad_x)
     right = min(float(frame_width), right + pad_x)
