@@ -1,5 +1,12 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.11
+
+### Highlights
+
+- **Khắc phục triệt để lỗi bố cục chiều cao hai cột (Hotfix)**:
+  - **Tối ưu CSS Grid Layout**: Sử dụng cấu hình `lg:h-0 lg:min-h-full` trên cột bên phải để nó hoàn toàn ăn theo chiều cao của cột cài đặt bên trái mà không tự động kéo giãn hàng Grid theo chiều dài của danh sách video. Danh sách video bên trong tự động co giãn và hiển thị thanh cuộn mượt mà.
+
 ## v1.3.10
 
 ### Highlights
