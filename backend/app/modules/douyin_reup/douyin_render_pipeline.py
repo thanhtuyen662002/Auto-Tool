@@ -821,7 +821,7 @@ class DouyinRenderPipeline:
                 "-c:v",
                 "libx264",
                 "-preset",
-                "veryfast",
+                "superfast",
                 "-crf",
                 "20",
                 "-pix_fmt",

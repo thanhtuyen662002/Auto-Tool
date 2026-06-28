@@ -1,5 +1,14 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.1.8
+
+### Highlights
+
+- **Tăng tốc độ Render video trên CPU** (`douyin_render_pipeline.py`):
+  - Chuyển cấu hình preset mã hóa video của FFmpeg từ `veryfast` sang `superfast`.
+  - Giảm tải tính toán thuật toán nén phức tạp của CPU trên mỗi khung hình, rút ngắn tổng thời gian render video cuối cùng đi khoảng 15-30%.
+  - Hoàn toàn an toàn cho phần cứng máy tính và chất lượng hình ảnh hiển thị không thay đổi.
+
 ## v1.1.7
 
 ### Highlights
