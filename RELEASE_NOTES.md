@@ -1,5 +1,14 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.1.7
+
+### Highlights
+
+- **Tối ưu tốc độ OCR trên CPU gấp 2 lần** (`frame_sampler.py`):
+  - Giảm độ phân giải của frame ảnh chụp để đưa vào mô hình OCR từ `720p` (`min(720,iw)`) xuống `480p` (`min(480,iw)`).
+  - Giúp giảm tới **55%** số lượng điểm ảnh (pixels) cần xử lý trên mỗi frame, giảm áp lực lên CPU đáng kể mà không ảnh hưởng tới độ chính xác của phụ đề chính.
+  - Cập nhật hằng số ước tính thời gian chạy OCR từ `12s` xuống `7s` per frame (`douyin_reup_service.py`), giúp thời gian timeout tổng của video sát với thực tế chạy thực tế hơn.
+  
 ## v1.1.6
 
 ### Highlights

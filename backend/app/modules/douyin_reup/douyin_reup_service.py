@@ -50,7 +50,7 @@ ProgressCallback = Callable[[dict[str, Any]], None]
 LogCallback = Callable[[str, str], None]
 
 # Hằng số ước lượng thời gian OCR per-frame (EasyOCR trên CPU, conservative)
-_OCR_SECONDS_PER_FRAME_ESTIMATE: int = 12
+_OCR_SECONDS_PER_FRAME_ESTIMATE: int = 7
 # Thời gian base cho các bước không phải OCR (scan + dịch + TTS + render)
 _OCR_ITEM_BASE_SECONDS: int = 600
 # Số frame tối đa ước lượng (khớp với max_frames mặc định của FrameSampler)

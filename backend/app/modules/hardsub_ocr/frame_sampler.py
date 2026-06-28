@@ -25,7 +25,7 @@ class FrameSampler:
                 "-i",
                 str(Path(video_path).expanduser().resolve()),
                 "-vf",
-                f"fps={fps:.6f},scale='min(720,iw)':-2",
+                f"fps={fps:.6f},scale='min(480,iw)':-2",
                 "-frames:v",
                 str(frame_limit),
                 "-q:v",
