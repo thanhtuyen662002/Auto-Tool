@@ -1,5 +1,13 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.1
+
+### Highlights
+
+- **Sửa lỗi Khởi động Ứng dụng (Hotfix)**:
+  - Sửa lỗi cú pháp `SyntaxError: keyword argument repeated` bên trong file `preset_registry.py` do bị trùng lặp khối preset `silent_sales_recut` trong quá trình merge code trước đó.
+  - Sửa lỗi khởi chạy ứng dụng ném ngoại lệ `ModuleNotFoundError: No module named 'app.modules.douyin_reup_presets.preset_registry'` khi đóng gói ứng dụng.
+
 ## v1.3.0
 
 ### Highlights
