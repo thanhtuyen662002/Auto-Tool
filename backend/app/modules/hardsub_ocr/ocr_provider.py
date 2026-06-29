@@ -24,68 +24,80 @@ class BaseOCRProvider:
 
 class PaddleOCRProvider(BaseOCRProvider):
     provider_name = "paddleocr"
+    _cache_lock = threading.Lock()
+    _ocr_cache: dict[str, tuple[Any, threading.Lock]] = {}
 
     def __init__(self, language: str = "ch") -> None:
         report = ensure_ocr_dependency("paddleocr", auto_install=None, warmup_models=False, language=language)
         if not report.available:
             raise RuntimeError(report.message or "Không tìm thấy PaddleOCR. Hãy cài paddleocr hoặc đổi OCR provider.")
-        try:
-            from paddleocr import PaddleOCR
-        except ImportError as exc:
-            raise RuntimeError("Không tìm thấy PaddleOCR. Hãy cài paddleocr hoặc đổi OCR provider.") from exc
-        
-        # Tắt kiểm tra kết nối online đến host model Trung Quốc để tránh bị đơ/treo lúc khởi động
-        import os
-        os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
 
-        # Tự động phát hiện card đồ họa rời NVIDIA CUDA
-        use_gpu = False
-        try:
-            import torch
-            if torch.cuda.is_available():
-                use_gpu = True
-        except Exception:
-            pass
-
-        # Khởi tạo tương thích với cả PaddleOCR cũ (v2.x) và mới (v3.x / paddlex)
-        device_str = "gpu" if use_gpu else "cpu"
-        try:
-            self.ocr = PaddleOCR(
-                use_doc_orientation_classify=False,
-                use_doc_unwarping=False,
-                use_textline_orientation=True,
-                lang=language or "ch",
-                device=device_str,
-                enable_mkldnn=False  # Tránh lỗi oneDNN instruction crash trên Windows
-            )
-        except Exception:
-            try:
-                self.ocr = PaddleOCR(
-                    use_angle_cls=True,
-                    lang=language or "ch",
-                    show_log=False,
-                    use_gpu=use_gpu
-                )
-            except Exception as exc:
+        with self._cache_lock:
+            cached = self._ocr_cache.get(language)
+            if cached is None:
                 try:
-                    self.ocr = PaddleOCR(lang=language or "ch")
-                except Exception as final_exc:
-                    raise RuntimeError(f"Không thể khởi tạo PaddleOCR: {final_exc}") from final_exc
+                    from paddleocr import PaddleOCR
+                except ImportError as exc:
+                    raise RuntimeError("Không tìm thấy PaddleOCR. Hãy cài paddleocr hoặc đổi OCR provider.") from exc
+                
+                # Tắt kiểm tra kết nối online đến host model Trung Quốc để tránh bị đơ/treo lúc khởi động
+                import os
+                os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+
+                # Tự động phát hiện card đồ họa rời NVIDIA CUDA
+                use_gpu = False
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        use_gpu = True
+                except Exception:
+                    pass
+
+                # Khởi tạo tương thích với cả PaddleOCR cũ (v2.x) và mới (v3.x / paddlex)
+                device_str = "gpu" if use_gpu else "cpu"
+                ocr_inst = None
+                try:
+                    ocr_inst = PaddleOCR(
+                        use_doc_orientation_classify=False,
+                        use_doc_unwarping=False,
+                        use_textline_orientation=True,
+                        lang=language or "ch",
+                        device=device_str,
+                        enable_mkldnn=False  # Tránh lỗi oneDNN instruction crash trên Windows
+                    )
+                except Exception:
+                    try:
+                        ocr_inst = PaddleOCR(
+                            use_angle_cls=True,
+                            lang=language or "ch",
+                            show_log=False,
+                            use_gpu=use_gpu
+                        )
+                    except Exception as exc:
+                        try:
+                            ocr_inst = PaddleOCR(lang=language or "ch")
+                        except Exception as final_exc:
+                            raise RuntimeError(f"Không thể khởi tạo PaddleOCR: {final_exc}") from final_exc
+                cached = (ocr_inst, threading.Lock())
+                self._ocr_cache[language] = cached
+
+        self.ocr, self._ocr_lock = cached
 
     def recognize(self, image_path: str, region: OCRRegion) -> OCRFrameResult:
         crop_path = crop_region(image_path, region)
         warnings: list[str] = []
         try:
-            try:
-                raw = self.ocr.ocr(str(crop_path), cls=True)
-            except Exception:
+            with self._ocr_lock:
                 try:
-                    if hasattr(self.ocr, "predict"):
-                        raw = self.ocr.predict(str(crop_path))
-                    else:
-                        raw = self.ocr.ocr(str(crop_path))
-                except Exception as inner_exc:
-                    raise inner_exc
+                    raw = self.ocr.ocr(str(crop_path), cls=True)
+                except Exception:
+                    try:
+                        if hasattr(self.ocr, "predict"):
+                            raw = self.ocr.predict(str(crop_path))
+                        else:
+                            raw = self.ocr.ocr(str(crop_path))
+                    except Exception as inner_exc:
+                        raise inner_exc
 
             blocks = _parse_paddle_blocks(raw)
             text = " ".join(block["text"] for block in blocks if block.get("text")).strip()
@@ -112,13 +124,14 @@ class PaddleOCRProvider(BaseOCRProvider):
         crop_paths = [crop_region(image_path, region) for image_path in image_paths]
         warnings: list[str] = []
         try:
-            if hasattr(self.ocr, "predict"):
-                raw_batch = self.ocr.predict([str(p) for p in crop_paths])
-            else:
-                try:
-                    raw_batch = [self.ocr.ocr(str(p), cls=True) for p in crop_paths]
-                except Exception:
-                    raw_batch = [self.ocr.ocr(str(p)) for p in crop_paths]
+            with self._ocr_lock:
+                if hasattr(self.ocr, "predict"):
+                    raw_batch = self.ocr.predict([str(p) for p in crop_paths])
+                else:
+                    try:
+                        raw_batch = [self.ocr.ocr(str(p), cls=True) for p in crop_paths]
+                    except Exception:
+                        raw_batch = [self.ocr.ocr(str(p)) for p in crop_paths]
         except Exception as exc:
             # Fallback chạy tuần tự nếu batch lỗi
             return [self.recognize(image_path, region) for image_path in image_paths]
@@ -147,6 +160,7 @@ class PaddleOCRProvider(BaseOCRProvider):
                 )
             )
         return results
+
 
 
 class EasyOCRProvider(BaseOCRProvider):

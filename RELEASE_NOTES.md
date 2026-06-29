@@ -1,5 +1,14 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.15
+
+### Highlights
+
+- **Sửa lỗi không che nền chữ Trung do PaddleOCR khởi tạo lại**:
+  - Khắc phục lỗi phát sinh khi khởi tạo PaddleOCR nhiều lần trong cùng một tiến trình (`PDX has already been initialized`).
+  - Lưu bộ nhớ đệm (cache) và khóa luồng (thread lock) cho instance của `PaddleOCRProvider` để tránh lỗi xung đột luồng và crash khi quét hàng loạt video.
+  - Tích hợp cache với tiến trình warmup background lúc khởi động app.
+
 ## v1.3.14
 
 ### Highlights

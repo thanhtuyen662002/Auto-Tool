@@ -434,8 +434,8 @@ def _warmup_ocr_model(provider: str, language: str) -> list[str]:
             lang = "ch_sim" if language in {"ch", "zh", "zh-cn"} else language
             easyocr.Reader([lang], gpu=False, verbose=False)
         elif provider == "paddleocr":
-            paddleocr = importlib.import_module("paddleocr")
-            paddleocr.PaddleOCR(use_angle_cls=True, lang=language or "ch", show_log=False)
+            from app.modules.hardsub_ocr.ocr_provider import build_ocr_provider
+            build_ocr_provider(provider, language)
     except Exception as exc:
         return [f"OCR model warmup failed for {provider}: {exc}"]
     return []
