@@ -409,6 +409,11 @@ export interface SystemDependencyStatusResponse {
   ocr_message?: string | null;
   gpu_available?: boolean;
   gpu_name?: string | null;
+  gpu_names?: string[];
+  gpu_cuda_available?: boolean;
+  gpu_asr_available?: boolean;
+  gpu_detection_method?: string | null;
+  gpu_message?: string | null;
   warnings: string[];
 }
 

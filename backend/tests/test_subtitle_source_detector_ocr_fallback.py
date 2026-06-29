@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem
-from app.modules.douyin_reup.subtitle_source_detector import SubtitleSourceDetector
+from app.modules.douyin_reup.subtitle_source_detector import SubtitleSourceDetector, _compact_worker_error
 from app.modules.hardsub_ocr.hardsub_ocr_schema import HardSubOCRResult, OCRSubtitleLine
 
 
@@ -117,3 +117,12 @@ def test_full_frame_ocr_is_tried_before_asr(tmp_path: Path):
     assert result.source_type == "ocr_hardsub"
     assert result.ocr_detected_line_count == 2
     assert asr.called is False
+
+
+def test_compact_worker_error_keeps_python_runtime_detail():
+    message = _compact_worker_error(
+        RuntimeError("Cai OCR packages that bai: No suitable Python runtime found Pass --list (-0)")
+    )
+
+    assert "Python runtime" in message
+    assert "OCR không nhận diện" not in message

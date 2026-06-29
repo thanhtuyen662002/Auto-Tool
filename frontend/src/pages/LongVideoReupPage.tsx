@@ -26,6 +26,8 @@ export default function LongVideoReupPage() {
   
   const [gpuAvailable, setGpuAvailable] = useState<boolean | null>(null);
   const [gpuName, setGpuName] = useState<string | null>(null);
+  const [gpuAsrAvailable, setGpuAsrAvailable] = useState<boolean | null>(null);
+  const [gpuMessage, setGpuMessage] = useState<string | null>(null);
 
   // Cấu hình video dài (độc lập)
   const [mode, setMode] = useState<'viet_sub' | 'dubbing'>('viet_sub');
@@ -68,9 +70,13 @@ export default function LongVideoReupPage() {
       .then((health) => {
         setGpuAvailable(Boolean(health.gpu_available));
         setGpuName(health.gpu_name || null);
+        setGpuAsrAvailable(Boolean(health.gpu_asr_available));
+        setGpuMessage(health.gpu_message || null);
       })
       .catch(() => {
         setGpuAvailable(false);
+        setGpuAsrAvailable(false);
+        setGpuMessage(null);
       });
   }, []);
 
@@ -185,21 +191,27 @@ export default function LongVideoReupPage() {
           </div>
         </div>
 
-        <div className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs ${
+        <div title={gpuMessage || undefined} className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs ${
           gpuAvailable === null
             ? 'border-white/10 bg-white/5 text-slate-300'
-            : gpuAvailable
+            : gpuAvailable && gpuAsrAvailable
               ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+              : gpuAvailable
+                ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
               : 'border-amber-500/20 bg-amber-500/10 text-amber-200'
         }`}>
-          <Cpu size={14} className={gpuAvailable ? 'animate-pulse' : ''} />
+          <Cpu size={14} className={gpuAvailable && gpuAsrAvailable ? 'animate-pulse' : ''} />
           <span>
             Trạng thái:{' '}
             {gpuAvailable === null ? (
               <strong>Đang kiểm tra...</strong>
-            ) : gpuAvailable ? (
+            ) : gpuAvailable && gpuAsrAvailable ? (
               <>
                 Sẵn sàng chạy <strong>GPU</strong> ({gpuName || 'CUDA'})
+              </>
+            ) : gpuAvailable ? (
+              <>
+                Có GPU <strong>{gpuName || 'NVIDIA'}</strong>, ASR đang dùng CPU vì CUDA chưa sẵn sàng
               </>
             ) : (
               <>

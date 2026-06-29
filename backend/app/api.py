@@ -123,6 +123,7 @@ from app.modules.queue_control import (
     QueueItemPriority,
     QueuePriorityService,
     QueueRetryService,
+    QueueRunStatus,
     QueueSettings,
     QueueStateResponse,
     QueueStateService,
@@ -356,6 +357,7 @@ from app.utils.dependency_manager import (
     ensure_runtime_dependencies,
     start_background_dependency_warmup,
 )
+from app.utils.gpu_detector import detect_gpu_status
 from app.utils.local_dialog import LocalDialogError, browse_local_path
 from app.utils.path_utils import resolve_path
 from app.utils.updater import get_cached_update_info, download_and_prepare_update
@@ -467,15 +469,7 @@ def create_app() -> FastAPI:
             ocr_provider=os.getenv("AUTO_TOOL_OCR_PROVIDER", DEFAULT_OCR_PROVIDER),
             warmup_ocr_models=False,
         )
-        gpu_available = False
-        gpu_name = None
-        try:
-            import torch
-            if torch.cuda.is_available():
-                gpu_available = True
-                gpu_name = torch.cuda.get_device_name(0)
-        except Exception:
-            pass
+        gpu = detect_gpu_status()
 
         return SystemDependencyStatusResponse(
             ffmpeg_path=report.ffmpeg_path,
@@ -486,9 +480,14 @@ def create_app() -> FastAPI:
             ocr_provider=report.ocr_provider,
             ocr_available=report.ocr_available,
             ocr_message=report.ocr_message,
-            gpu_available=gpu_available,
-            gpu_name=gpu_name,
-            warnings=list(report.warnings),
+            gpu_available=gpu.hardware_available,
+            gpu_name=gpu.hardware_name,
+            gpu_names=list(gpu.hardware_names),
+            gpu_cuda_available=gpu.cuda_available,
+            gpu_asr_available=gpu.asr_cuda_available,
+            gpu_detection_method=gpu.detection_method,
+            gpu_message=gpu.message,
+            warnings=[*list(report.warnings), *list(gpu.warnings)],
         )
 
     @app.get("/api/system/update-check", response_model=UpdateCheckResponse)
@@ -751,6 +750,66 @@ def create_app() -> FastAPI:
             job_resume_service.release_resume_lock(job_id)
         return result
 
+    def _queue_resume_manifest_path(job_id: str) -> Path:
+        safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in job_id)[:120] or "job"
+        return app_data_dir() / "data" / "job_recovery" / safe / "resume_manifest.json"
+
+    def _active_resume_job_for_queue(job_id: str) -> dict[str, Any] | None:
+        try:
+            payload = json.loads(_queue_resume_manifest_path(job_id).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        resume_job_id = str(payload.get("resume_job_id") or "").strip()
+        if not resume_job_id:
+            return None
+        resume_job = database.get_job(resume_job_id)
+        if not resume_job:
+            return None
+        status = str(resume_job.get("status") or "")
+        if status not in {"queued", "running", "resuming", "pausing", "cancel_requested"}:
+            return None
+        if status in {"queued", "resuming", "pausing"} and not _job_updated_within_seconds(resume_job, 10 * 60):
+            return None
+        return {
+            "resume_job_id": resume_job_id,
+            "status": status,
+            "current_step": resume_job.get("current_step"),
+            "progress": resume_job.get("progress"),
+        }
+
+    def _job_updated_within_seconds(job: dict[str, Any], seconds: int) -> bool:
+        try:
+            updated_at = datetime.fromisoformat(str(job.get("updated_at") or ""))
+        except ValueError:
+            return False
+        return (datetime.now() - updated_at).total_seconds() <= seconds
+
+    def _queue_has_resume_work(state: Any | None) -> bool:
+        if state is None:
+            return True
+        paused_items = sum(1 for item in getattr(state, "items", []) if getattr(getattr(item, "status", None), "value", None) == "paused")
+        return bool(
+            int(getattr(state, "queued_items", 0) or 0)
+            or paused_items
+            or int(getattr(state, "cancelled_items", 0) or 0)
+            or int(getattr(state, "running_items", 0) or 0)
+        )
+
+    def _should_start_queue_resume_worker(job_before: dict[str, Any], state_before: Any | None, state_after: Any | None) -> bool:
+        state = state_after or state_before
+        if not _queue_has_resume_work(state):
+            return False
+        job_status = str(job_before.get("status") or "")
+        state_status = str(getattr(getattr(state, "status", None), "value", getattr(state, "status", "")) or "")
+        running_items = int(getattr(state, "running_items", 0) or 0)
+        if running_items > 0 and state_status in {"running", "resuming"}:
+            return False
+        if job_status in {"paused", "interrupted", "recoverable", "failed", "completed_with_errors", "resuming"}:
+            return True
+        if state_status in {"paused", "resuming", "failed", "completed_with_warnings"}:
+            return True
+        return state_status not in {"running", "completed", "cancelled"} and int(getattr(state, "queued_items", 0) or 0) > 0
+
     @app.get("/api/queue-control/jobs/{job_id}", response_model=QueueStateResponse)
     def get_queue_control_job(job_id: str) -> QueueStateResponse:
         try:
@@ -770,12 +829,39 @@ def create_app() -> FastAPI:
     @app.post("/api/queue-control/jobs/{job_id}/resume", response_model=QueueActionResult)
     def resume_queue_job(job_id: str) -> QueueActionResult:
         job_before = _get_job_or_404(job_id)
+        state_before = queue_state_service.load_queue_state(job_id)
+        active_resume_job = _active_resume_job_for_queue(job_id)
+        if active_resume_job:
+            return QueueActionResult(
+                success=True,
+                job_id=job_id,
+                action=QueueControlAction.resume,
+                message="Batch đang có phiên chạy tiếp. Tool sẽ không tạo thêm phiên resume trùng.",
+                warnings=["Đã chặn bấm Tiếp tục lặp lại vì resume job vẫn đang hoạt động."],
+                data={"active_resume_job": active_resume_job},
+            )
+        if (
+            state_before
+            and state_before.status == QueueRunStatus.resuming
+            and not state_before.running_items
+            and job_resume_service.locks.is_job_locked(job_id)
+        ):
+            job_resume_service.release_resume_lock(job_id)
         try:
             action = queue_control_service.resume(job_id)
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        if job_before.get("status") in {"paused", "interrupted", "recoverable", "failed", "completed_with_errors"}:
+        state_after = queue_state_service.load_queue_state(job_id)
+        if _should_start_queue_resume_worker(job_before, state_before, state_after):
             resume_result = _start_resume_job_for_queue(job_id, "reconcile_then_continue")
+            if not resume_result.new_job_id:
+                try:
+                    queue_state_service.update_queue_state(
+                        job_id,
+                        lambda current: current.model_copy(update={"status": QueueRunStatus.paused, "pause_requested": True}),
+                    )
+                except LookupError:
+                    pass
             action = action.model_copy(
                 update={
                     "data": {
@@ -4487,7 +4573,7 @@ def _check_config_requirements(
         if credential_path and not Path(credential_path).expanduser().exists():
             issues.append(
                 ConfigRequirementIssue(
-                    severity="error",
+                    severity="warning" if (auth.get("api_key") or auth.get("access_token")) else "error",
                     code="google_tts_credentials_file_missing",
                     field="settings.google_tts_credentials_json_path",
                     message=f"File service account Google TTS không tồn tại: {credential_path}",

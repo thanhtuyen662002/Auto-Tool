@@ -18,6 +18,7 @@ class SubtitleSourceDetector:
     def __init__(self, asr_service: ASRService | None = None, ocr_service: HardSubOCRService | None = None) -> None:
         self.asr_service = asr_service or ASRService()
         self.ocr_service = ocr_service or HardSubOCRService()
+        self.last_probe_ocr_error: str | None = None
 
     def detect_source(
         self,
@@ -297,11 +298,15 @@ class SubtitleSourceDetector:
         target_dir: Path,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> HardSubOCRResult | None:
+        self.last_probe_ocr_error = None
         try:
             result = self._run_ocr(video, settings, target_dir, progress_callback)
-        except Exception:
+        except Exception as exc:
+            self.last_probe_ocr_error = _compact_worker_error(exc)
             return None
         if not result.debug_json_path:
+            messages = _dedupe_messages([*result.errors, *result.warnings])
+            self.last_probe_ocr_error = "; ".join(messages) if messages else None
             return None
         return result
 
@@ -371,6 +376,14 @@ def _compact_worker_error(exc: Exception) -> str:
     for marker in ("Traceback (most recent call last):", "Traceback"):
         if marker in text:
             text = text.split(marker, 1)[0].strip()
+    lowered = text.lower()
+    if "no suitable python runtime" in lowered:
+        return (
+            "Không tìm thấy Python runtime phù hợp để cài PaddleOCR. "
+            "Có thể bản app đang chạy Python khác với Python đã cài trên máy."
+        )
+    if "paddleocr" in lowered or "paddlepaddle" in lowered or "cài ocr packages" in lowered or "pip" in lowered:
+        return text[:700] if len(text) > 700 else text
     if "ASR" in text and "subtitle" in text:
         return "ASR không nhận diện được phụ đề đủ tin cậy từ audio của video."
     if "OCR" in text:

@@ -5,8 +5,11 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
+from app.modules.douyin_reup import asr_service
 from app.modules.douyin_reup.asr_service import ASRService, _asr_audio_limit_seconds, _is_missing_vad_asset_error
+from app.modules.douyin_reup.douyin_schema import DouyinReupSettings
 from app.schemas.media_schema import MediaFile
+from app.utils.gpu_detector import GpuStatus
 
 
 CHINESE_HELLO = "\u4f60\u597d"
@@ -150,3 +153,46 @@ def test_asr_audio_limit_can_be_disabled(monkeypatch):
     monkeypatch.setenv("AUTO_TOOL_ASR_MAX_AUDIO_SECONDS", "0")
 
     assert _asr_audio_limit_seconds("long.mp4") is None
+
+
+def test_asr_warning_distinguishes_gpu_hardware_from_cuda_runtime(monkeypatch):
+    monkeypatch.setattr(asr_service, "_GPU_AVAILABLE", None)
+    monkeypatch.setattr(
+        asr_service,
+        "detect_gpu_status",
+        lambda: GpuStatus(
+            hardware_available=True,
+            hardware_name="NVIDIA GeForce RTX 3060 Ti",
+            hardware_names=("NVIDIA GeForce RTX 3060 Ti",),
+            cuda_available=False,
+            asr_cuda_available=False,
+        ),
+    )
+    settings = DouyinReupSettings(enabled=True, use_asr_if_no_subtitle=True, asr_device="auto")
+
+    warnings = asr_service.check_asr_support_and_optimize_settings(settings)
+
+    assert settings.asr_device == "cpu"
+    assert any("RTX 3060 Ti" in warning for warning in warnings)
+    assert all("Chưa phát hiện GPU" not in warning for warning in warnings)
+
+
+def test_asr_auto_uses_cuda_when_ctranslate2_cuda_is_ready(monkeypatch):
+    monkeypatch.setattr(asr_service, "_GPU_AVAILABLE", None)
+    monkeypatch.setattr(
+        asr_service,
+        "detect_gpu_status",
+        lambda: GpuStatus(
+            hardware_available=True,
+            hardware_name="NVIDIA GeForce RTX 3060 Ti",
+            hardware_names=("NVIDIA GeForce RTX 3060 Ti",),
+            cuda_available=True,
+            asr_cuda_available=True,
+        ),
+    )
+    settings = DouyinReupSettings(enabled=True, use_asr_if_no_subtitle=True, asr_device="auto")
+
+    warnings = asr_service.check_asr_support_and_optimize_settings(settings)
+
+    assert settings.asr_device == "cuda"
+    assert warnings == []

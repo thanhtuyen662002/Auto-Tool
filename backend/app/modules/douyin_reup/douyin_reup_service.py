@@ -10,8 +10,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from app.adapters.ffmpeg_adapter import ffmpeg_timeout
-from app.modules.douyin_reup.douyin_folder_scanner import DouyinFolderScanner
+from app.adapters.ffmpeg_adapter import FFmpegError, ffmpeg_timeout, probe_video
+from app.modules.douyin_reup.douyin_folder_scanner import (
+    SUPPORTED_VIDEO_EXTENSIONS,
+    DouyinFolderScanner,
+    find_sidecar_srt,
+    has_embedded_text_subtitle,
+)
 from app.modules.douyin_reup.douyin_render_pipeline import DouyinRenderPipeline
 from app.modules.douyin_reup.douyin_schema import (
     DouyinOutputResult,
@@ -117,15 +122,46 @@ class DouyinReupService:
         probe = getattr(self.source_detector, "probe_ocr_debug", None)
         if not callable(probe):
             return None
-        try:
-            result = probe(video, probe_settings, probe_dir, progress_callback)
-        except Exception:
-            result = None
+        attempts: list[tuple[str, DouyinReupSettings, Path]] = [(settings.ocr_provider, probe_settings, probe_dir)]
+        normalized_provider = (settings.ocr_provider or "").strip().lower()
+        if normalized_provider in {"paddleocr", "paddle", "paddle_ocr"}:
+            fallback_settings = probe_settings.model_copy(
+                update={
+                    "ocr_provider": "easyocr",
+                    "ocr_sample_fps": min(float(probe_settings.ocr_sample_fps), 0.5),
+                }
+            )
+            attempts.append(("easyocr", fallback_settings, ensure_dir(probe_dir / "easyocr_fallback")))
+
+        result = None
+        probe_errors: list[str] = []
+        used_fallback = False
+        for provider_name, attempt_settings, attempt_dir in attempts:
+            try:
+                result = probe(video, attempt_settings, attempt_dir, progress_callback)
+            except Exception as exc:
+                result = None
+                probe_error = _friendly_error(str(exc))
+            else:
+                probe_error = getattr(self.source_detector, "last_probe_ocr_error", None)
+            if result and result.debug_json_path:
+                used_fallback = provider_name != settings.ocr_provider
+                break
+            if probe_error:
+                probe_errors.append(f"{provider_name}: {probe_error}")
+
+        if used_fallback:
+            warnings.append(
+                "subtitle_cover_probe_fallback: PaddleOCR không sẵn sàng cho bước dò vị trí che; "
+                "đã dùng EasyOCR dự phòng cho video này."
+            )
         if not result or not result.debug_json_path:
             warnings.append(
                 "subtitle_cover_probe_skipped: Không quét được tọa độ phụ đề Trung; "
                 "không vẽ nền che cho video này."
             )
+            if probe_errors:
+                warnings.append(f"subtitle_cover_probe_error: {'; '.join(probe_errors)}")
             return None
         if result.detected_line_count <= 0:
             warnings.append(
@@ -169,6 +205,11 @@ class DouyinReupService:
         scan_seconds = time.perf_counter() - scan_started
         total = len(videos)
         if total == 0:
+            if settings.process_mode == "selected" and settings.selected_video_paths:
+                raise RuntimeError(
+                    "Không còn video nguồn hợp lệ để chạy tiếp batch. "
+                    "Các file trong danh sách resume có thể đã bị xóa, đổi tên hoặc di chuyển sang ổ/thư mục khác."
+                )
             raise RuntimeError(f"Không tìm thấy video hợp lệ trong thư mục Douyin: {config.source_folder}")
 
         outputs: list[DouyinOutputResult] = []
@@ -1273,6 +1314,8 @@ class DouyinReupService:
                 if key in seen:
                     continue
                 video = by_path.get(key)
+                if video is None:
+                    video = _load_selected_video_directly(selected_path)
                 if video is not None:
                     selected_videos.append(video)
                     seen.add(key)
@@ -1683,6 +1726,40 @@ def _recoverable_step_from_failed_step(failed_step: str | None) -> RecoverableSt
     if "subtitle_source" in value or "source" in value:
         return RecoverableStep.subtitle_source
     return RecoverableStep.render
+
+
+def _load_selected_video_directly(selected_path: str) -> DouyinVideoItem | None:
+    path = Path(selected_path).expanduser()
+    try:
+        path = path.resolve()
+    except OSError:
+        return None
+    if not path.is_file() or path.suffix.lower() not in SUPPORTED_VIDEO_EXTENSIONS:
+        return None
+    try:
+        media = probe_video(str(path))
+    except (OSError, FFmpegError, ValueError):
+        return None
+    warnings = ["Video được nạp trực tiếp từ danh sách resume vì không còn nằm trong thư mục nguồn hiện tại."]
+    if media.duration < 3:
+        warnings.append("Video ngắn hơn 3 giây, vẫn được giữ nhưng có thể không phù hợp để reup.")
+    elif media.duration > 1800:
+        warnings.append("Cảnh báo: Video dài hơn 30 phút. Quá trình OCR, dịch và render có thể rất nặng.")
+    elif media.duration > 900:
+        warnings.append("Lưu ý: Video dài hơn 15 phút. Quá trình xử lý trên CPU có thể tốn nhiều thời gian.")
+    sidecar = find_sidecar_srt(path)
+    return DouyinVideoItem(
+        path=media.path,
+        filename=path.name,
+        duration=media.duration,
+        width=media.width,
+        height=media.height,
+        fps=media.fps,
+        has_audio=media.has_audio,
+        sidecar_srt_path=str(sidecar) if sidecar else None,
+        embedded_subtitle_found=has_embedded_text_subtitle(str(path)),
+        warnings=warnings,
+    )
 
 
 def _queue_state_needs_rebuild(queue_state: QueueState, video_paths: list[str]) -> bool:

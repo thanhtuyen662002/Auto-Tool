@@ -155,6 +155,11 @@ class SystemDependencyStatusResponse(BaseModel):
     ocr_message: str | None = None
     gpu_available: bool = False
     gpu_name: str | None = None
+    gpu_names: list[str] = Field(default_factory=list)
+    gpu_cuda_available: bool = False
+    gpu_asr_available: bool = False
+    gpu_detection_method: str | None = None
+    gpu_message: str | None = None
     warnings: list[str] = Field(default_factory=list)
 
 

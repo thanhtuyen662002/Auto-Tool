@@ -9,6 +9,7 @@ from app.adapters.ffmpeg_adapter import probe_video, run_ffmpeg
 from app.modules.douyin_reup.subtitle_quality_gate import segment_is_low_quality
 from app.modules.douyin_reup.subtitle_timing_guard import SubtitleBlock, write_srt_blocks
 from app.utils.file_utils import ensure_dir
+from app.utils.gpu_detector import detect_gpu_status
 from app.utils.logger import get_logger
 
 
@@ -292,6 +293,8 @@ def _resolve_asr_device(requested_device: str) -> str:
     with _GPU_CACHE_LOCK:
         if _GPU_AVAILABLE is False:
             return "cpu"
+        if device == "auto" and _GPU_AVAILABLE is True:
+            return "cuda"
     return device
 
 
@@ -356,6 +359,7 @@ def check_asr_support_and_optimize_settings(settings: DouyinReupSettings) -> lis
 
     if device in {"auto", "cuda"}:
         gpu_works = False
+        gpu_status = detect_gpu_status()
         try:
             with _GPU_CACHE_LOCK:
                 if _GPU_AVAILABLE is True:
@@ -364,8 +368,7 @@ def check_asr_support_and_optimize_settings(settings: DouyinReupSettings) -> lis
                     gpu_works = False
                 else:
                     # Kiểm tra nhanh không tải model: dùng ctranslate2.get_cuda_device_count()
-                    import ctranslate2
-                    if ctranslate2.get_cuda_device_count() > 0:
+                    if gpu_status.asr_cuda_available:
                         _GPU_AVAILABLE = True
                         gpu_works = True
                     else:
@@ -377,13 +380,22 @@ def check_asr_support_and_optimize_settings(settings: DouyinReupSettings) -> lis
         if not gpu_works:
             settings.asr_device = "cpu"
             settings.asr_subprocess_isolation = False  # Tắt cô lập tiến trình trên CPU để dùng cache model
-            warning_msg = (
-                "Phát hiện lỗi GPU/CUDA (thiếu thư viện CUDA runtime hoặc cublas). "
-                "Tự động chuyển cấu hình ASR sang chạy bằng CPU."
-            )
+            if gpu_status.hardware_available:
+                warning_msg = (
+                    f"Đã phát hiện GPU {gpu_status.hardware_name or ''}, nhưng CUDA cho ASR chưa sẵn sàng "
+                    "(thường do thiếu CUDA/cuDNN hoặc ctranslate2 bản GPU). "
+                    "Tạm chuyển ASR sang CPU để batch vẫn chạy tiếp."
+                )
+            else:
+                warning_msg = (
+                    "Chưa phát hiện GPU NVIDIA/CUDA dùng được cho ASR. "
+                    "Tạm chuyển cấu hình ASR sang CPU để batch vẫn chạy tiếp."
+                )
             logger.warning(warning_msg)
             warnings.append(warning_msg)
             device = "cpu"
+        elif device == "auto":
+            settings.asr_device = "cuda"
 
     # 3. Với CPU, cùi nhất là dùng ASR CPU luôn khả dụng nếu import được thư viện.
     # Không cần thiết khởi tạo WhisperModel("tiny") giả lập gây tải online và treo máy.
