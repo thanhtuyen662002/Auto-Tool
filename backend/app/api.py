@@ -3532,7 +3532,16 @@ def _douyin_resume_outputs(resume_plan: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _job_looks_douyin(job: dict[str, Any]) -> bool:
     outputs = (job.get("results") or {}).get("outputs") or []
-    return any(isinstance(output, dict) and output.get("source_video") for output in outputs)
+    if any(isinstance(output, dict) and output.get("source_video") for output in outputs):
+        return True
+    project_id = job.get("project_id")
+    if project_id:
+        project = database.get_project(project_id)
+        if project and project.get("config"):
+            cfg = project["config"]
+            if cfg.get("douyin_reup", {}).get("enabled", False):
+                return True
+    return False
 
 
 def _ensure_job_checkpoint(

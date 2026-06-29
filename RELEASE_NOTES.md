@@ -1,5 +1,13 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.14
+
+### Highlights
+
+- **Sửa lỗi phân loại tác vụ khi Resume**:
+  - **Khắc phục lỗi chạy sai chế độ (Product Render thay vì Douyin Reup)**: Cập nhật hàm kiểm tra `_job_looks_douyin` và `_mode_from_plan_or_job` để tự động kiểm tra cấu hình dự án gốc trong cơ sở dữ liệu làm fallback khi danh sách kết quả (`results_json`) rỗng, đảm bảo resume đúng chế độ Douyin Reup thay vì Product Render.
+  - **Khắc phục lỗi treo hàng đợi/chấm điểm**: Tránh tình trạng treo và kẹt hàng giờ ở bước chấm điểm cảnh (`scoring_segments`) do chọn nhầm chế độ Product Render cho danh sách hàng ngàn video.
+
 ## v1.3.13
 
 ### Highlights

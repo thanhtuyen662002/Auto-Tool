@@ -96,7 +96,19 @@ class JobResumeService:
         warnings = []
         if request.do_not_overwrite_existing_outputs and skipped:
             warnings.append("Các output đã tồn tại sẽ được bỏ qua, không ghi đè.")
-        filtered_resume_items = [item for item in resume_items if item.get("source_video")]
+        is_douyin = False
+        project_id = job.get("project_id")
+        if project_id:
+            project = database.get_project(project_id)
+            if project and project.get("config"):
+                cfg = project["config"]
+                if cfg.get("douyin_reup", {}).get("enabled", False):
+                    is_douyin = True
+                    
+        if is_douyin:
+            filtered_resume_items = [item for item in resume_items if item.get("source_video")]
+        else:
+            filtered_resume_items = resume_items
         return {
             "original_job_id": job_id,
             "project_id": job.get("project_id"),
@@ -255,4 +267,15 @@ def _mode_from_plan_or_job(plan: dict[str, Any], job: dict[str, Any]) -> str:
         return "douyin_reup"
     if any(isinstance(item, dict) and item.get("subtitle_review_document_id") for item in outputs):
         return "subtitle_render"
+    
+    project_id = job.get("project_id")
+    if project_id:
+        project = database.get_project(project_id)
+        if project and project.get("config"):
+            cfg = project["config"]
+            if cfg.get("douyin_reup", {}).get("enabled", False):
+                if cfg.get("enable_silent_immersive_mode", False):
+                    return "silent_immersive"
+                return "douyin_reup"
+                
     return "product_render"

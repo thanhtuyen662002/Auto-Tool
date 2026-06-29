@@ -157,6 +157,17 @@ def _infer_mode(job: dict[str, Any]) -> str:
         return "douyin_reup"
     if any(isinstance(item, dict) and item.get("subtitle_review_document_id") for item in outputs):
         return "subtitle_render"
+    
+    project_id = job.get("project_id")
+    if project_id:
+        project = database.get_project(project_id)
+        if project and project.get("config"):
+            cfg = project["config"]
+            if cfg.get("douyin_reup", {}).get("enabled", False):
+                if cfg.get("enable_silent_immersive_mode", False):
+                    return "silent_immersive"
+                return "douyin_reup"
+                
     return "product_render"
 
 
