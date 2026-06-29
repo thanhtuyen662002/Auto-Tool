@@ -96,6 +96,7 @@ class JobResumeService:
         warnings = []
         if request.do_not_overwrite_existing_outputs and skipped:
             warnings.append("Các output đã tồn tại sẽ được bỏ qua, không ghi đè.")
+        filtered_resume_items = [item for item in resume_items if item.get("source_video")]
         return {
             "original_job_id": job_id,
             "project_id": job.get("project_id"),
@@ -104,10 +105,10 @@ class JobResumeService:
             "do_not_overwrite_existing_outputs": request.do_not_overwrite_existing_outputs,
             "skipped_completed_items": len(skipped),
             "retry_items": len(retry_items),
-            "resumed_items": len(retry_items) + len(resume_items),
+            "resumed_items": len(retry_items) + len(filtered_resume_items),
             "retry_outputs": retry_items,
-            "pending_outputs": resume_items,
-            "selected_source_videos": _source_videos_from_resume_items([*retry_items, *resume_items]),
+            "pending_outputs": filtered_resume_items,
+            "selected_source_videos": _source_videos_from_resume_items([*retry_items, *filtered_resume_items]),
             "warnings": warnings,
             "reconciliation": reconciliation,
         }

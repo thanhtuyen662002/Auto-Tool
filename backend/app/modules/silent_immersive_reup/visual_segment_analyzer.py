@@ -42,9 +42,13 @@ class VisualSegmentAnalyzer:
         except Exception:
             return []
 
-        capture = cv2.VideoCapture(str(video_path))
+        capture = cv2.VideoCapture(str(video_path), cv2.CAP_FFMPEG)
         if not capture.isOpened():
-            return []
+            capture.release()
+            capture = cv2.VideoCapture(str(video_path))
+            if not capture.isOpened():
+                capture.release()
+                return []
         try:
             fps = float(capture.get(cv2.CAP_PROP_FPS) or 0) or 30.0
             frame_count = float(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)

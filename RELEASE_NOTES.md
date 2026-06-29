@@ -1,5 +1,13 @@
 # Auto Tool Douyin Reup v1.0.0-rc1
 
+## v1.3.13
+
+### Highlights
+
+- **Sửa lỗi crash tiến trình chính và lỗi resume**:
+  - **Khắc phục lỗi OpenCV crash trên Windows**: Ép sử dụng backend FFMPEG (`cv2.CAP_FFMPEG`) và tự động giải phóng handle `.release()` khi mở video thất bại, giúp khắc phục triệt để lỗi Access Violation (`0xc0000005`) liên quan đến thư viện driver Intel (`IntelControlLib.dll`).
+  - **Tối ưu hóa khôi phục tác vụ (Resume)**: Tự động loại bỏ các mục chờ rỗng không có video nguồn (`source_video`) trước khi lên kế hoạch resume, giúp tránh việc tạo job mới với đầu rỗng và tiếp tục xử lý mượt mà các video còn lại.
+
 ## v1.3.12
 
 ### Highlights

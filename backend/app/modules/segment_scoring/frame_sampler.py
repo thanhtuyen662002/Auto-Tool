@@ -28,10 +28,14 @@ class FrameSampler:
             logger.warning("OpenCV is not installed; cannot score video frames.")
             return []
 
-        capture = cv2.VideoCapture(video_path)
+        capture = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
         if not capture.isOpened():
-            logger.warning("Could not open video for frame sampling: %s", video_path)
-            return []
+            capture.release()
+            capture = cv2.VideoCapture(video_path)
+            if not capture.isOpened():
+                capture.release()
+                logger.warning("Could not open video for frame sampling: %s", video_path)
+                return []
 
         frames: list["np.ndarray"] = []
         try:
