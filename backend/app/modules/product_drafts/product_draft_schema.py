@@ -142,6 +142,11 @@ class ProjectListItem(BaseModel):
     id: str
     project_name: str
     created_at: str
+    mode: str | None = None
+    product_name: str | None = None
+    source_folder: str | None = None
+    output_folder: str | None = None
+    output_count: int | None = None
 
 
 class ProjectListResponse(BaseModel):

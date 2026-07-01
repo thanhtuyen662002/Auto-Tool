@@ -221,8 +221,12 @@ export function getProject(projectId: string): Promise<ProjectDetail> {
   return request<ProjectDetail>(`/api/projects/${projectId}`);
 }
 
-export function listProjects(limit?: number, offset?: number): Promise<ProjectListResponse> {
-  const query = limit !== undefined && offset !== undefined ? `?limit=${limit}&offset=${offset}` : '';
+export function listProjects(limit?: number, offset?: number, mode?: string): Promise<ProjectListResponse> {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (offset !== undefined) params.set('offset', String(offset));
+  if (mode) params.set('mode', mode);
+  const query = params.toString() ? `?${params.toString()}` : '';
   return request<ProjectListResponse>(`/api/projects${query}`);
 }
 

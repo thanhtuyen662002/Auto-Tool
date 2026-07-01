@@ -248,6 +248,7 @@ class ProjectConfig(BaseModel):
     project_name: str = Field(min_length=1)
     source_folder: str = Field(min_length=1)
     output_folder: str = Field(min_length=1)
+    mode: str = Field(default="product_render", min_length=1)
     product: ProductInfo
     render: RenderSettings
     effects: EffectSettings

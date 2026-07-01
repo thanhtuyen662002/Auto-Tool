@@ -35,9 +35,10 @@ export default function RenderQueuePage() {
   const [error, setError] = useState<string | null>(null);
 
   const projectName = useMemo(() => {
+    if (job?.project_name) return job.project_name;
     if (!projectId) return 'Dự án';
     return loadProjectConfig(projectId)?.project_name ?? 'Dự án';
-  }, [projectId]);
+  }, [job?.project_name, projectId]);
 
   const load = useCallback(async () => {
     if (!jobId) return;
@@ -81,7 +82,10 @@ export default function RenderQueuePage() {
   }, [queue]);
 
   const canViewResults = Boolean(job?.status && DONE_STATUSES.has(job.status));
-  const canAdjustAndContinue = Boolean(jobId && ADJUSTABLE_STATUSES.has(String(queue?.status || job?.status || '')));
+  const adjustAction = useMemo(() => buildAdjustAction(job, projectId, jobId), [job, jobId, projectId]);
+  const canAdjustAndContinue = Boolean(
+    adjustAction && jobId && ADJUSTABLE_STATUSES.has(String(queue?.status || job?.status || '')),
+  );
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
 
   async function runAction(name: string, action: () => Promise<QueueActionResult>) {
@@ -130,9 +134,9 @@ export default function RenderQueuePage() {
           {canAdjustAndContinue ? (
             <Link
               className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
-              to={`/douyin-reup?job_id=${encodeURIComponent(jobId || '')}&resume=1`}
+              to={adjustAction?.to || '#'}
             >
-              Chỉnh cài đặt rồi chạy tiếp
+              {adjustAction?.label || 'Mở cài đặt'}
             </Link>
           ) : null}
           {canViewResults ? (
@@ -255,6 +259,39 @@ function ResourceMetric({ label, value }: { label: string; value: number | strin
       <div className="mt-1 text-lg font-semibold text-ink">{value}</div>
     </div>
   );
+}
+
+function buildAdjustAction(
+  job: JobStatus | null,
+  projectId: string | undefined,
+  jobId: string | undefined,
+): { label: string; to: string } | null {
+  if (!projectId || !jobId) return null;
+  const mode = resolveWorkflowMode(job, projectId);
+  if (mode === 'douyin_reup') {
+    return {
+      label: 'Chỉnh cài đặt Reup rồi chạy tiếp',
+      to: `/douyin-reup?job_id=${encodeURIComponent(jobId)}&resume=1`,
+    };
+  }
+  if (mode === 'silent_reup') {
+    return { label: 'Mở Silent Mode', to: '/silent-mode' };
+  }
+  if (mode === 'subtitle_render') {
+    return { label: 'Mở kết quả sửa phụ đề', to: `/results/${projectId}/${jobId}` };
+  }
+  return { label: 'Mở cài đặt Affiliate', to: `/settings/${projectId}` };
+}
+
+function resolveWorkflowMode(job: JobStatus | null, projectId = ''): string {
+  const mode = (job?.project_mode || '').toLowerCase();
+  const normalizedProjectId = projectId.toLowerCase();
+  const step = (job?.current_step || '').toLowerCase();
+  if (mode) return mode;
+  if (normalizedProjectId.startsWith('douyin_reup_') || step.startsWith('douyin_video_')) return 'douyin_reup';
+  if (normalizedProjectId.startsWith('silent_')) return 'silent_reup';
+  if (normalizedProjectId.startsWith('subtitle_review_') || step.startsWith('subtitle_review_')) return 'subtitle_render';
+  return 'product_render';
 }
 
 function formatLogLevel(level: string): string {

@@ -1861,17 +1861,24 @@ def create_app() -> FastAPI:
         return ProjectCreateResponse(project_id=project_id, status="created")
 
     @app.get("/api/projects", response_model=ProjectListResponse)
-    def list_projects(limit: int = 100, offset: int = 0) -> ProjectListResponse:
+    def list_projects(limit: int = 100, offset: int = 0, mode: str | None = None) -> ProjectListResponse:
         database.init_db()
-        projects = database.list_projects(limit=limit, offset=offset)
-        total = database.count_projects()
+        normalized_mode = (mode or "").strip()
+        if normalized_mode:
+            all_projects = [
+                project
+                for project in database.list_all_projects()
+                if _project_mode_from_config(project.get("config") or {}) == normalized_mode
+            ]
+            total = len(all_projects)
+            start = max(0, offset)
+            projects = all_projects[start : start + max(1, min(limit, 500))]
+        else:
+            projects = database.list_projects(limit=limit, offset=offset)
+            total = database.count_projects()
         return ProjectListResponse(
             items=[
-                {
-                    "id": project["project_id"],
-                    "project_name": project["config"].get("project_name", project["project_id"]),
-                    "created_at": project["created_at"],
-                }
+                _project_list_item(project)
                 for project in projects
             ],
             total=total
@@ -2804,14 +2811,9 @@ def create_app() -> FastAPI:
         jobs = []
         for row in rows:
             job_dict = dict(row)
-            project_name = None
-            if job_dict.get("config_json"):
-                try:
-                    cfg = json.loads(job_dict["config_json"])
-                    project_name = cfg.get("project_name")
-                except Exception:
-                    pass
-            job_dict["project_name"] = project_name
+            project_meta = _project_meta_from_config_json(job_dict.get("config_json"))
+            job_dict["project_name"] = project_meta.get("project_name") or job_dict.get("project_id")
+            job_dict["project_mode"] = project_meta.get("project_mode")
             job_dict.pop("config_json", None)
             jobs.append(job_dict)
         return {"success": True, "jobs": jobs, "total": total}
@@ -2821,8 +2823,13 @@ def create_app() -> FastAPI:
     def get_job(job_id: str) -> JobStatusResponse:
         job = _get_job_or_404(job_id)
         logs = database.get_job_logs(job_id)
+        project = database.get_project(job.get("project_id")) if job.get("project_id") else None
+        project_meta = _project_meta_from_config((project or {}).get("config") if project else None)
         return JobStatusResponse(
             job_id=job["job_id"],
+            project_id=job.get("project_id"),
+            project_name=project_meta.get("project_name"),
+            project_mode=project_meta.get("project_mode"),
             status=job["status"],
             current_step=job["current_step"],
             progress=job["progress"],
@@ -5716,6 +5723,59 @@ def _get_job_or_404(job_id: str) -> dict[str, Any]:
     if not job:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
     return job
+
+
+def _project_list_item(project: dict[str, Any]) -> dict[str, Any]:
+    config = project.get("config") if isinstance(project, dict) else {}
+    if not isinstance(config, dict):
+        config = {}
+    product = config.get("product") if isinstance(config.get("product"), dict) else {}
+    render = config.get("render") if isinstance(config.get("render"), dict) else {}
+    output_count = render.get("output_count")
+    return {
+        "id": project.get("project_id"),
+        "project_name": config.get("project_name") or project.get("project_id"),
+        "created_at": project.get("created_at"),
+        "mode": _project_mode_from_config(config),
+        "product_name": product.get("name") or None,
+        "source_folder": config.get("source_folder") or None,
+        "output_folder": config.get("output_folder") or None,
+        "output_count": output_count if isinstance(output_count, int) else None,
+    }
+
+
+def _project_meta_from_config_json(raw_config: Any) -> dict[str, str | None]:
+    if not raw_config:
+        return {"project_name": None, "project_mode": None}
+    try:
+        config = json.loads(str(raw_config))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        config = {}
+    return _project_meta_from_config(config)
+
+
+def _project_meta_from_config(config: Any) -> dict[str, str | None]:
+    if not isinstance(config, dict):
+        return {"project_name": None, "project_mode": None}
+    return {
+        "project_name": str(config.get("project_name") or "").strip() or None,
+        "project_mode": _project_mode_from_config(config),
+    }
+
+
+def _project_mode_from_config(config: dict[str, Any]) -> str:
+    explicit = str(config.get("mode") or "").strip()
+    project_name = str(config.get("project_name") or "")
+    douyin_reup = config.get("douyin_reup")
+    if isinstance(douyin_reup, dict) and douyin_reup.get("enabled"):
+        if explicit == "silent_reup" or project_name.startswith("silent_") or project_name.startswith("silent_reup"):
+            return "silent_reup"
+        return "douyin_reup"
+    if explicit:
+        return explicit
+    if project_name.startswith("silent_") or project_name.startswith("silent_reup"):
+        return "silent_reup"
+    return "product_render"
 
 
 def _latest_crop_safety_report_path(project_id: str) -> Path | None:

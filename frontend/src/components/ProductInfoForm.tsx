@@ -80,7 +80,11 @@ export default function ProductInfoForm({ config, onChange }: ProductInfoFormPro
           })
         }
       />
-      <TextInput label="CTA" value={config.product.cta} onChange={(cta) => updateProduct({ cta })} />
+      <TextInput
+        label="Lời kêu gọi hành động"
+        value={config.product.cta}
+        onChange={(cta) => updateProduct({ cta })}
+      />
 
       <div className="rounded-md border border-line bg-surface/60 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">

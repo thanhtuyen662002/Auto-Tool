@@ -1403,6 +1403,9 @@ export interface JobLogItem {
 
 export interface JobStatus {
   job_id: string;
+  project_id?: string;
+  project_name?: string | null;
+  project_mode?: string | null;
   status: 'queued' | 'running' | 'completed' | 'completed_with_errors' | 'failed' | string;
   current_step: string;
   progress: number;
@@ -1411,11 +1414,9 @@ export interface JobStatus {
   failed_outputs: number;
   logs: JobLogItem[];
   cache_summary?: CacheSummary | null;
-  project_name?: string | null;
   created_at?: string;
   updated_at?: string;
   preview_only?: boolean;
-  project_id?: string;
 }
 
 export interface JobOutput {
@@ -2054,6 +2055,11 @@ export interface ProjectListItem {
   id: string;
   project_name: string;
   created_at: string;
+  mode?: string | null;
+  product_name?: string | null;
+  source_folder?: string | null;
+  output_folder?: string | null;
+  output_count?: number | null;
 }
 
 export interface ProjectListResponse {

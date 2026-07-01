@@ -7,11 +7,17 @@ interface RenderProgressProps {
 export default function RenderProgress({ job }: RenderProgressProps) {
   const progress = Math.max(0, Math.min(100, job?.progress ?? 0));
   const stalledMinutes = staleMinutes(job);
+  const workflow = workflowBadge(job);
   return (
     <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
       <div className="mb-3 flex items-center justify-between gap-4">
         <div>
-          <div className="text-sm font-semibold text-ink">{formatStep(job?.current_step ?? 'queued')}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-semibold text-ink">{formatStep(job?.current_step ?? 'queued')}</div>
+            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${workflow.className}`}>
+              {workflow.label}
+            </span>
+          </div>
           <div className="text-xs text-muted">{formatStatus(job?.status ?? 'queued')}</div>
         </div>
         <div className="text-xl font-semibold text-brand">{progress}%</div>
@@ -58,6 +64,34 @@ function Metric({ label, value }: { label: string; value: number | string }) {
 function formatCacheSize(sizeMb: number): string {
   if (sizeMb >= 1024) return `${(sizeMb / 1024).toFixed(2)} GB`;
   return `${sizeMb.toFixed(1)} MB`;
+}
+
+function workflowBadge(job: JobStatus | null): { label: string; className: string } {
+  const mode = jobWorkflowMode(job);
+  if (mode === 'douyin_reup') {
+    return { label: 'Reup có thoại', className: 'border-cyan-200 bg-cyan-50 text-cyan-800' };
+  }
+  if (mode === 'silent_reup') {
+    return { label: 'Silent Mode', className: 'border-violet-200 bg-violet-50 text-violet-800' };
+  }
+  if (mode === 'subtitle_render') {
+    return { label: 'Sửa phụ đề', className: 'border-amber-200 bg-amber-50 text-amber-800' };
+  }
+  if (mode === 'product_render') {
+    return { label: 'Video Affiliate', className: 'border-emerald-200 bg-emerald-50 text-emerald-800' };
+  }
+  return { label: 'Render video', className: 'border-slate-200 bg-slate-50 text-slate-700' };
+}
+
+function jobWorkflowMode(job: JobStatus | null): string {
+  const mode = (job?.project_mode || '').toLowerCase();
+  const projectId = (job?.project_id || '').toLowerCase();
+  const step = (job?.current_step || '').toLowerCase();
+  if (mode) return mode;
+  if (projectId.startsWith('douyin_reup_') || step.startsWith('douyin_video_')) return 'douyin_reup';
+  if (projectId.startsWith('silent_')) return 'silent_reup';
+  if (projectId.startsWith('subtitle_review_') || step.startsWith('subtitle_review_')) return 'subtitle_render';
+  return 'product_render';
 }
 
 function formatStatus(status: string): string {

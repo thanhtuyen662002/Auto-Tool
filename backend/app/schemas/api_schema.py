@@ -435,6 +435,9 @@ class JobLogItem(BaseModel):
 
 class JobStatusResponse(BaseModel):
     job_id: str
+    project_id: str | None = None
+    project_name: str | None = None
+    project_mode: str | None = None
     status: str
     current_step: str
     progress: int

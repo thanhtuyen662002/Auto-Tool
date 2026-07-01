@@ -83,11 +83,8 @@ import type {
 } from '../types/project';
 import { applyIndustryPresetToConfig, DEFAULT_INDUSTRY_APPLY_OPTIONS } from '../utils/industryPresetApply';
 import {
-  defaultProjectConfig,
-  formatJson,
   isProjectDirty,
   loadProjectConfig,
-  maskSensitiveConfig,
   saveProjectConfig,
 } from '../utils/projectState';
 
@@ -253,7 +250,7 @@ export default function RenderSettingsPage() {
             if (!mounted) return;
             setCropSafety({
               success: false,
-              error: cropErr instanceof Error ? cropErr.message : 'Không thể đọc báo cáo Crop Safety.',
+              error: cropErr instanceof Error ? cropErr.message : 'Không thể đọc báo cáo chống cắt mất sản phẩm.',
             });
           }
           void loadCacheSummary(activePreviewProjectId);
@@ -277,10 +274,6 @@ export default function RenderSettingsPage() {
     };
   }, [previewJobId, previewProjectId]);
 
-  const previewJson = useMemo(
-    () => formatJson(maskSensitiveConfig(config ?? defaultProjectConfig())),
-    [config],
-  );
   const availableTTSProviders = ttsProviders.length ? ttsProviders : FALLBACK_TTS_PROVIDERS;
   const safetyBlocked = Boolean(safetyResult?.errors_count);
 
@@ -391,7 +384,7 @@ export default function RenderSettingsPage() {
       setSafetyResult(result);
       return result;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể chạy Product Info QA.');
+      setError(err instanceof Error ? err.message : 'Không thể kiểm tra thông tin sản phẩm.');
       return null;
     } finally {
       setCheckingSafety(false);
@@ -414,7 +407,7 @@ export default function RenderSettingsPage() {
       const safety = await checkProjectSafety(activeProjectId);
       setSafetyResult(safety);
       if (safety.errors_count > 0) {
-        throw new Error('Product Info QA có lỗi cần sửa trước khi render.');
+        throw new Error('Kiểm tra thông tin sản phẩm có lỗi cần sửa trước khi render.');
       }
       const response = await startRender(activeProjectId, previewOnly);
       if (previewOnly) {
@@ -758,20 +751,14 @@ export default function RenderSettingsPage() {
         </section>
 
         <aside className="rounded-lg border border-line bg-white p-5 shadow-panel">
-          <h2 className="mb-3 text-base font-semibold text-ink">Tóm tắt cấu hình</h2>
-          {mode === 'simple' ? (
-            <FriendlySummary
-              config={config}
-              providers={availableTTSProviders}
-              templates={timelineTemplates}
-              visualStylePresets={visualStylePresets}
-              industryPresets={industryPresets}
-            />
-          ) : (
-            <pre className="max-h-[780px] overflow-auto rounded-md bg-surface p-4 text-xs leading-relaxed text-ink">
-              {previewJson}
-            </pre>
-          )}
+          <h2 className="mb-3 text-base font-semibold text-ink">Kết quả tạm dựa trên cài đặt</h2>
+          <FriendlySummary
+            config={config}
+            providers={availableTTSProviders}
+            templates={timelineTemplates}
+            visualStylePresets={visualStylePresets}
+            industryPresets={industryPresets}
+          />
         </aside>
       </div>
 
@@ -1115,7 +1102,7 @@ function SimpleSettingsPanel({
         </label>
       </div>
       <div className="mt-5 border-t border-line pt-5">
-        <h3 className="mb-3 text-sm font-semibold text-ink">Subtitle / Overlay Style</h3>
+        <h3 className="mb-3 text-sm font-semibold text-ink">Kiểu phụ đề / Khung phủ</h3>
         <VisualStyleSelector
           presets={visualStylePresets}
           selectedPresetId={config.visual_style?.preset_id ?? DEFAULT_VISUAL_STYLE_SETTINGS.preset_id}
@@ -1213,7 +1200,7 @@ function AdvancedSettingsPanel({
       </div>
 
       <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
-        <h2 className="mb-3 text-base font-semibold text-ink">Industry Preset</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Ngành hàng</h2>
         <IndustryPresetSelector
           presets={industryPresets}
           selectedPresetId={config.industry?.preset_id ?? 'general_product'}
@@ -1228,7 +1215,7 @@ function AdvancedSettingsPanel({
             disabled={busy}
             onClick={() => onIndustryPreset(config.industry?.preset_id ?? 'general_product')}
           >
-            Apply preset
+            Áp dụng mẫu
           </button>
           <button
             className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink hover:border-brand"
@@ -1236,7 +1223,7 @@ function AdvancedSettingsPanel({
             disabled={busy}
             onClick={() => onIndustryPreset('general_product')}
           >
-            Reset general
+            Về mặc định chung
           </button>
         </div>
       </div>
@@ -1257,7 +1244,7 @@ function AdvancedSettingsPanel({
       </div>
 
       <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
-        <h2 className="mb-3 text-base font-semibold text-ink">Subtitle / Overlay Style</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Kiểu phụ đề / Khung phủ</h2>
         <VisualStyleSelector
           presets={visualStylePresets}
           selectedPresetId={config.visual_style?.preset_id ?? DEFAULT_VISUAL_STYLE_SETTINGS.preset_id}
@@ -1536,7 +1523,7 @@ function CropSafetyPanel({
 
   return (
     <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
-      <h2 className="mb-3 text-base font-semibold text-ink">Crop Safety</h2>
+      <h2 className="mb-3 text-base font-semibold text-ink">Chống cắt mất sản phẩm</h2>
       <div className="grid gap-3">
         <label className="flex items-start gap-3 rounded-md border border-line bg-white p-3 text-sm">
           <input
@@ -1787,7 +1774,7 @@ function CropSafetyStatusBox({ result }: { result: CropSafetyAnalyzeResponse | n
   if (!result.success) {
     return (
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-        <span className="font-semibold">Crop Safety chưa có dữ liệu.</span>
+        <span className="font-semibold">Chưa có dữ liệu chống cắt mất sản phẩm.</span>
         <span className="mt-1 block">{result.error ?? 'Render preview xong rồi thử lại.'}</span>
       </div>
     );
@@ -1808,7 +1795,7 @@ function CropSafetyStatusBox({ result }: { result: CropSafetyAnalyzeResponse | n
     <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-ink">Crop Safety</h2>
+          <h2 className="text-base font-semibold text-ink">Chống cắt mất sản phẩm</h2>
           <p className="mt-1 text-sm text-muted">
             Đã phân tích {result.total_clips_analyzed ?? 0} cảnh trong video thử.
           </p>
@@ -1868,17 +1855,19 @@ function FriendlySummary({
   return (
     <dl className="grid gap-3 text-sm">
       <SummaryRow label="Dự án" value={config.product.name || config.project_name} />
-      <SummaryRow label="Industry" value={industry?.name ?? config.industry?.preset_id ?? 'general_product'} />
+      <SummaryRow label="Ngành hàng" value={industry?.name ?? config.industry?.preset_id ?? 'Chưa chọn'} />
       <SummaryRow label="Đầu ra" value={`${config.render.output_count} video x ${config.render.duration}s`} />
+      <SummaryRow label="Video nguồn" value={config.source_folder || 'Chưa chọn'} />
+      <SummaryRow label="Thư mục xuất" value={config.output_folder || 'Chưa chọn'} />
       <SummaryRow label="Phong cách" value={style?.summaryLabel ?? config.timeline?.template_id ?? 'Tuỳ chỉnh'} />
       <SummaryRow label="Mức chỉnh sửa" value={edit?.summaryLabel ?? 'Tuỳ chỉnh'} />
       <SummaryRow label="Giọng đọc" value={voice?.summaryLabel ?? config.tts?.voice ?? '-'} />
       <SummaryRow label="Tạo giọng đọc" value={provider?.name ?? config.tts?.provider ?? '-'} />
       <SummaryRow label="Nhạc nền" value={musicSummary} />
-      <SummaryRow label="Crop Safety" value={cropSafety.enabled ? `Bật (${cropSafety.mode})` : 'Tắt'} />
+      <SummaryRow label="Chống cắt mất sản phẩm" value={cropSafety.enabled ? `Bật (${cropSafety.mode})` : 'Tắt'} />
       <SummaryRow label="Dòng thời gian" value={template?.name ?? config.timeline?.template_id ?? '-'} />
       <SummaryRow label="Kịch bản" value="Tự động trộn" />
-      <SummaryRow label="Subtitle / Overlay" value={visualStyle?.name ?? config.visual_style?.preset_id ?? '-'} />
+      <SummaryRow label="Phụ đề / Khung phủ" value={visualStyle?.name ?? config.visual_style?.preset_id ?? '-'} />
     </dl>
   );
 }
@@ -1949,7 +1938,7 @@ function ProductSafetyBox({
         ? `Có ${result?.warnings_count ?? 0} cảnh báo cần xem lại`
         : status === 'error'
           ? `Có ${result?.errors_count ?? 0} lỗi cần sửa trước khi render`
-          : 'Chưa chạy Product Info QA';
+          : 'Chưa kiểm tra thông tin sản phẩm';
   const badgeClass =
     status === 'passed'
       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -1963,7 +1952,7 @@ function ProductSafetyBox({
     <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-ink">Product Info QA</h2>
+          <h2 className="text-base font-semibold text-ink">Kiểm tra thông tin sản phẩm</h2>
           <p className="mt-1 text-sm text-muted">
             Kiểm tra thông tin sản phẩm, claim rủi ro và điều kiện render cơ bản.
           </p>
@@ -2128,7 +2117,7 @@ function CachePanel({
     <div className="rounded-lg border border-line bg-white p-5 shadow-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-ink">Performance Cache</h2>
+          <h2 className="text-base font-semibold text-ink">Bộ nhớ tăng tốc</h2>
           <p className="mt-1 text-sm text-muted">
             Tái sử dụng metadata, crop safety, TTS và overlay khi input chưa thay đổi.
           </p>
@@ -2145,8 +2134,8 @@ function CachePanel({
       </div>
 
       <div className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
-        <Metric label="Cache hit" value={summary?.hits ?? 0} />
-        <Metric label="Cache miss" value={summary?.misses ?? 0} />
+        <Metric label="Dữ liệu dùng lại" value={summary?.hits ?? 0} />
+        <Metric label="Dữ liệu phải tạo mới" value={summary?.misses ?? 0} />
         <Metric label="Dung lượng" value={formatCacheSize(summary?.cache_size_mb ?? 0)} />
         <Metric label="Số mục" value={itemCount} />
       </div>

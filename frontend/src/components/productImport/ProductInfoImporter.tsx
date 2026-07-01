@@ -19,26 +19,13 @@ const IMPORT_TABS: Array<{ id: ProductImportInputType; label: string; placeholde
   },
   {
     id: 'text',
-    label: 'Paste mô tả',
-    placeholder:
-      'Dán mô tả sản phẩm tại đây...\nVí dụ:\nMáy Chiếu 4K Android KAW XMAX10\nThương hiệu: KAW\nĐộ sáng 10.000 Lumens\nHỗ trợ 4K\nAndroid 9.0',
-  },
-  {
-    id: 'json',
-    label: 'Import JSON',
-    placeholder:
-      '{\n  "product_name": "Máy chiếu KAW",\n  "brand_name": "KAW",\n  "benefits": ["Hỗ trợ 4K", "Android 9.0"]\n}',
+    label: 'Dán mô tả sản phẩm',
+    placeholder: 'Dán mô tả, thông số, lợi ích, giá bán hoặc nội dung sản phẩm mà bạn đang có.',
   },
   {
     id: 'txt',
-    label: 'Import TXT',
-    placeholder: 'Dán nội dung file TXT hoặc chọn file TXT bên dưới.',
-  },
-  {
-    id: 'csv',
-    label: 'Import CSV',
-    placeholder:
-      'name,brand,description,features,cta\nMáy chiếu KAW,KAW,Nhỏ gọn hỗ trợ 4K,"Hỗ trợ 4K; Android 9.0; Nhỏ gọn",Xem chi tiết ngay',
+    label: 'Chọn file mô tả',
+    placeholder: 'Dán nội dung file mô tả sản phẩm hoặc chọn file .txt bên dưới.',
   },
 ];
 
@@ -120,7 +107,7 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
         <div>
           <h2 className="text-base font-semibold text-ink">Import thông tin sản phẩm</h2>
           <p className="mt-1 text-sm text-muted">
-            Chuẩn hóa thông tin trước khi đưa vào script generator. Tool không tự xác minh thông số sản phẩm.
+            Dùng khi bạn đã có mô tả sản phẩm. Tool chỉ sắp xếp lại thông tin, không tự xác minh thông số.
           </p>
         </div>
       </div>
@@ -160,13 +147,13 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
             onChange={setContent}
           />
           <div className="flex flex-wrap items-center gap-3">
-            {activeTab === 'json' || activeTab === 'txt' || activeTab === 'csv' ? (
+            {activeTab === 'txt' ? (
               <label className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-ink hover:border-brand">
                 Chọn file
                 <input
                   className="hidden"
                   type="file"
-                  accept={activeTab === 'json' ? '.json,application/json' : activeTab === 'csv' ? '.csv,text/csv' : '.txt,text/plain'}
+                  accept=".txt,text/plain"
                   onChange={(event) => void handleFile(event.target.files?.[0] ?? null)}
                 />
               </label>
@@ -243,9 +230,9 @@ function ImportPreview({
       <div className="grid gap-3 sm:grid-cols-2">
         <SummaryItem label="Tên sản phẩm" value={product.name || 'Thiếu'} />
         <SummaryItem label="Thương hiệu" value={product.brand || 'Chưa có'} />
-        <SummaryItem label="CTA" value={product.cta} />
+        <SummaryItem label="Lời kêu gọi hành động" value={product.cta} />
         <SummaryItem label="Ngành hàng gợi ý" value={industryName} />
-        <SummaryItem label="Confidence" value={`${Math.round(product.confidence_score * 100)}%`} />
+        <SummaryItem label="Độ tin cậy" value={`${Math.round(product.confidence_score * 100)}%`} />
       </div>
       <SummaryBlock label="Mô tả" value={product.description || 'Chưa có mô tả'} />
       <BulletBlock label="Điểm nổi bật" items={product.features} empty="Chưa có điểm nổi bật." />
@@ -312,11 +299,17 @@ function IssueList({ issues }: { issues: ProductValidationIssue[] }) {
             }`}
             key={`${issue.field}-${index}`}
           >
-            <span className="font-semibold">{issue.severity.toUpperCase()}:</span> {issue.message}
+            <span className="font-semibold">{formatSeverity(issue.severity)}:</span> {issue.message}
             {issue.suggestion ? <span className="block text-xs opacity-80">{issue.suggestion}</span> : null}
           </li>
         ))}
       </ul>
     </div>
   );
+}
+
+function formatSeverity(severity: ProductValidationIssue['severity']): string {
+  if (severity === 'error') return 'Cần sửa';
+  if (severity === 'warning') return 'Cần kiểm tra';
+  return 'Gợi ý';
 }

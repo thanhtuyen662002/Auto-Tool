@@ -1,11 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Clapperboard, FolderOpen, Loader2, Clock, ExternalLink, Trash2 } from 'lucide-react';
+import { Clapperboard, FolderOpen, Loader2, Clock, ExternalLink, Trash2, ShoppingBag } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { listJobs, deleteJob } from '../api/client';
 import type { JobStatus } from '../types/project';
 import ResultsLayout from '../components/results/ResultsLayout';
-import GlassBadge from '../components/glass/GlassBadge';
+import GlassBadge, { type GlassBadgeVariant } from '../components/glass/GlassBadge';
 import GlassButton from '../components/glass/GlassButton';
 import GlassPagination from '../components/glass/GlassPagination';
 import GlassModal from '../components/glass/GlassModal';
@@ -83,10 +83,21 @@ export default function ResultsPage() {
   }, [hasActiveJob, currentPage]);
 
   function getJobTypeLabel(projectId: string): string {
-    if (projectId.startsWith('douyin_reup_')) return 'Reup có thoại (Douyin)';
-    if (projectId.startsWith('silent_')) return 'Reup không thoại';
-    if (projectId.startsWith('subtitle_review_')) return 'Sửa phụ đề';
+    const normalized = projectId.toLowerCase();
+    if (normalized.startsWith('douyin_reup_')) return 'Reup có thoại';
+    if (normalized.startsWith('silent_')) return 'Silent Mode';
+    if (normalized.startsWith('subtitle_review_')) return 'Sửa phụ đề';
     return 'Video Affiliate';
+  }
+
+  function getJobWorkflow(job: JobStatus): { label: string; variant: GlassBadgeVariant } {
+    const mode = (job.project_mode || '').toLowerCase();
+    const projectId = (job.project_id || '').toLowerCase();
+    if (mode === 'douyin_reup') return { label: 'Reup có thoại', variant: 'ready' };
+    if (mode === 'silent_reup') return { label: 'Silent Mode', variant: 'processing' };
+    if (mode === 'subtitle_render') return { label: 'Sửa phụ đề', variant: 'warning' };
+    if (mode === 'product_render') return { label: 'Video Affiliate', variant: 'success' };
+    return { label: getJobTypeLabel(projectId), variant: projectId.startsWith('silent_') ? 'processing' : 'neutral' };
   }
 
   function getStatusBadge(status: string) {
@@ -116,6 +127,7 @@ export default function ResultsPage() {
       subtitle="Theo dõi các tiến trình render thời gian thực, quản lý hàng đợi và xem kết quả video đầu ra."
       actions={
         <>
+          <LinkButton to="/projects/new" label="Video Affiliate" icon={<ShoppingBag size={16} />} />
           <LinkButton to="/douyin-reup" label="Reup có thoại" icon={<Clapperboard size={16} />} />
           <LinkButton to="/silent-mode" label="Reup không thoại" icon={<FolderOpen size={16} />} />
         </>
@@ -144,6 +156,7 @@ export default function ResultsPage() {
                 const isActive = ACTIVE_STATUSES.has(job.status);
                 const formattedDate = new Date(job.created_at || Date.now()).toLocaleString('vi-VN');
                 const progressVal = job.progress ?? 0;
+                const workflow = getJobWorkflow(job);
                 const linkUrl = isActive
                   ? `/queue/${job.project_id || 'project'}/${job.job_id}`
                   : `/results/${job.project_id || 'project'}/${job.job_id}`;
@@ -157,9 +170,7 @@ export default function ResultsPage() {
                             {job.project_name || `Dự án: ${job.project_id}`}
                           </h2>
                           {getStatusBadge(job.status)}
-                          <span className="text-[11px] rounded bg-white/5 px-2 py-0.5 font-medium text-slate-400">
-                            {getJobTypeLabel(job.project_id || '')}
-                          </span>
+                          <GlassBadge variant={workflow.variant} size="sm">{workflow.label}</GlassBadge>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-400">
                           <span className="flex items-center gap-1">

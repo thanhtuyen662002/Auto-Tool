@@ -441,6 +441,18 @@ def list_projects(limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
     return [_row_to_project(row) for row in rows]
 
 
+def list_all_projects() -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM projects
+            ORDER BY created_at DESC
+            """
+        ).fetchall()
+    return [_row_to_project(row) for row in rows]
+
+
 def update_project_config(project_id: str, config: dict[str, Any]) -> dict[str, Any] | None:
     with get_connection() as conn:
         conn.execute(
