@@ -7,6 +7,9 @@
 html {
   background: var(--studio-bg);
   color-scheme: dark;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 html.theme-light {
@@ -15,7 +18,10 @@ html.theme-light {
 
 body {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
   min-width: 320px;
+  overflow-x: hidden;
   color: var(--studio-text);
   background: var(--studio-bg);
   font-family:
@@ -48,6 +54,12 @@ button:disabled {
   to {
     width: 0%;
   }
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 @media (min-width: 1024px) {

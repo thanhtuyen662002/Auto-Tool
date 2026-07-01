@@ -32,8 +32,8 @@ export default function ProductInfoForm({ config, onChange }: ProductInfoFormPro
   };
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2">
+    <div className="min-w-0 space-y-5">
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <TextInput
           label="Tên dự án"
           value={config.project_name}
@@ -86,7 +86,7 @@ export default function ProductInfoForm({ config, onChange }: ProductInfoFormPro
         onChange={(cta) => updateProduct({ cta })}
       />
 
-      <div className="rounded-md border border-line bg-surface/60 p-4">
+      <div className="min-w-0 overflow-hidden rounded-md border border-line bg-surface/60 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold text-ink">Thông số được cung cấp</h3>
@@ -100,14 +100,14 @@ export default function ProductInfoForm({ config, onChange }: ProductInfoFormPro
             + Thêm thông số
           </button>
         </div>
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           {specs.length === 0 ? (
             <p className="rounded-md border border-dashed border-line bg-white px-3 py-3 text-xs text-muted">
               Chưa có thông số. Có thể để trống nếu người dùng chưa cung cấp.
             </p>
           ) : null}
           {specs.map((spec, index) => (
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto]" key={index}>
+            <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto]" key={index}>
               <TextInput
                 label="Tên thông số"
                 value={spec.name}
@@ -130,7 +130,7 @@ export default function ProductInfoForm({ config, onChange }: ProductInfoFormPro
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <NumberInput
           label="Số lượng video"
           value={config.render.output_count}

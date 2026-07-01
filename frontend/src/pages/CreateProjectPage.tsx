@@ -190,9 +190,9 @@ export default function CreateProjectPage() {
   }
 
   return (
-    <main className="studio-page grid gap-6">
-      <section className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+    <main className="studio-page grid max-w-full gap-6 overflow-x-hidden">
+      <section className="flex min-w-0 flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
           <GlassBadge variant="ready">Video Affiliate</GlassBadge>
           <h1 className="mt-3 text-2xl font-semibold text-ink">Tạo Video Affiliate</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
@@ -212,8 +212,8 @@ export default function CreateProjectPage() {
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(380px,0.8fr)]">
-        <section className="glass-card-strong p-5">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+        <section className="glass-card-strong min-w-0 overflow-hidden p-5">
           <StepHeader step="1" title="Thông tin sản phẩm" description="Bạn có thể nhập tay hoặc dán mô tả để tool tự sắp xếp lại." />
           <div className="mt-4">
             <ProductInfoImporter industryPresets={industryPresets} onApply={handleApplyImportedProduct} />
@@ -257,7 +257,7 @@ export default function CreateProjectPage() {
           </div>
         </section>
 
-        <aside className="grid gap-5 content-start">
+        <aside className="grid min-w-0 content-start gap-5">
           <AffiliatePreviewPanel config={config} industryName={selectedIndustry?.name ?? 'Chưa chọn ngành hàng'} isDirty={isDirty} />
           <AffiliateHistoryPanel
             projects={history}
@@ -274,11 +274,11 @@ export default function CreateProjectPage() {
 
 function StepHeader({ step, title, description }: { step: string; title: string; description: string }) {
   return (
-    <div className="flex gap-3">
+    <div className="flex min-w-0 gap-3">
       <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-cyan-300/25 bg-cyan-300/10 text-sm font-semibold text-brand">
         {step}
       </div>
-      <div>
+      <div className="min-w-0">
         <h2 className="text-base font-semibold text-ink">{title}</h2>
         <p className="mt-1 text-sm leading-6 text-muted">{description}</p>
       </div>
@@ -303,9 +303,9 @@ function AffiliatePreviewPanel({
   const hashtags = (config.product.hashtag_suggestions ?? []).slice(0, 5);
   const featurePreview = config.product.features.filter((item) => item.trim()).slice(0, 4);
   return (
-    <section className="glass-card-strong p-5">
+    <section className="glass-card-strong min-w-0 overflow-hidden p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold text-ink">Kết quả dự kiến</h2>
           <p className="mt-1 text-sm leading-6 text-muted">Bản tóm tắt dễ hiểu từ cài đặt hiện tại.</p>
         </div>
@@ -314,14 +314,14 @@ function AffiliatePreviewPanel({
         </GlassBadge>
       </div>
 
-      <div className="mt-4 rounded-md border border-line bg-surface p-4">
+      <div className="mt-4 min-w-0 overflow-hidden rounded-md border border-line bg-surface p-4">
         <div className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Preview video</div>
-        <h3 className="mt-3 text-xl font-semibold text-ink">{config.product.name || 'Tên sản phẩm sẽ hiển thị ở đây'}</h3>
-        <p className="mt-2 text-sm leading-6 text-muted">{config.product.description || 'Mô tả sản phẩm sẽ được dùng để viết lời bình và caption.'}</p>
-        <div className="mt-3 rounded-md border border-line bg-white/5 p-3 text-sm text-ink">{hook}</div>
+        <h3 className="mt-3 break-words text-xl font-semibold text-ink">{config.product.name || 'Tên sản phẩm sẽ hiển thị ở đây'}</h3>
+        <p className="mt-2 break-words text-sm leading-6 text-muted">{config.product.description || 'Mô tả sản phẩm sẽ được dùng để viết lời bình và caption.'}</p>
+        <div className="mt-3 break-words rounded-md border border-line bg-white/5 p-3 text-sm text-ink">{hook}</div>
         <div className="mt-3 flex flex-wrap gap-2">
           {featurePreview.length ? featurePreview.map((item, index) => (
-            <span key={`${item}-${index}`} className="rounded-full border border-line bg-white/5 px-3 py-1 text-xs text-muted">
+            <span key={`${item}-${index}`} className="max-w-full break-words rounded-full border border-line bg-white/5 px-3 py-1 text-xs text-muted">
               {item}
             </span>
           )) : (
@@ -332,7 +332,7 @@ function AffiliatePreviewPanel({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
         <PreviewMetric label="Số video sẽ tạo" value={`${config.render.output_count || 0} video`} />
         <PreviewMetric label="Thời lượng mỗi video" value={`${config.render.duration || 0} giây`} />
         <PreviewMetric label="Khung hình" value={config.render.resolution || config.render.aspect_ratio || 'Chưa chọn'} />
@@ -341,7 +341,7 @@ function AffiliatePreviewPanel({
         <PreviewMetric label="Nhạc nền" value={config.music.enabled ? 'Có nhạc nền' : 'Không thêm nhạc'} />
       </div>
 
-      <div className="mt-4 grid gap-2 text-sm">
+      <div className="mt-4 grid min-w-0 gap-2 text-sm">
         <PathLine label="Video nguồn" value={config.source_folder} />
         <PathLine label="Thư mục xuất" value={config.output_folder} />
       </div>
@@ -391,21 +391,21 @@ function AffiliateHistoryPanel({
   onPageChange: (page: number) => void;
 }) {
   return (
-    <section className="glass-card-strong p-5">
+    <section className="glass-card-strong min-w-0 overflow-hidden p-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold text-ink">Lịch sử Affiliate</h2>
           <p className="mt-1 text-sm leading-6 text-muted">Mở lại những dự án sản phẩm đã tạo gần đây.</p>
         </div>
         <GlassBadge variant="neutral">{projects.length} mục</GlassBadge>
       </div>
 
-      <div className="mt-4 grid gap-3">
+      <div className="mt-4 grid min-w-0 gap-3">
         {loading ? (
           <div className="rounded-md border border-line bg-surface p-4 text-sm text-muted">Đang tải lịch sử...</div>
         ) : projects.length ? (
           projects.map((project) => (
-            <div key={project.id} className="rounded-md border border-line bg-surface p-4">
+            <div key={project.id} className="min-w-0 rounded-md border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate font-semibold text-ink">{project.project_name}</div>
@@ -448,16 +448,16 @@ function AffiliateHistoryPanel({
 
 function PreviewMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-line bg-surface p-3">
+    <div className="min-w-0 rounded-md border border-line bg-surface p-3">
       <div className="text-xs text-muted">{label}</div>
-      <div className="mt-1 text-sm font-semibold text-ink">{value}</div>
+      <div className="mt-1 break-words text-sm font-semibold text-ink">{value}</div>
     </div>
   );
 }
 
 function PathLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-line bg-surface px-3 py-2">
+    <div className="min-w-0 rounded-md border border-line bg-surface px-3 py-2">
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-1 truncate text-sm text-ink">{value || 'Chưa chọn'}</div>
     </div>

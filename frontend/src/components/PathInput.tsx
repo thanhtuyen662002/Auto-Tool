@@ -49,14 +49,14 @@ export default function PathInput({
   }
 
   return (
-    <div className="block">
+    <div className="block min-w-0">
       <label className="mb-1 block text-sm font-medium text-ink" htmlFor={inputId}>
         {label}
       </label>
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         <input
           id={inputId}
-          className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100"
+          className="h-10 w-full min-w-0 rounded-md border border-line bg-white px-3 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100"
           type="text"
           lang="vi"
           spellCheck={false}
@@ -66,11 +66,11 @@ export default function PathInput({
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
         />
-        <div className="flex flex-wrap gap-2">
+        <div className="flex min-w-0 flex-wrap gap-2">
           {modes.map((mode) => (
             <button
               key={mode}
-              className="h-10 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink hover:border-brand disabled:text-muted"
+              className="h-10 shrink-0 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink hover:border-brand disabled:text-muted"
               type="button"
               disabled={disabled || busyMode !== null}
               onClick={() => void handleBrowse(mode)}

@@ -16,10 +16,10 @@ export default function NumberInput({
   step = 1,
 }: NumberInputProps) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1 block text-sm font-medium text-ink">{label}</span>
       <input
-        className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100"
+        className="h-10 w-full min-w-0 rounded-md border border-line bg-white px-3 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100"
         type="number"
         value={value}
         min={min}

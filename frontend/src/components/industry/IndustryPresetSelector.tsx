@@ -41,11 +41,11 @@ export default function IndustryPresetSelector({
   }
 
   return (
-    <div className="grid gap-4">
-      <label className="block">
+    <div className="grid min-w-0 gap-4">
+      <label className="block min-w-0">
         <span className="mb-1 block text-sm font-medium text-ink">Ngành hàng sản phẩm</span>
         <select
-          className="h-10 w-full rounded-md border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-blue-100"
+          className="h-10 w-full min-w-0 rounded-md border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-blue-100"
           value={selected?.id ?? ''}
           onChange={(event) => onSelect(event.target.value)}
         >
@@ -58,10 +58,10 @@ export default function IndustryPresetSelector({
       </label>
 
       {selected ? (
-        <div className="rounded-md border border-line bg-surface p-4">
+        <div className="min-w-0 overflow-hidden rounded-md border border-line bg-surface p-4">
           <div className="text-sm font-semibold text-ink">{selected.name}</div>
-          <p className="mt-1 text-sm leading-relaxed text-muted">{selected.description}</p>
-          <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
+          <p className="mt-1 break-words text-sm leading-relaxed text-muted">{selected.description}</p>
+          <div className="mt-3 grid min-w-0 gap-2 text-sm md:grid-cols-2">
             <SummaryItem label="Phong cách video" value={videoStyleLabelForPreset(selected)} />
             <SummaryItem label="Dòng thời gian" value={selected.timeline_template_id} />
             <SummaryItem label="Lớp phủ" value={selected.visual_style_preset_id} />
@@ -75,9 +75,9 @@ export default function IndustryPresetSelector({
                 <span className="font-medium text-ink">Caption tone: </span>
                 <span className="text-muted">{selected.caption_tone}</span>
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
+              <div className="mt-2 flex min-w-0 flex-wrap gap-2">
                 {selected.hashtag_suggestions.map((tag) => (
-                  <span key={tag} className="rounded bg-white px-2 py-1 text-xs font-medium text-muted">
+                  <span key={tag} className="max-w-full break-words rounded bg-white px-2 py-1 text-xs font-medium text-muted">
                     {tag}
                   </span>
                 ))}
@@ -88,7 +88,7 @@ export default function IndustryPresetSelector({
       ) : null}
 
       {onApplyOptionsChange ? (
-        <div className="grid gap-2 rounded-md border border-line bg-white p-3 text-sm sm:grid-cols-2">
+        <div className="grid min-w-0 gap-2 rounded-md border border-line bg-white p-3 text-sm sm:grid-cols-2">
           {OPTION_LABELS.map((item) => (
             <label key={item.key} className="flex items-center gap-2">
               <input
@@ -108,10 +108,9 @@ export default function IndustryPresetSelector({
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded bg-white px-3 py-2">
+    <div className="min-w-0 rounded bg-white px-3 py-2">
       <div className="text-xs font-medium text-muted">{label}</div>
-      <div className="mt-0.5 font-semibold text-ink">{value}</div>
+      <div className="mt-0.5 break-words font-semibold text-ink">{value}</div>
     </div>
   );
 }
-

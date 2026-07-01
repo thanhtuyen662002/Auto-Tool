@@ -102,9 +102,9 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
   }
 
   return (
-    <div className="rounded-lg border border-line bg-surface/70 p-4">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
+    <div className="min-w-0 overflow-hidden rounded-lg border border-line bg-surface/70 p-4">
+      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="text-base font-semibold text-ink">Import thông tin sản phẩm</h2>
           <p className="mt-1 text-sm text-muted">
             Dùng khi bạn đã có mô tả sản phẩm. Tool chỉ sắp xếp lại thông tin, không tự xác minh thông số.
@@ -112,7 +112,7 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex min-w-0 flex-wrap gap-2">
         {IMPORT_TABS.map((tab) => (
           <button
             className={`rounded-md border px-3 py-2 text-sm font-semibold ${
@@ -138,7 +138,7 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
           Dùng form bên dưới để nhập thủ công. Các tab còn lại dùng khi bạn muốn paste mô tả hoặc import nội dung file.
         </p>
       ) : (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 min-w-0 space-y-3">
           <TextArea
             label={active.label}
             value={content}
@@ -146,7 +146,7 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
             placeholder={active.placeholder}
             onChange={setContent}
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             {activeTab === 'txt' ? (
               <label className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-ink hover:border-brand">
                 Chọn file
@@ -175,7 +175,7 @@ export default function ProductInfoImporter({ industryPresets, onApply }: Produc
       <NotifyOnChange value={message} variant="success" />
 
       {result ? (
-        <div className="mt-4 rounded-md border border-line bg-white p-4">
+        <div className="mt-4 min-w-0 overflow-hidden rounded-md border border-line bg-white p-4">
           {result.product ? (
             <ImportPreview
               product={result.product}
@@ -226,8 +226,8 @@ function ImportPreview({
   industryName: string;
 }) {
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
+    <div className="min-w-0 space-y-4">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
         <SummaryItem label="Tên sản phẩm" value={product.name || 'Thiếu'} />
         <SummaryItem label="Thương hiệu" value={product.brand || 'Chưa có'} />
         <SummaryItem label="Lời kêu gọi hành động" value={product.cta} />
@@ -249,9 +249,9 @@ function ImportPreview({
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-surface px-3 py-2">
+    <div className="min-w-0 rounded-md bg-surface px-3 py-2">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</div>
-      <div className="mt-1 text-sm text-ink">{value}</div>
+      <div className="mt-1 break-words text-sm text-ink">{value}</div>
     </div>
   );
 }
@@ -260,7 +260,7 @@ function SummaryBlock({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="mb-1 text-sm font-semibold text-ink">{label}</div>
-      <p className="rounded-md bg-surface px-3 py-2 text-sm text-ink">{value}</p>
+      <p className="break-words rounded-md bg-surface px-3 py-2 text-sm text-ink">{value}</p>
     </div>
   );
 }
@@ -272,7 +272,7 @@ function BulletBlock({ label, items, empty }: { label: string; items: string[]; 
       {items.length ? (
         <ul className="space-y-1 rounded-md bg-surface px-4 py-3 text-sm text-ink">
           {items.map((item, index) => (
-            <li key={`${item}-${index}`}>- {item}</li>
+            <li className="break-words" key={`${item}-${index}`}>- {item}</li>
           ))}
         </ul>
       ) : (

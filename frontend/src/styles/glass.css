@@ -68,6 +68,8 @@ html.theme-light {
   position: relative;
   isolation: isolate;
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: hidden;
   color: var(--studio-text);
   background: var(--studio-bg);
 }
@@ -84,6 +86,9 @@ html.theme-light {
 .studio-content-layout {
   position: relative;
   z-index: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 .studio-sidebar-shell {
@@ -94,6 +99,12 @@ html.theme-light {
 .studio-topbar {
   border-color: var(--studio-border);
   background: var(--studio-panel);
+}
+
+.studio-fade-in {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 html.has-background-image .studio-sidebar-shell {

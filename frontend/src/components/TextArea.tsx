@@ -22,10 +22,10 @@ export default function TextArea({
   const minHeightClass = rows >= 6 ? 'min-h-40' : 'min-h-24';
 
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1 block text-sm font-medium text-ink">{label}</span>
       <textarea
-        className={`w-full resize-y rounded-md border border-line bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100 ${minHeightClass} ${className}`}
+        className={`w-full min-w-0 resize-y rounded-md border border-line bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100 ${minHeightClass} ${className}`}
         lang="vi"
         spellCheck={spellCheck}
         autoComplete={autoComplete}
