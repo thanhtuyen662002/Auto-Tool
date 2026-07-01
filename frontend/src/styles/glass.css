@@ -65,16 +65,43 @@ html.theme-light {
 }
 
 .studio-theme {
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   color: var(--studio-text);
+  background: var(--studio-bg);
 }
 
 .studio-background {
   position: fixed;
   inset: 0;
-  z-index: -10;
+  z-index: 0;
   overflow: hidden;
+  pointer-events: none;
   background: var(--studio-background-gradient);
+}
+
+.studio-content-layout {
+  position: relative;
+  z-index: 1;
+}
+
+.studio-sidebar-shell {
+  border-color: var(--studio-border);
+  background: var(--studio-panel-strong);
+}
+
+.studio-topbar {
+  border-color: var(--studio-border);
+  background: var(--studio-panel);
+}
+
+html.has-background-image .studio-sidebar-shell {
+  background: color-mix(in srgb, var(--studio-panel-strong) 88%, transparent);
+}
+
+html.has-background-image .studio-topbar {
+  background: color-mix(in srgb, var(--studio-panel) 82%, transparent);
 }
 
 .studio-background::before,

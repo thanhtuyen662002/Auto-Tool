@@ -190,10 +190,12 @@ export function applyAppearanceSettings(settings = getLocalUiSettings()) {
     'reduce-motion',
     'density-comfortable',
     'density-compact',
+    'has-background-image',
   );
   root.classList.add(`theme-${settings.themeMode}`);
   root.classList.add(`glass-${settings.glassIntensity}`);
   root.classList.add(`density-${settings.layoutDensity}`);
+  if (hasUsableBackgroundImage(settings)) root.classList.add('has-background-image');
   if (settings.reduceMotion) root.classList.add('reduce-motion');
   root.style.colorScheme = settings.themeMode === 'light' ? 'light' : 'dark';
   applyThemeVariables(root, settings);
@@ -297,6 +299,10 @@ function normalizeDensity(value: string): LayoutDensity {
 function normalizeWorkflow(value: string): DefaultWorkflow {
   if (value === 'silent' || value === 'subtitle') return value;
   return 'douyin';
+}
+
+function hasUsableBackgroundImage(settings: LocalUiSettings): boolean {
+  return settings.backgroundImageEnabled && settings.backgroundImageMode !== 'none' && settings.backgroundImageSource.trim().length > 0;
 }
 
 function normalizeHexColor(value: string, fallback: string): string {

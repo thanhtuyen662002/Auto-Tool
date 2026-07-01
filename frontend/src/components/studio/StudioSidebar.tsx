@@ -46,7 +46,7 @@ export default function StudioSidebar({
 }) {
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex w-[268px] flex-col border-r border-white/10 bg-[#080d19]/92 p-4 backdrop-blur-xl transition-transform lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      className={`studio-sidebar-shell fixed inset-y-0 left-0 z-40 flex w-[268px] flex-col border-r p-4 backdrop-blur-xl transition-transform lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
       aria-label="Điều hướng chính"
     >
       <div className="flex items-center justify-between gap-3 px-2 py-2">

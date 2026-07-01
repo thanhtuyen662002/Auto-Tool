@@ -25,7 +25,7 @@ export default function StudioTopBar({
   shuttingDown?: boolean;
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-white/10 bg-[#070a13]/72 backdrop-blur-xl">
+    <header className="studio-topbar sticky top-0 z-30 border-b backdrop-blur-xl">
       <div className="flex min-h-16 items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <button className="rounded-md border border-white/10 p-2 text-slate-300 hover:bg-white/8 lg:hidden" type="button" onClick={onMenu} aria-label="Mở menu">
