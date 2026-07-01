@@ -24,6 +24,7 @@ def build_douyin_reup_summary(
     failure_breakdown = _failure_breakdown(failures)
     performance = _performance(outputs, scan_seconds=scan_seconds, total_runtime_seconds=total_runtime_seconds)
     ocr_summary = _ocr_summary(outputs)
+    gpu_acceleration = _gpu_acceleration_summary(outputs)
     subtitle_quality = _subtitle_quality_summary(outputs)
     settings = config.douyin_reup
     subtitle_rewrite = _subtitle_rewrite_summary(
@@ -65,6 +66,7 @@ def build_douyin_reup_summary(
         rendered=len(rendered),
         failure_breakdown=failure_breakdown,
         performance=performance,
+        gpu_acceleration=gpu_acceleration,
         ocr_summary=ocr_summary,
         preset=_preset_summary(settings),
         settings_snapshot=settings.model_dump(mode="json") if settings else {},
@@ -173,6 +175,26 @@ def _subtitle_quality_summary(outputs: list[DouyinOutputResult]) -> dict[str, An
         "average_source_quality_score": round(sum(gate_scores) / len(gate_scores), 4) if gate_scores else 0.0,
         "rejected_source_count": len(rejected),
         "rejected_source_breakdown": dict(Counter(str(item.get("source") or "unknown") for item in rejected)),
+    }
+
+
+def _gpu_acceleration_summary(outputs: list[DouyinOutputResult]) -> dict[str, Any]:
+    profiles = [getattr(output, "gpu_profile", None) for output in outputs]
+    profiles = [profile for profile in profiles if isinstance(profile, dict)]
+    encoder_counts = Counter(str(profile.get("render_encoder") or "unknown") for profile in profiles)
+    nvenc_count = sum(1 for profile in profiles if profile.get("render_nvenc_used"))
+    asr_cuda_count = sum(1 for profile in profiles if profile.get("asr_cuda_used"))
+    ocr_gpu_ready_count = sum(1 for profile in profiles if profile.get("ocr_gpu_ready"))
+    readiness = next((profile.get("readiness") for profile in profiles if isinstance(profile.get("readiness"), dict)), {})
+    return {
+        "safe_cpu_fallback": True,
+        "profiled_videos": len(profiles),
+        "render_nvenc_videos": nvenc_count,
+        "render_cpu_videos": max(0, len(profiles) - nvenc_count),
+        "asr_cuda_videos": asr_cuda_count,
+        "ocr_gpu_ready_videos": ocr_gpu_ready_count,
+        "encoder_counts": dict(encoder_counts),
+        "readiness": readiness,
     }
 
 

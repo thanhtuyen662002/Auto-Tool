@@ -10,6 +10,7 @@ from PIL import Image
 from app.modules.hardsub_ocr.hardsub_ocr_schema import OCRFrameResult, OCRRegion
 from app.utils.file_utils import ensure_dir
 from app.utils.dependency_manager import ensure_ocr_dependency
+from app.utils.gpu_detector import detect_gpu_status
 
 
 class BaseOCRProvider:
@@ -32,8 +33,12 @@ class PaddleOCRProvider(BaseOCRProvider):
         if not report.available:
             raise RuntimeError(report.message or "Không tìm thấy PaddleOCR. Hãy cài paddleocr hoặc đổi OCR provider.")
 
+        gpu_status = detect_gpu_status()
+        use_gpu = bool(gpu_status.hardware_available)
+        cache_key = f"{language}:{'gpu' if use_gpu else 'cpu'}"
+
         with self._cache_lock:
-            cached = self._ocr_cache.get(language)
+            cached = self._ocr_cache.get(cache_key)
             if cached is None:
                 try:
                     from paddleocr import PaddleOCR
@@ -45,14 +50,6 @@ class PaddleOCRProvider(BaseOCRProvider):
                 os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
 
                 # Tự động phát hiện card đồ họa rời NVIDIA CUDA
-                use_gpu = False
-                try:
-                    import torch
-                    if torch.cuda.is_available():
-                        use_gpu = True
-                except Exception:
-                    pass
-
                 # Khởi tạo tương thích với cả PaddleOCR cũ (v2.x) và mới (v3.x / paddlex)
                 device_str = "gpu" if use_gpu else "cpu"
                 ocr_inst = None
@@ -73,13 +70,24 @@ class PaddleOCRProvider(BaseOCRProvider):
                             show_log=False,
                             use_gpu=use_gpu
                         )
-                    except Exception as exc:
+                    except Exception:
+                        if use_gpu:
+                            try:
+                                ocr_inst = PaddleOCR(
+                                    use_angle_cls=True,
+                                    lang=language or "ch",
+                                    show_log=False,
+                                    use_gpu=False
+                                )
+                            except Exception:
+                                ocr_inst = None
                         try:
-                            ocr_inst = PaddleOCR(lang=language or "ch")
+                            if ocr_inst is None:
+                                ocr_inst = PaddleOCR(lang=language or "ch")
                         except Exception as final_exc:
                             raise RuntimeError(f"Không thể khởi tạo PaddleOCR: {final_exc}") from final_exc
                 cached = (ocr_inst, threading.Lock())
-                self._ocr_cache[language] = cached
+                self._ocr_cache[cache_key] = cached
 
         self.ocr, self._ocr_lock = cached
 
@@ -179,19 +187,21 @@ class EasyOCRProvider(BaseOCRProvider):
         lang = "ch_sim" if language in {"ch", "zh", "zh-cn"} else language
         
         # Tự động phát hiện card đồ họa rời NVIDIA CUDA
-        use_gpu = False
-        try:
-            import torch
-            if torch.cuda.is_available():
-                use_gpu = True
-        except Exception:
-            pass
+        gpu_status = detect_gpu_status()
+        use_gpu = bool(gpu_status.torch_cuda_available)
+        cache_key = f"{lang}:{'gpu' if use_gpu else 'cpu'}"
 
         with self._cache_lock:
-            cached = self._reader_cache.get(lang)
+            cached = self._reader_cache.get(cache_key)
             if cached is None:
-                cached = (easyocr.Reader([lang], gpu=use_gpu), threading.Lock())
-                self._reader_cache[lang] = cached
+                try:
+                    reader = easyocr.Reader([lang], gpu=use_gpu)
+                except Exception:
+                    if not use_gpu:
+                        raise
+                    reader = easyocr.Reader([lang], gpu=False)
+                cached = (reader, threading.Lock())
+                self._reader_cache[cache_key] = cached
         self.reader, self._reader_lock = cached
 
     def recognize(self, image_path: str, region: OCRRegion) -> OCRFrameResult:

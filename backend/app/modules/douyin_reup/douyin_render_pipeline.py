@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import threading
 from dataclasses import asdict
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -25,6 +26,8 @@ from app.modules.visual_style.subtitle_style_renderer import generate_ass_subtit
 from app.modules.visual_style.visual_style_service import VisualStyleService, parse_resolution
 from app.modules.voice_generator.voice_generator import VoiceGenerator
 from app.utils.file_utils import ensure_dir
+from app.utils.gpu_acceleration import is_nvidia_gpu, is_nvenc_ready
+from app.utils.gpu_detector import detect_gpu_status
 
 
 VOICEOVER_AUDIO_GAIN = 1.8
@@ -32,6 +35,67 @@ MASTER_AUDIO_GAIN = 1.6
 AUDIO_LIMITER_FILTER = "alimiter=limit=0.95"
 MASTER_LOUDNESS_FILTER = f"volume={MASTER_AUDIO_GAIN:.3f},loudnorm=I=-16:TP=-1.5:LRA=11,{AUDIO_LIMITER_FILTER}"
 MIN_VIDEO_SLOWDOWN_DELTA = 0.015
+_NVENC_LOCK = threading.Lock()
+_NVENC_AVAILABLE: bool | None = None
+
+
+def _should_try_nvenc() -> bool:
+    if os.getenv("AUTO_TOOL_DISABLE_NVENC", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return False
+    with _NVENC_LOCK:
+        if _NVENC_AVAILABLE is False:
+            return False
+    return is_nvidia_gpu(detect_gpu_status()) and is_nvenc_ready()
+
+
+def _mark_nvenc_available(value: bool) -> None:
+    global _NVENC_AVAILABLE
+    with _NVENC_LOCK:
+        _NVENC_AVAILABLE = value
+
+
+def _cpu_video_encode_args() -> list[str]:
+    return [
+        "-c:v",
+        "libx264",
+        "-preset",
+        "superfast",
+        "-crf",
+        "20",
+        "-pix_fmt",
+        "yuv420p",
+    ]
+
+
+def _nvenc_video_encode_args() -> list[str]:
+    return [
+        "-c:v",
+        "h264_nvenc",
+        "-preset",
+        "fast",
+        "-rc",
+        "vbr",
+        "-cq",
+        "21",
+        "-b:v",
+        "0",
+        "-pix_fmt",
+        "yuv420p",
+    ]
+
+
+def _remove_partial_output(output_path: str) -> None:
+    try:
+        path = Path(output_path)
+        if path.exists():
+            path.unlink()
+    except OSError:
+        pass
+
+
+def _short_ffmpeg_error(exc: Exception) -> str:
+    text = str(exc).replace("\r", "\n").splitlines()[-1].strip() if str(exc).strip() else exc.__class__.__name__
+    return text[:180] if len(text) > 180 else text
 
 
 def _visual_style_overrides(settings: DouyinReupSettings) -> dict:
@@ -360,8 +424,9 @@ class DouyinRenderPipeline:
                         raise RuntimeError(f"Không tìm thấy file nhạc nền hợp lệ trong thư mục: {settings.music_folder}")
                     warnings.append(f"Không tìm thấy file nhạc nền hợp lệ trong thư mục: {settings.music_folder}")
 
+        video_encoder = "libx264"
         try:
-            self._run_render_with_audio_fallback(
+            video_encoder = self._run_render_with_audio_fallback(
                 video=video,
                 settings=settings,
                 output_path=str(output_path),
@@ -385,7 +450,7 @@ class DouyinRenderPipeline:
                     ) from exc
                 warnings.append(f"Burn subtitle thất bại, thử render lại không subtitle: {exc}")
                 try:
-                    self._run_render_with_audio_fallback(
+                    video_encoder = self._run_render_with_audio_fallback(
                         video=video,
                         settings=settings,
                         output_path=str(output_path),
@@ -410,7 +475,7 @@ class DouyinRenderPipeline:
                         ) from retry_exc
                     warnings.append(f"Render với nhạc nền thất bại, thử render lại chỉ giữ audio gốc: {retry_exc}")
                     bgm_path = None
-                    self._run_render_with_audio_fallback(
+                    video_encoder = self._run_render_with_audio_fallback(
                         video=video,
                         settings=settings,
                         output_path=str(output_path),
@@ -434,7 +499,7 @@ class DouyinRenderPipeline:
                     ) from exc
                 warnings.append(f"Render với nhạc nền thất bại, thử render lại chỉ giữ audio gốc: {exc}")
                 bgm_path = None
-                self._run_render_with_audio_fallback(
+                video_encoder = self._run_render_with_audio_fallback(
                     video=video,
                     settings=settings,
                     output_path=str(output_path),
@@ -468,6 +533,11 @@ class DouyinRenderPipeline:
             "render_subtitle_srt_file": render_subtitle_srt_path,
             "video_slowdown_factor": video_slowdown_factor,
             "voiceover_timing": voiceover_timing,
+            "video_encoder": video_encoder,
+            "gpu_acceleration": {
+                "render_encoder": video_encoder,
+                "render_nvenc_used": video_encoder == "h264_nvenc",
+            },
             "warnings": warnings,
             "errors": errors,
         }
@@ -660,9 +730,9 @@ class DouyinRenderPipeline:
         video_slowdown_factor: float = 1.0,
         subtitle_cover_options: dict | None = None,
         warnings: list[str] | None = None,
-    ) -> None:
+    ) -> str:
         try:
-            self._run_render(
+            return self._run_render(
                 video=video,
                 settings=settings,
                 output_path=output_path,
@@ -675,6 +745,7 @@ class DouyinRenderPipeline:
                 render_duration=render_duration,
                 video_slowdown_factor=video_slowdown_factor,
                 subtitle_cover_options=subtitle_cover_options,
+                warnings=warnings,
             )
         except FFmpegError:
             if not settings.reduce_original_voice:
@@ -688,7 +759,7 @@ class DouyinRenderPipeline:
                     ),
                 }
             )
-            self._run_render(
+            encoder = self._run_render(
                 video=video,
                 settings=retry_settings,
                 output_path=output_path,
@@ -701,12 +772,15 @@ class DouyinRenderPipeline:
                 render_duration=render_duration,
                 video_slowdown_factor=video_slowdown_factor,
                 subtitle_cover_options=subtitle_cover_options,
+                warnings=warnings,
             )
             if warnings is not None:
                 warnings.append(
                     "Giảm giọng Trung bằng bộ lọc center-cancel không chạy ổn với file này; "
                     "đã render lại bằng cách hạ âm lượng audio gốc để giữ batch tiếp tục."
                 )
+
+            return encoder
 
     def _run_render(
         self,
@@ -722,7 +796,8 @@ class DouyinRenderPipeline:
         render_duration: float | None = None,
         video_slowdown_factor: float = 1.0,
         subtitle_cover_options: dict | None = None,
-    ) -> None:
+        warnings: list[str] | None = None,
+    ) -> str:
         duration = max(0.1, float(render_duration or video.duration))
         slowdown = max(1.0, float(video_slowdown_factor or 1.0))
         args = ["-y", "-i", video.path]
@@ -815,24 +890,37 @@ class DouyinRenderPipeline:
             args.extend(["-map", audio_label, "-c:a", "aac", "-b:a", "160k"])
         else:
             args.append("-an")
-        args.extend(
-            [
-                "-t",
-                f"{duration:.3f}",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "superfast",
-                "-crf",
-                "20",
-                "-pix_fmt",
-                "yuv420p",
+        base_args = [*args, "-t", f"{duration:.3f}"]
+        if _should_try_nvenc():
+            nvenc_args = [
+                *base_args,
+                *_nvenc_video_encode_args(),
                 "-movflags",
                 "+faststart",
                 output_path,
             ]
-        )
-        run_ffmpeg(args)
+            try:
+                run_ffmpeg(nvenc_args)
+                _mark_nvenc_available(True)
+                return "h264_nvenc"
+            except FFmpegError as exc:
+                _mark_nvenc_available(False)
+                _remove_partial_output(output_path)
+                if warnings is not None:
+                    warnings.append(
+                        "render_gpu_nvenc_fallback: Đã phát hiện GPU NVIDIA nhưng FFmpeg không dùng được NVENC "
+                        f"({_short_ffmpeg_error(exc)}); đã tự động chuyển sang CPU libx264 cho video này."
+                    )
+
+        cpu_args = [
+            *base_args,
+            *_cpu_video_encode_args(),
+            "-movflags",
+            "+faststart",
+            output_path,
+        ]
+        run_ffmpeg(cpu_args)
+        return "libx264"
 
     @staticmethod
     def _build_audio_filter(

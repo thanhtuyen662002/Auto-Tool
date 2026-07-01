@@ -13,11 +13,11 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -357,6 +357,7 @@ from app.utils.dependency_manager import (
     ensure_runtime_dependencies,
     start_background_dependency_warmup,
 )
+from app.utils.gpu_acceleration import build_gpu_acceleration_report
 from app.utils.gpu_detector import detect_gpu_status
 from app.utils.local_dialog import LocalDialogError, browse_local_path
 from app.utils.path_utils import resolve_path
@@ -365,6 +366,13 @@ from app.version import APP_VERSION
 
 
 logger = logging.getLogger(__name__)
+IMAGE_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+REMOTE_IMAGE_MAX_BYTES = 15 * 1024 * 1024
 _SILENT_PLAN_STORE: dict[str, dict[str, Any]] = {}
 
 
@@ -470,6 +478,7 @@ def create_app() -> FastAPI:
             warmup_ocr_models=False,
         )
         gpu = detect_gpu_status()
+        gpu_acceleration = build_gpu_acceleration_report(report.ocr_provider)
 
         return SystemDependencyStatusResponse(
             ffmpeg_path=report.ffmpeg_path,
@@ -485,8 +494,11 @@ def create_app() -> FastAPI:
             gpu_names=list(gpu.hardware_names),
             gpu_cuda_available=gpu.cuda_available,
             gpu_asr_available=gpu.asr_cuda_available,
+            gpu_ocr_available=bool(gpu_acceleration.get("ocr_gpu_available")),
+            gpu_nvenc_available=bool(gpu_acceleration.get("render_nvenc_available")),
             gpu_detection_method=gpu.detection_method,
             gpu_message=gpu.message,
+            gpu_acceleration=gpu_acceleration,
             warnings=[*list(report.warnings), *list(gpu.warnings)],
         )
 
@@ -3055,14 +3067,53 @@ def create_app() -> FastAPI:
         image_path = Path(path).expanduser().resolve()
         if not image_path.exists() or not image_path.is_file():
             raise HTTPException(status_code=404, detail=f"Image file not found: {image_path}")
-        if image_path.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
-            raise HTTPException(status_code=400, detail="Only PNG/JPG image preview files are supported.")
-        try:
-            image_path.relative_to(app_data_dir().resolve())
-        except ValueError as exc:
-            raise HTTPException(status_code=403, detail="Image path is not a registered Auto Tool preview asset.") from exc
-        media_type = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
+        media_type = IMAGE_MEDIA_TYPES.get(image_path.suffix.lower())
+        if not media_type:
+            raise HTTPException(status_code=400, detail="Only PNG/JPG/WebP image preview files are supported.")
         return FileResponse(image_path, media_type=media_type, filename=image_path.name)
+
+    @app.get("/api/files/remote-image", response_model=None)
+    def get_remote_image_file(url: str = Query(...)) -> Response:
+        remote_url = url.strip()
+        parsed = urlparse(remote_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise HTTPException(status_code=400, detail="Only http/https image URLs are supported.")
+
+        try:
+            import requests
+
+            with requests.get(
+                remote_url,
+                headers={"User-Agent": "AutoToolStudio/1.0"},
+                timeout=12,
+                stream=True,
+            ) as response:
+                if response.status_code >= 400:
+                    raise HTTPException(status_code=502, detail=f"Could not load remote image: HTTP {response.status_code}")
+                content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+                if content_type and not content_type.startswith("image/"):
+                    raise HTTPException(status_code=400, detail="URL does not point to an image file.")
+                chunks: list[bytes] = []
+                total = 0
+                for chunk in response.iter_content(chunk_size=64 * 1024):
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if total > REMOTE_IMAGE_MAX_BYTES:
+                        raise HTTPException(status_code=413, detail="Remote image is too large.")
+                    chunks.append(chunk)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Could not load remote image: {exc}") from exc
+
+        suffix_media_type = IMAGE_MEDIA_TYPES.get(Path(parsed.path).suffix.lower())
+        media_type = content_type or suffix_media_type or "image/jpeg"
+        return Response(
+            content=b"".join(chunks),
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
 
     @app.get("/api/files/audio", response_model=None)
     def get_audio_file(path: str = Query(...)) -> FileResponse:

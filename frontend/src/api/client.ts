@@ -137,7 +137,7 @@ export function sourceVideoFileUrl(path: string): string {
 
 export function assetFileUrl(pathOrUrl: string): string {
   if (pathOrUrl.startsWith('/')) return backendUrl(pathOrUrl);
-  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  if (/^https?:\/\//i.test(pathOrUrl)) return backendUrl(`/api/files/remote-image?url=${encodeURIComponent(pathOrUrl)}`);
   return backendUrl(`/api/files/image?path=${encodeURIComponent(pathOrUrl)}`);
 }
 

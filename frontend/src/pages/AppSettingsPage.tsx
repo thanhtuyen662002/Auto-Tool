@@ -118,6 +118,7 @@ export default function AppSettingsPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <GlassCard className="p-5" strong><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Cpu size={18} className="text-cyan-200" /><h2 className="font-semibold text-white">Hệ thống xử lý</h2></div><GlassBadge variant={dependencies?.ffmpeg_path ? 'success' : 'warning'}>{dependencies?.ffmpeg_path ? 'Sẵn sàng' : 'Cần kiểm tra'}</GlassBadge></div><div className="mt-4 grid gap-2"><Dependency label="Bộ dựng video (FFmpeg)" ready={Boolean(dependencies?.ffmpeg_path)} /><Dependency label="Bộ đọc thông tin video (ffprobe)" ready={Boolean(dependencies?.ffprobe_path)} /><Dependency label={`Đọc chữ trên video${dependencies?.ocr_provider ? ` (${dependencies.ocr_provider})` : ''}`} ready={Boolean(dependencies?.ocr_available)} /><Dependency label="Giọng đọc offline (Piper)" ready={Boolean(dependencies?.piper_path && dependencies?.piper_model_path)} /></div></GlassCard>
           <GlassCard className="p-5" strong><div className="flex items-center gap-2"><Info size={18} className="text-violet-200" /><h2 className="font-semibold text-white">Mặc định quy trình</h2></div><div className="mt-4 grid gap-4"><PathInput label="Thư mục đầu ra mặc định" value={defaultOutputFolder} onChange={setDefaultOutputFolder} /><PathInput label="Thư mục nhạc nền mặc định" value={defaultBgmFolder} onChange={setDefaultBgmFolder} /></div></GlassCard>
+          <GpuAccelerationSettingsCard dependencies={dependencies} />
         </div>
 
         <details className="glass-card-strong p-5">
@@ -199,6 +200,50 @@ export default function AppSettingsPage() {
 
 function Dependency({ label, ready }: { label: string; ready: boolean }) {
   return <div className="flex items-center justify-between rounded-md bg-black/15 px-3 py-2 text-sm"><span className="text-slate-300">{label}</span><span className={ready ? 'text-emerald-200' : 'text-amber-200'}><CheckCircle2 size={16} /></span></div>;
+}
+
+function GpuAccelerationSettingsCard({ dependencies }: { dependencies: SystemDependencyStatusResponse | null }) {
+  const report = dependencies?.gpu_acceleration;
+  const features = report?.features ?? [];
+  const gpuName = dependencies?.gpu_name || report?.hardware_name || 'GPU';
+  const hasGpu = Boolean(dependencies?.gpu_available || report?.hardware_available);
+  return (
+    <GlassCard className="p-5" strong>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Cpu size={18} className="text-cyan-200" />
+          <h2 className="font-semibold text-white">Tăng tốc RTX/GPU</h2>
+        </div>
+        <GlassBadge variant={hasGpu ? 'success' : 'neutral'}>{hasGpu ? gpuName : 'CPU an toàn'}</GlassBadge>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-slate-400">
+        Tool sẽ tự dùng GPU cho phần sẵn sàng và tự quay về CPU nếu máy không có CUDA/NVENC.
+      </p>
+      <div className="mt-4 grid gap-2">
+        {features.length ? features.map((feature) => (
+          <Dependency key={feature.id} label={`${formatGpuFeatureLabel(feature.id, feature.label)}${feature.engine ? ` - ${feature.engine}` : ''}`} ready={Boolean(feature.available)} />
+        )) : (
+          <>
+            <Dependency label="Nghe lời thoại/ASR - CPU fallback" ready={false} />
+            <Dependency label="Đọc chữ OCR - CPU fallback" ready={false} />
+            <Dependency label="Render video - libx264" ready={false} />
+          </>
+        )}
+      </div>
+      {report?.notes?.length ? (
+        <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
+          {report.notes.slice(0, 2).join(' ')}
+        </div>
+      ) : null}
+    </GlassCard>
+  );
+}
+
+function formatGpuFeatureLabel(id: string | undefined, fallback: string): string {
+  if (id === 'asr') return 'Nghe lời thoại/ASR';
+  if (id === 'ocr') return 'Đọc chữ OCR';
+  if (id === 'render') return 'Render video';
+  return fallback;
 }
 
 function normalizeSettings(settings: AppSettings): AppSettings {

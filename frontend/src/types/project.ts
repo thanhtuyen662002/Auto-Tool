@@ -412,9 +412,39 @@ export interface SystemDependencyStatusResponse {
   gpu_names?: string[];
   gpu_cuda_available?: boolean;
   gpu_asr_available?: boolean;
+  gpu_ocr_available?: boolean;
+  gpu_nvenc_available?: boolean;
   gpu_detection_method?: string | null;
   gpu_message?: string | null;
+  gpu_acceleration?: GpuAccelerationReport;
   warnings: string[];
+}
+
+export interface GpuAccelerationFeature {
+  id: string;
+  label: string;
+  available: boolean;
+  engine?: string | null;
+}
+
+export interface GpuAccelerationReport {
+  status?: string;
+  safe_cpu_fallback?: boolean;
+  hardware_available?: boolean;
+  hardware_name?: string | null;
+  hardware_names?: string[];
+  cuda_available?: boolean;
+  asr_cuda_available?: boolean;
+  torch_cuda_available?: boolean;
+  detection_method?: string | null;
+  ocr_provider?: string | null;
+  ocr_gpu_available?: boolean;
+  ocr_gpu_mode?: string | null;
+  render_nvenc_available?: boolean;
+  render_encoder_preferred?: string | null;
+  features?: GpuAccelerationFeature[];
+  notes?: string[];
+  warnings?: string[];
 }
 
 export interface MediaFile {
@@ -687,12 +717,25 @@ export interface DouyinOutputResult {
   can_retry?: boolean;
   duration?: number | null;
   durations?: Record<string, number>;
+  gpu_profile?: GpuRuntimeProfile;
   retry_history?: Array<Record<string, string | null>>;
   final_output_qa?: FinalOutputQASummary | null;
   publish_manifest_file?: string | null;
   cleanup_report?: OutputCleanupReport | null;
   warnings: string[];
   errors: string[];
+}
+
+export interface GpuRuntimeProfile {
+  readiness?: GpuAccelerationReport;
+  asr_device?: string;
+  asr_cuda_used?: boolean;
+  ocr_provider?: string | null;
+  ocr_gpu_ready?: boolean;
+  subtitle_source?: string | null;
+  render_encoder?: string | null;
+  render_nvenc_used?: boolean;
+  safe_cpu_fallback?: boolean;
 }
 
 export interface DouyinReupSummary {
@@ -732,6 +775,16 @@ export interface DouyinReupSummary {
     average_render_seconds_per_video: number;
     total_runtime_seconds: number;
     slowest_step: string;
+  };
+  gpu_acceleration?: {
+    safe_cpu_fallback?: boolean;
+    profiled_videos?: number;
+    render_nvenc_videos?: number;
+    render_cpu_videos?: number;
+    asr_cuda_videos?: number;
+    ocr_gpu_ready_videos?: number;
+    encoder_counts?: Record<string, number>;
+    readiness?: GpuAccelerationReport;
   };
   ocr_summary?: {
     videos_attempted: number;
@@ -1384,6 +1437,7 @@ export interface JobOutput {
   caption?: string | null;
   hashtags?: string[];
   crop_safety?: CropSafetyOutputSummary;
+  gpu_profile?: GpuRuntimeProfile;
   log_file?: string;
   error?: string;
   warnings?: string[];

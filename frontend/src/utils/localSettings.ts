@@ -1,3 +1,5 @@
+import { backendUrl } from '../services/api';
+
 export type GlassIntensity = 'soft' | 'medium' | 'strong';
 export type MotionPreference = 'normal' | 'reduce';
 export type LayoutDensity = 'comfortable' | 'compact';
@@ -268,8 +270,10 @@ function applyThemeVariables(root: HTMLElement, settings: LocalUiSettings) {
 export function resolveBackgroundImageUrl(settings: LocalUiSettings): string {
   const source = settings.backgroundImageSource.trim();
   if (!source) return '';
-  if (settings.backgroundImageMode === 'url' || /^data:image\//i.test(source) || /^https?:\/\//i.test(source)) return source;
-  return `/api/files/image?path=${encodeURIComponent(source)}`;
+  if (/^data:image\//i.test(source)) return source;
+  if (/^https?:\/\//i.test(source)) return backendUrl(`/api/files/remote-image?url=${encodeURIComponent(source)}`);
+  if (source.startsWith('/api/')) return backendUrl(source);
+  return backendUrl(`/api/files/image?path=${encodeURIComponent(source)}`);
 }
 
 function normalizeGlass(value: string): GlassIntensity {

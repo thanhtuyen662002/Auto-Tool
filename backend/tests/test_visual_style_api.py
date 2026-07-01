@@ -54,6 +54,52 @@ def test_visual_style_api_lists_previews_and_updates_project(tmp_path, monkeypat
         assert project_detail.json()["config"]["visual_style"]["preset_id"] == "sale_bold_red"
 
 
+def test_image_file_api_allows_user_selected_background(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AUTO_TOOL_DATA_DIR", str(tmp_path / "data"))
+    database.DB_PATH = tmp_path / "autotool-style-test.db"
+    background = tmp_path / "outside-app-data" / "background.webp"
+    background.parent.mkdir()
+    background.write_bytes(b"not-a-real-image-but-preview-endpoint-serves-by-extension")
+
+    with TestClient(create_app()) as client:
+        response = client.get("/api/files/image", params={"path": str(background)})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/webp")
+
+
+def test_remote_image_api_proxies_external_background(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AUTO_TOOL_DATA_DIR", str(tmp_path / "data"))
+    database.DB_PATH = tmp_path / "autotool-style-test.db"
+
+    class FakeRemoteImageResponse:
+        status_code = 200
+        headers = {"content-type": "image/png"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def iter_content(self, chunk_size: int):
+            yield b"\x89PNG\r\n"
+
+    def fake_get(url: str, **_kwargs):
+        assert url == "https://example.com/background.png"
+        return FakeRemoteImageResponse()
+
+    import requests
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    with TestClient(create_app()) as client:
+        response = client.get("/api/files/remote-image", params={"url": "https://example.com/background.png"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert response.content.startswith(b"\x89PNG")
+
+
 def _project_config(tmp_path: Path) -> dict:
     source_dir = tmp_path / "source"
     output_dir = tmp_path / "outputs"

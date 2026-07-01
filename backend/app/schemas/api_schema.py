@@ -158,8 +158,11 @@ class SystemDependencyStatusResponse(BaseModel):
     gpu_names: list[str] = Field(default_factory=list)
     gpu_cuda_available: bool = False
     gpu_asr_available: bool = False
+    gpu_ocr_available: bool = False
+    gpu_nvenc_available: bool = False
     gpu_detection_method: str | None = None
     gpu_message: str | None = None
+    gpu_acceleration: dict[str, Any] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
 
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from app.adapters.ffmpeg_adapter import FFmpegError
+from app.modules.douyin_reup import douyin_render_pipeline as pipeline_module
 from app.modules.douyin_reup.douyin_render_pipeline import (
     DouyinRenderPipeline,
     _visual_style_overrides,
@@ -11,6 +13,7 @@ from app.modules.douyin_reup.douyin_render_pipeline import (
 )
 from app.modules.douyin_reup.douyin_schema import DouyinReupSettings, DouyinVideoItem
 from app.modules.douyin_reup.subtitle_timing_guard import SubtitleBlock
+from app.utils.gpu_detector import GpuStatus
 
 
 def test_smooth_voiceover_groups_fragmented_subtitle_blocks():
@@ -151,6 +154,70 @@ def test_audio_filter_can_reduce_original_voice_with_center_cancel():
     assert label == "[aout]"
     assert "aformat=channel_layouts=stereo" in audio_filter
     assert "pan=stereo|c0=c0-0.700*c1|c1=c1-0.700*c0" in audio_filter
+
+
+def test_render_uses_nvenc_when_nvidia_gpu_is_available(monkeypatch):
+    monkeypatch.delenv("AUTO_TOOL_DISABLE_NVENC", raising=False)
+    monkeypatch.setattr(pipeline_module, "_NVENC_AVAILABLE", None)
+    monkeypatch.setattr(
+        pipeline_module,
+        "detect_gpu_status",
+        lambda: GpuStatus(hardware_available=True, hardware_name="NVIDIA RTX", hardware_names=("NVIDIA RTX",)),
+    )
+    monkeypatch.setattr(pipeline_module, "is_nvenc_ready", lambda: True)
+    captured: list[list[str]] = []
+    monkeypatch.setattr(pipeline_module, "run_ffmpeg", lambda args: captured.append(args))
+
+    DouyinRenderPipeline()._run_render(
+        video=DouyinVideoItem(path="input.mp4", filename="input.mp4", duration=5, width=1080, height=1920, fps=30, has_audio=False),
+        settings=DouyinReupSettings(enabled=True, burn_subtitle=False, keep_original_audio=False, add_bgm=False),
+        output_path="output.mp4",
+        width=1080,
+        height=1920,
+        overlay_path=None,
+        subtitle_ass_path=None,
+        bgm_path=None,
+    )
+
+    assert len(captured) == 1
+    assert "h264_nvenc" in captured[0]
+
+
+def test_render_falls_back_to_libx264_when_nvenc_fails(monkeypatch):
+    monkeypatch.delenv("AUTO_TOOL_DISABLE_NVENC", raising=False)
+    monkeypatch.setattr(pipeline_module, "_NVENC_AVAILABLE", None)
+    monkeypatch.setattr(
+        pipeline_module,
+        "detect_gpu_status",
+        lambda: GpuStatus(hardware_available=True, hardware_name="NVIDIA RTX", hardware_names=("NVIDIA RTX",)),
+    )
+    monkeypatch.setattr(pipeline_module, "is_nvenc_ready", lambda: True)
+    calls: list[list[str]] = []
+
+    def fake_run_ffmpeg(args: list[str]) -> None:
+        calls.append(args)
+        if "h264_nvenc" in args:
+            raise FFmpegError("No capable devices found")
+
+    monkeypatch.setattr(pipeline_module, "run_ffmpeg", fake_run_ffmpeg)
+    warnings: list[str] = []
+
+    DouyinRenderPipeline()._run_render(
+        video=DouyinVideoItem(path="input.mp4", filename="input.mp4", duration=5, width=1080, height=1920, fps=30, has_audio=False),
+        settings=DouyinReupSettings(enabled=True, burn_subtitle=False, keep_original_audio=False, add_bgm=False),
+        output_path="output.mp4",
+        width=1080,
+        height=1920,
+        overlay_path=None,
+        subtitle_ass_path=None,
+        bgm_path=None,
+        warnings=warnings,
+    )
+
+    assert len(calls) == 2
+    assert "h264_nvenc" in calls[0]
+    assert "libx264" in calls[1]
+    assert any("render_gpu_nvenc_fallback" in warning for warning in warnings)
 
 
 def test_visual_style_overrides_include_custom_vietnamese_subtitle_style():

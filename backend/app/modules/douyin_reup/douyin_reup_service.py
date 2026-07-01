@@ -49,6 +49,7 @@ from app.modules.silent_immersive_reup.silent_reup_service import is_silent_reup
 from app.modules.subtitle_review import SubtitleReviewService
 from app.schemas.project_schema import ProjectConfig
 from app.utils.file_utils import ensure_dir, write_json
+from app.utils.gpu_acceleration import runtime_gpu_profile
 from app.utils.process_isolation import run_in_isolated_process
 
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -507,6 +508,7 @@ class DouyinReupService:
         result_status = "success"
         final_qa_report = None
         render_payload: dict[str, Any] | None = None
+        gpu_profile = runtime_gpu_profile(settings)
         retry_steps = retry_steps or {"asr", "translation", "render"}
         cached_output = cached_output or {}
         source_retry_requested = bool(retry_steps.intersection({"subtitle_source", "source", "asr", "ocr"}))
@@ -572,6 +574,7 @@ class DouyinReupService:
                     failed_step = "asr"
                 raise RuntimeError(_friendly_error("; ".join(errors) or f"Không tìm thấy subtitle nguồn cho video {video.filename}."))
 
+            gpu_profile = runtime_gpu_profile(settings, subtitle_source=source_result.source_type)
             translated_path = video_dir / f"video_{index:03d}_{settings.target_language}.srt"
             cached_translated_srt = None if translation_retry_requested else _existing_cached_path(cached_output.get("translated_srt_file"))
             if cached_translated_srt:
@@ -680,6 +683,7 @@ class DouyinReupService:
                     log_file=str(log_path),
                     duration=video.duration,
                     durations=_round_durations(durations),
+                    gpu_profile=gpu_profile,
                     retry_history=retry_history,
                     warnings=_dedupe(warnings),
                     errors=[],
@@ -711,6 +715,11 @@ class DouyinReupService:
                 render_kwargs["gemini_model_name"] = config.ai.text_model
             render_payload = self.render_pipeline.render_video_with_translated_subtitle(**render_kwargs)
             durations["render_seconds"] = time.perf_counter() - render_started
+            gpu_profile = runtime_gpu_profile(
+                settings,
+                subtitle_source=source_result.source_type,
+                render_encoder=str(render_payload.get("video_encoder") or "libx264"),
+            )
 
             # Tự động chia nhỏ video dài thành nhiều tập ngắn nếu bật cấu hình
             if getattr(settings, "split_long_video", False):
@@ -783,6 +792,7 @@ class DouyinReupService:
                 **_subtitle_quality_output_fields(source_result),
                 duration=render_payload.get("duration"),
                 durations=_round_durations(durations),
+                gpu_profile=gpu_profile,
                 retry_history=retry_history,
                 final_output_qa={
                     **_final_qa_summary(final_qa_report),
@@ -825,6 +835,7 @@ class DouyinReupService:
                 can_retry=True,
                 duration=video.duration,
                 durations=_round_durations(durations),
+                gpu_profile=gpu_profile,
                 retry_history=retry_history,
                 warnings=_dedupe(warnings),
                 errors=_dedupe(errors),
@@ -844,6 +855,7 @@ class DouyinReupService:
                     "source_video": video.path,
                     "steps": steps,
                     "durations": _round_durations(durations),
+                    "gpu_profile": gpu_profile,
                     "retry_history": retry_history,
                     "warnings": _dedupe(warnings),
                     "errors": _dedupe(errors),
@@ -888,6 +900,8 @@ class DouyinReupService:
                         "render_subtitle_srt_file": render_payload.get("render_subtitle_srt_file"),
                         "video_slowdown_factor": render_payload.get("video_slowdown_factor"),
                         "voiceover_timing": render_payload.get("voiceover_timing"),
+                        "video_encoder": render_payload.get("video_encoder"),
+                        "gpu_acceleration": render_payload.get("gpu_acceleration"),
                     }
                 write_json(log_path, payload)
 

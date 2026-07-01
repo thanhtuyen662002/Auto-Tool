@@ -2577,6 +2577,7 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
             <div>
               <h3 className="font-semibold text-white">{friendlyTermLabel('ocr')}</h3>
               <div className={dependencyStatus?.ocr_available ? 'mt-1 text-xs text-emerald-300' : 'mt-1 text-xs text-amber-300'}>{formatOcrDependencyStatus(dependencyStatus)}</div>
+              <div className="mt-1 text-xs text-slate-400">{formatGpuAccelerationStatus(dependencyStatus)}</div>
             </div>
             <Toggle label="Đọc chữ trên video khi cần" checked={settings.use_ocr_if_no_subtitle || settings.use_ocr_if_asr_failed} onChange={(value) => updateAdvancedSettings({ use_ocr_if_no_subtitle: value, use_ocr_if_asr_failed: value })} />
           </div>
@@ -4679,4 +4680,17 @@ function formatOcrDependencyStatus(status: SystemDependencyStatusResponse | null
   if (!status) return 'Đang kiểm tra bộ đọc chữ trên video khi khởi động.';
   if (status.ocr_available) return `Bộ đọc chữ đã sẵn sàng: ${status.ocr_provider || 'mặc định'}.`;
   return status.ocr_message || 'Tool đang tự chuẩn bị bộ đọc chữ trong nền.';
+}
+
+function formatGpuAccelerationStatus(status: SystemDependencyStatusResponse | null): string {
+  if (!status) return 'Tăng tốc GPU: đang kiểm tra.';
+  const report = status.gpu_acceleration;
+  if (!status.gpu_available && !report?.hardware_available) return 'Tăng tốc GPU: không có GPU, chạy CPU an toàn.';
+  const ready: string[] = [];
+  if (report?.asr_cuda_available || status.gpu_asr_available) ready.push('ASR CUDA');
+  if (report?.ocr_gpu_available || status.gpu_ocr_available) ready.push('OCR GPU');
+  if (report?.render_nvenc_available || status.gpu_nvenc_available) ready.push('NVENC render');
+  return ready.length
+    ? `Tăng tốc GPU sẵn sàng: ${ready.join(', ')}.`
+    : 'Đã thấy GPU nhưng CUDA/NVENC chưa sẵn sàng, tool sẽ tự chạy CPU.';
 }

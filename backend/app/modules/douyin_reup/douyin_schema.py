@@ -457,6 +457,7 @@ class DouyinOutputResult(BaseModel):
     can_retry: bool = False
     duration: float | None = None
     durations: dict[str, float] = Field(default_factory=dict)
+    gpu_profile: dict[str, Any] = Field(default_factory=dict)
     retry_history: list[dict[str, str | None]] = Field(default_factory=list)
     final_output_qa: dict | None = None
     publish_manifest_file: str | None = None
@@ -480,4 +481,5 @@ class DouyinReupSummary(BaseModel):
     outputs: list[DouyinOutputResult] = Field(default_factory=list)
     subtitle_review: dict[str, int | bool] = Field(default_factory=dict)
     silent_immersive: dict[str, Any] = Field(default_factory=dict)
+    gpu_acceleration: dict[str, Any] = Field(default_factory=dict)
     summary_file: str | None = None
