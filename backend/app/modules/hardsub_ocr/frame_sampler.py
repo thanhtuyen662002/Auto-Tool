@@ -17,6 +17,9 @@ class FrameSampler:
         media = probe_video(video_path)
         fps = max(0.1, float(sample_fps or 2.0))
         frame_limit = max(1, int(max_frames))
+        duration = max(0.1, float(media.duration or 0.1))
+        expected_frames = max(1, int(duration * fps))
+        effective_fps = min(fps, max(0.01, frame_limit / duration)) if expected_frames > frame_limit else fps
         target_dir = ensure_dir(output_dir)
         output_pattern = target_dir / "sample_%06d.jpg"
         run_ffmpeg(
@@ -25,7 +28,7 @@ class FrameSampler:
                 "-i",
                 str(Path(video_path).expanduser().resolve()),
                 "-vf",
-                f"fps={fps:.6f},scale='min(480,iw)':-2",
+                f"fps={effective_fps:.6f},scale='min(480,iw)':-2",
                 "-frames:v",
                 str(frame_limit),
                 "-q:v",
@@ -35,7 +38,7 @@ class FrameSampler:
         )
 
         duration_ms = max(1, int(round(media.duration * 1000)))
-        interval_ms = max(1, int(round(1000 / fps)))
+        interval_ms = max(1, int(round(1000 / effective_fps)))
         sampled: list[tuple[int, str]] = []
         for index, frame_path in enumerate(sorted(target_dir.glob("sample_*.jpg"))):
             if frame_path.stat().st_size <= 0:

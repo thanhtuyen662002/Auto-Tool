@@ -10,6 +10,7 @@ from app.modules.queue_control.queue_control_schema import (
 )
 from app.modules.queue_control.queue_event_logger import QueueEventLogger
 from app.modules.queue_control.queue_state_service import QueueStateService
+from app.utils.subprocess_utils import terminate_all_tracked_processes
 
 
 class QueueControlService:
@@ -67,13 +68,21 @@ class QueueControlService:
             lambda current: current.model_copy(update={"status": QueueRunStatus.cancel_requested, "cancel_requested": True}),
         )
         database.update_job(job_id, status="cancel_requested", current_step=state.current_step or "cancel_requested")
-        database.add_job_log(job_id, "warning", "Người dùng yêu cầu hủy batch. Output đã xong sẽ được giữ lại.")
+        killed_processes = terminate_all_tracked_processes(reason=f"cancel queue job {job_id}")
+        database.add_job_log(
+            job_id,
+            "warning",
+            (
+                "Người dùng yêu cầu hủy batch. Output đã xong sẽ được giữ lại. "
+                f"Đã dọn {killed_processes} tiến trình OCR/FFmpeg/TTS đang chạy."
+            ),
+        )
         self.events.log_event(job_id, "cancel_requested", output_dir=state.output_dir)
         return QueueActionResult(
             success=True,
             job_id=job_id,
             action=QueueControlAction.cancel,
-            message="Job sẽ hủy an toàn trước item tiếp theo.",
+            message="Đã gửi yêu cầu hủy và dọn tiến trình đang chạy. Job sẽ chuyển sang Đã hủy sau vài giây.",
         )
 
     def skip_items(self, job_id: str, item_ids: list[str]) -> QueueActionResult:

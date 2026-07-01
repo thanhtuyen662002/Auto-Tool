@@ -121,7 +121,7 @@ function QueueRow({ item, selected, onToggle }: { item: QueueItem; selected: boo
       </div>
       <div className="text-sm">
         <div className="font-semibold text-ink">{statusLabel(item.status)}</div>
-        <div className="mt-1 text-xs text-muted">{item.current_step || 'Chưa chạy'}</div>
+        <div className="mt-1 text-xs text-muted">{formatQueueStep(item.current_step || 'Chưa chạy')}</div>
       </div>
       <div className="text-sm">
         <div className="font-semibold text-ink">{Math.round(item.progress_percent || 0)}%</div>
@@ -154,4 +154,30 @@ function statusLabel(status: string): string {
     needs_review: 'Cần xem lại',
   };
   return labels[status] ?? status;
+}
+
+function formatQueueStep(step: string): string {
+  const normalized = step.toLowerCase();
+  const labels: Record<string, string> = {
+    item_worker_start: 'Đang khởi động worker xử lý video',
+    subtitle_source: 'Đang xác định nguồn phụ đề',
+    asr_extracting_audio: 'Đang tách âm thanh để nhận diện thoại',
+    asr_loading_model: 'Đang nạp model nhận diện thoại',
+    asr_transcribing: 'Đang nhận diện lời thoại',
+    asr_writing_subtitles: 'Đang ghi phụ đề nhận diện',
+    ocr_probe: 'Đang kiểm tra chữ trên video',
+    ocr_loading_model: 'Đang chuẩn bị bộ đọc chữ',
+    ocr_sampling_frames: 'Đang lấy frame phụ đề',
+    ocr_recognizing: 'Đang nhận diện chữ trên video',
+    ocr_merging_lines: 'Đang ghép dòng chữ nhận diện',
+    translation: 'Đang dịch phụ đề',
+    timing_guard: 'Đang căn thời gian phụ đề',
+    render: 'Đang dựng video',
+    final_output_qa: 'Đang kiểm tra video đầu ra',
+    completed: 'Hoàn thành',
+    cancelled: 'Đã hủy',
+    failed: 'Thất bại',
+  };
+  const matched = Object.keys(labels).find((key) => normalized === key || normalized.endsWith(`_${key}`));
+  return matched ? labels[matched] : step;
 }

@@ -12,7 +12,7 @@ import GlassModal from '../components/glass/GlassModal';
 import NotifyOnChange from '../components/notifications/NotifyOnChange';
 
 
-const ACTIVE_STATUSES = new Set(['queued', 'running', 'paused']);
+const ACTIVE_STATUSES = new Set(['queued', 'running', 'paused', 'pausing', 'resuming', 'cancel_requested']);
 
 export default function ResultsPage() {
   const [jobs, setJobs] = useState<JobStatus[]>([]);
@@ -95,6 +95,7 @@ export default function ResultsPage() {
     const projectId = (job.project_id || '').toLowerCase();
     if (mode === 'douyin_reup') return { label: 'Reup có thoại', variant: 'ready' };
     if (mode === 'silent_reup') return { label: 'Silent Mode', variant: 'processing' };
+    if (mode === 'long_video') return { label: 'Video dài/Phim', variant: 'processing' };
     if (mode === 'subtitle_render') return { label: 'Sửa phụ đề', variant: 'warning' };
     if (mode === 'product_render') return { label: 'Video Affiliate', variant: 'success' };
     return { label: getJobTypeLabel(projectId), variant: projectId.startsWith('silent_') ? 'processing' : 'neutral' };
@@ -108,6 +109,12 @@ export default function ResultsPage() {
         return <GlassBadge variant="processing"><Loader2 className="mr-1 h-3 w-3 animate-spin inline" />Đang chạy</GlassBadge>;
       case 'paused':
         return <GlassBadge variant="warning">Tạm dừng</GlassBadge>;
+      case 'pausing':
+        return <GlassBadge variant="warning">Đang tạm dừng</GlassBadge>;
+      case 'resuming':
+        return <GlassBadge variant="processing">Đang tiếp tục</GlassBadge>;
+      case 'cancel_requested':
+        return <GlassBadge variant="warning">Đang hủy</GlassBadge>;
       case 'completed':
         return <GlassBadge variant="success">Hoàn thành</GlassBadge>;
       case 'completed_with_errors':

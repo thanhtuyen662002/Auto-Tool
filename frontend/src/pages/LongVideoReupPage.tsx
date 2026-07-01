@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Film, Play, AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert, Cpu } from 'lucide-react';
 import GlassCard from '../components/glass/GlassCard';
 import GlassButton from '../components/glass/GlassButton';
@@ -6,16 +6,25 @@ import PathInput from '../components/PathInput';
 import SliderInput from '../components/SliderInput';
 import { scanDouyinFolder, startDouyinOneClick, getHealth } from '../services/startWorkflowApi';
 import { emitNotification } from '../components/notifications/NotificationProvider';
-import { getAppSettings } from '../api/client';
+import { getAppSettings, getGoogleCloudTTSVoices } from '../api/client';
 import type { DouyinVideoItem, DouyinReupSettings } from '../types/project';
 
 const VIETNAMESE_TTS_VOICES = [
-  { provider: 'edge_tts', voice: 'vi-VN-HoaiMyNeural', label: 'Edge TTS - Hoài My (Nữ)' },
-  { provider: 'edge_tts', voice: 'vi-VN-NamMinhNeural', label: 'Edge TTS - Nam Minh (Nam)' },
-  { provider: 'piper', voice: 'vi_VN-vais1000-medium', label: 'Piper Offline (Nam)' },
-  { provider: 'google_cloud_tts', voice: 'vi-VN-Wavenet-A', label: 'Google Cloud - Wavenet A (Nữ)' },
-  { provider: 'google_cloud_tts', voice: 'vi-VN-Wavenet-D', label: 'Google Cloud - Wavenet D (Nam)' },
+  { provider: 'edge_tts', voice: 'vi-VN-HoaiMyNeural', label: 'Edge TTS - Hoài My (Nữ)', gender: 'female' },
+  { provider: 'edge_tts', voice: 'vi-VN-NamMinhNeural', label: 'Edge TTS - Nam Minh (Nam)', gender: 'male' },
+  { provider: 'piper', voice: 'vi_VN-vais1000-medium', label: 'Piper Offline - giọng Việt local', gender: 'neutral' },
+  { provider: 'google_cloud_tts', voice: 'vi-VN-Wavenet-A', label: 'Google Cloud - Wavenet A (Nữ)', gender: 'female' },
+  { provider: 'google_cloud_tts', voice: 'vi-VN-Wavenet-B', label: 'Google Cloud - Wavenet B (Nam)', gender: 'male' },
+  { provider: 'google_cloud_tts', voice: 'vi-VN-Wavenet-C', label: 'Google Cloud - Wavenet C (Nữ)', gender: 'female' },
+  { provider: 'google_cloud_tts', voice: 'vi-VN-Wavenet-D', label: 'Google Cloud - Wavenet D (Nam)', gender: 'male' },
+  { provider: 'google_cloud_tts', voice: 'vi-VN-Standard-A', label: 'Google Cloud - Standard A (Nữ)', gender: 'female' },
+  { provider: 'google_cloud_tts', voice: 'vi-VN-Standard-B', label: 'Google Cloud - Standard B (Nam)', gender: 'male' },
+  { provider: 'google_cloud_tts', voice: 'vi-VN-Standard-C', label: 'Google Cloud - Standard C (Nữ)', gender: 'female' },
+  { provider: 'google_cloud_tts', voice: 'vi-VN-Standard-D', label: 'Google Cloud - Standard D (Nam)', gender: 'male' },
 ];
+
+type VoiceOption = (typeof VIETNAMESE_TTS_VOICES)[number];
+type SplitDurationUnit = 'seconds' | 'minutes';
 
 export default function LongVideoReupPage() {
   const [sourceFolder, setSourceFolder] = useState('');
@@ -42,6 +51,8 @@ export default function LongVideoReupPage() {
   const [narratorVoice, setNarratorVoice] = useState('vi-VN-HoaiMyNeural');
   const [maleVoice, setMaleVoice] = useState('vi-VN-NamMinhNeural');
   const [femaleVoice, setFemaleVoice] = useState('vi-VN-HoaiMyNeural');
+  const [favoriteGoogleVoices, setFavoriteGoogleVoices] = useState<string[]>([]);
+  const [availableGoogleVoices, setAvailableGoogleVoices] = useState<string[]>([]);
   
   // Tỷ lệ khung hình xuất
   const [dimensionMode, setDimensionMode] = useState<'vertical' | 'horizontal' | 'square' | 'auto'>('auto');
@@ -49,6 +60,7 @@ export default function LongVideoReupPage() {
   // Cấu hình chia tập nhỏ video
   const [splitLongVideo, setSplitLongVideo] = useState(false);
   const [splitMaxDuration, setSplitMaxDuration] = useState(55);
+  const [splitDurationUnit, setSplitDurationUnit] = useState<SplitDurationUnit>('seconds');
   const [splitPartPrefix, setSplitPartPrefix] = useState('Phần');
   const [splitLabelDurationMode, setSplitLabelDurationMode] = useState<'always' | 'intro_5s'>('always');
   const [splitLabelPosition, setSplitLabelPosition] = useState<'top_center' | 'bottom_center' | 'top_left' | 'top_right'>('top_center');
@@ -63,6 +75,22 @@ export default function LongVideoReupPage() {
       .then((settings: any) => {
         if (settings.last_source_folder) setSourceFolder(settings.last_source_folder);
         if (settings.last_output_folder) setOutputFolder(settings.last_output_folder);
+        setFavoriteGoogleVoices(settings.google_tts_favorite_voices ?? []);
+        const hasGoogleAuth = Boolean(
+          settings.google_tts_api_key || settings.google_tts_credentials_json_path || settings.google_tts_access_token,
+        );
+        if (hasGoogleAuth) {
+          getGoogleCloudTTSVoices(
+            {
+              apiKey: settings.google_tts_api_key,
+              credentialsJsonPath: settings.google_tts_credentials_json_path,
+              accessToken: settings.google_tts_access_token,
+            },
+            'vi-VN',
+          )
+            .then((response) => setAvailableGoogleVoices(response.voices.map((voice) => voice.name).filter(Boolean)))
+            .catch(() => setAvailableGoogleVoices([]));
+        }
       })
       .catch(() => {});
 
@@ -80,6 +108,40 @@ export default function LongVideoReupPage() {
       });
   }, []);
 
+  const voiceOptions = useMemo(
+    () => buildVoiceOptions(availableGoogleVoices, favoriteGoogleVoices),
+    [availableGoogleVoices, favoriteGoogleVoices],
+  );
+  const narratorVoiceOption = useMemo(
+    () => voiceOptions.find((item) => item.voice === narratorVoice) || voiceOptions[0],
+    [narratorVoice, voiceOptions],
+  );
+  const maleVoiceOptions = useMemo(
+    () => voiceOptions.filter((item) => item.gender === 'male' || item.gender === 'neutral'),
+    [voiceOptions],
+  );
+  const femaleVoiceOptions = useMemo(
+    () => voiceOptions.filter((item) => item.gender === 'female' || item.gender === 'neutral'),
+    [voiceOptions],
+  );
+  const splitDisplayDuration = splitDurationUnit === 'minutes'
+    ? Number((splitMaxDuration / 60).toFixed(2))
+    : splitMaxDuration;
+  const longestVideoSeconds = useMemo(
+    () => Math.max(0, ...videos.map((video) => Number(video.duration) || 0)),
+    [videos],
+  );
+  const longVideoTimeouts = useMemo(() => buildLongVideoTimeouts(longestVideoSeconds), [longestVideoSeconds]);
+
+  function updateSplitDuration(value: string) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+      setSplitMaxDuration(1);
+      return;
+    }
+    setSplitMaxDuration(splitDurationUnit === 'minutes' ? Math.round(numericValue * 60) : numericValue);
+  }
+
   const handleScan = async () => {
     if (!sourceFolder.trim()) {
       emitNotification({ variant: 'warning', message: 'Vui lòng chọn thư mục chứa video nguồn' });
@@ -90,7 +152,9 @@ export default function LongVideoReupPage() {
       const response = await scanDouyinFolder(sourceFolder);
       const items = response.media || [];
       setVideos(items);
-      emitNotification({ variant: 'success', message: `Đã quét được ${items.length} video trong thư mục` });
+      const longest = Math.max(0, ...items.map((item) => Number(item.duration) || 0));
+      const longHint = longest >= 900 ? ' Video dài sẽ được theo dõi bằng tiến độ OCR/render chi tiết.' : '';
+      emitNotification({ variant: 'success', message: `Đã quét được ${items.length} video trong thư mục.${longHint}` });
     } catch (err: any) {
       emitNotification({ variant: 'error', message: `Không thể quét thư mục: ${err.message || err}` });
     } finally {
@@ -117,6 +181,7 @@ export default function LongVideoReupPage() {
         enabled: true,
         preset_id: selectedPresetId,
         preset_name: mode === 'viet_sub' ? 'Phim - Chỉ chèn Sub Việt' : 'Phim - Thuyết minh Việt',
+        long_video_mode: mode,
         burn_subtitle: true,
         
         // Cấu hình âm thanh video dài
@@ -132,7 +197,7 @@ export default function LongVideoReupPage() {
         
         // Thuyết minh & Multi-speaker
         generate_voiceover_for_silent_video: mode === 'dubbing',
-        silent_voiceover_provider: 'edge_tts',
+        silent_voiceover_provider: narratorVoiceOption?.provider || 'edge_tts',
         silent_voiceover_voice: narratorVoice,
         
         // Cấu hình multi-speaker (Dành riêng cho phim dài)
@@ -153,6 +218,17 @@ export default function LongVideoReupPage() {
         split_label_font_color: splitLabelFontColor,
         split_label_bg_color: splitLabelBgColor,
         split_label_bg_opacity: splitLabelBgOpacity,
+
+        // Video dài cần timeout rộng hơn batch Douyin ngắn để tránh bị hiểu nhầm là treo.
+        asr_max_audio_seconds: 0,
+        ocr_max_sample_frames: longVideoTimeouts.ocrFrames,
+        asr_subprocess_isolation: true,
+        ocr_subprocess_isolation: true,
+        asr_timeout_seconds: longVideoTimeouts.asr,
+        ocr_timeout_seconds: longVideoTimeouts.ocr,
+        batch_item_timeout_seconds: longVideoTimeouts.item,
+        batch_ffmpeg_timeout_seconds: longVideoTimeouts.ffmpeg,
+        batch_watchdog_stale_minutes: longVideoTimeouts.watchdogMinutes,
       };
 
       // Gọi API bắt đầu xử lý hàng loạt
@@ -166,7 +242,10 @@ export default function LongVideoReupPage() {
         advanced_overrides: settingsPayload,
       });
 
-      emitNotification({ variant: 'success', message: 'Đã khởi tạo tác vụ xử lý video dài thành công!' });
+      emitNotification({
+        variant: 'success',
+        message: 'Đã tạo tác vụ Video dài/Phim. Tool sẽ chuyển sang Tác vụ & Kết quả để theo dõi tiến độ OCR, dịch và render.',
+      });
       window.location.hash = '/results';
     } catch (err: any) {
       emitNotification({ variant: 'error', message: `Khởi chạy thất bại: ${err.message || err}` });
@@ -427,9 +506,12 @@ export default function LongVideoReupPage() {
                     onChange={(e) => setMultiSpeakerEnabled(e.target.checked)}
                     className="h-3.5 w-3.5 rounded border-white/10 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
                   />
-                  <span>Kích hoạt thuyết minh đa vai (Roadmap)</span>
+                  <span>Thử nghiệm phân vai giọng đọc</span>
                 </label>
               </div>
+              <p className="mb-4 rounded-md border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                Phân vai hiện dùng để lưu lựa chọn giọng theo nhóm nhân vật. Bản render vẫn ưu tiên giọng thuyết minh chính cho toàn bộ timeline cho tới khi backend tách speaker ổn định.
+              </p>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -439,8 +521,8 @@ export default function LongVideoReupPage() {
                     onChange={(e) => setNarratorVoice(e.target.value)}
                     className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
                   >
-                    {VIETNAMESE_TTS_VOICES.map((item) => (
-                      <option key={item.voice} value={item.voice}>
+                    {voiceOptions.map((item) => (
+                      <option key={`${item.provider}:${item.voice}`} value={item.voice}>
                         {item.label}
                       </option>
                     ))}
@@ -456,8 +538,8 @@ export default function LongVideoReupPage() {
                         onChange={(e) => setMaleVoice(e.target.value)}
                         className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
                       >
-                        {VIETNAMESE_TTS_VOICES.filter((item) => item.label.includes('Nam') || item.label.includes('Offline')).map((item) => (
-                          <option key={item.voice} value={item.voice}>
+                        {maleVoiceOptions.map((item) => (
+                          <option key={`${item.provider}:${item.voice}`} value={item.voice}>
                             {item.label}
                           </option>
                         ))}
@@ -471,8 +553,8 @@ export default function LongVideoReupPage() {
                         onChange={(e) => setFemaleVoice(e.target.value)}
                         className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
                       >
-                        {VIETNAMESE_TTS_VOICES.filter((item) => item.label.includes('Nữ')).map((item) => (
-                          <option key={item.voice} value={item.voice}>
+                        {femaleVoiceOptions.map((item) => (
+                          <option key={`${item.provider}:${item.voice}`} value={item.voice}>
                             {item.label}
                           </option>
                         ))}
@@ -507,16 +589,28 @@ export default function LongVideoReupPage() {
               <div className="space-y-6 pt-2 border-t border-white/5">
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
-                    <label className="mb-1.5 block text-xs text-slate-400">Thời lượng mỗi tập (giây)</label>
-                    <input
-                      type="number"
-                      min={10}
-                      max={300}
-                      value={splitMaxDuration}
-                      onChange={(e) => setSplitMaxDuration(Number(e.target.value))}
-                      className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
-                    />
-                    <span className="mt-1 block text-[10px] text-slate-500">Mốc lý tưởng là 55s</span>
+                    <label className="mb-1.5 block text-xs text-slate-400">Thời lượng mỗi tập</label>
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <input
+                        type="number"
+                        min={splitDurationUnit === 'minutes' ? 0.1 : 1}
+                        step={splitDurationUnit === 'minutes' ? 0.1 : 1}
+                        value={splitDisplayDuration}
+                        onChange={(e) => updateSplitDuration(e.target.value)}
+                        className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
+                      />
+                      <select
+                        value={splitDurationUnit}
+                        onChange={(e) => setSplitDurationUnit(e.target.value as SplitDurationUnit)}
+                        className="rounded-md border border-white/10 bg-slate-900 px-2 py-2 text-xs text-white focus:border-cyan-500 focus:ring-cyan-500"
+                      >
+                        <option value="seconds">Giây</option>
+                        <option value="minutes">Phút</option>
+                      </select>
+                    </div>
+                    <span className="mt-1 block text-[10px] text-slate-500">
+                      Không giới hạn 300s nữa. Tool đang lưu tương đương {Math.round(splitMaxDuration)} giây/tập.
+                    </span>
                   </div>
 
                   <div>
@@ -617,7 +711,7 @@ export default function LongVideoReupPage() {
 
                 <div className="rounded-lg bg-cyan-400/5 border border-cyan-400/10 p-3.5 text-xs text-cyan-200">
                   <div className="font-bold mb-1">⚡ Thuật toán cắt thông minh tự động:</div>
-                  Hệ thống sẽ tự động quét file phụ đề sau khi dịch để tìm khoảng lặng kết thúc câu nói gần mốc {splitMaxDuration}s nhất để cắt video. Tránh tuyệt đối việc cắt đứt câu thoại dở dang của nhân vật!
+                  Hệ thống sẽ tự động quét file phụ đề sau khi dịch để tìm khoảng lặng kết thúc câu nói gần mốc {Math.round(splitMaxDuration)}s nhất để cắt video. Tránh tuyệt đối việc cắt đứt câu thoại dở dang của nhân vật!
                 </div>
               </div>
             )}
@@ -715,4 +809,50 @@ export default function LongVideoReupPage() {
       </div>
     </div>
   );
+}
+
+function buildVoiceOptions(googleVoices: string[], favoriteGoogleVoices: string[]): VoiceOption[] {
+  const options: VoiceOption[] = [...VIETNAMESE_TTS_VOICES];
+  const existing = new Set(options.map((item) => `${item.provider}:${item.voice}`));
+  for (const voice of [...favoriteGoogleVoices, ...googleVoices]) {
+    const value = voice.trim();
+    if (!value) continue;
+    const key = `google_cloud_tts:${value}`;
+    if (existing.has(key)) continue;
+    options.push({
+      provider: 'google_cloud_tts',
+      voice: value,
+      label: `Google Cloud - ${value}`,
+      gender: inferVoiceGender(value),
+    });
+    existing.add(key);
+  }
+  return options;
+}
+
+function inferVoiceGender(voiceName: string): string {
+  const normalized = voiceName.toLowerCase();
+  if (/-b\b/.test(normalized) || /-d\b/.test(normalized) || normalized.includes('male')) return 'male';
+  if (/-a\b/.test(normalized) || /-c\b/.test(normalized) || normalized.includes('female')) return 'female';
+  return 'neutral';
+}
+
+function buildLongVideoTimeouts(longestVideoSeconds: number): {
+  item: number;
+  ffmpeg: number;
+  ocr: number;
+  asr: number;
+  watchdogMinutes: number;
+  ocrFrames: number;
+} {
+  const duration = Math.max(0, Number(longestVideoSeconds) || 0);
+  const ocrFrames = Math.min(4000, Math.max(480, Math.ceil(duration * 0.8)));
+  return {
+    item: Math.max(7200, Math.ceil(ocrFrames * 6 + 1800)),
+    ffmpeg: Math.max(7200, Math.ceil(duration * 2.5 + 1800)),
+    ocr: Math.max(5400, Math.ceil(ocrFrames * 6 + 1200)),
+    asr: Math.max(5400, Math.ceil(duration * 3 + 1200)),
+    watchdogMinutes: Math.max(60, Math.ceil(duration / 60 + 20)),
+    ocrFrames,
+  };
 }

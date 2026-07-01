@@ -669,6 +669,7 @@ const DEFAULT_SETTINGS: DouyinReupSettings = {
   ocr_provider: 'easyocr',
   ocr_language: 'ch',
   ocr_sample_fps: 2.0,
+  ocr_max_sample_frames: 240,
   ocr_subprocess_isolation: false,
   ocr_timeout_seconds: 1200,
   ocr_region_mode: 'full_frame',

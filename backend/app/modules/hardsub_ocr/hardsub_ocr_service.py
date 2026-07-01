@@ -51,6 +51,7 @@ class HardSubOCRService:
             video_path,
             str(target_dir / "ocr_frames"),
             sample_fps=settings.ocr_sample_fps,
+            max_frames=settings.ocr_max_sample_frames,
         )
         frame_width, frame_height = media.width, media.height
         if frames:

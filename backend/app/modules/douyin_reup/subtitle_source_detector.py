@@ -277,6 +277,7 @@ class SubtitleSourceDetector:
                 settings.model_dump(mode="json"),
                 timeout_seconds=settings.asr_timeout_seconds,
                 stage_name=f"ASR {video.filename}",
+                progress_callback=progress_callback,
             )
         path = self.asr_service.transcribe_to_srt(
             video.path,
@@ -325,6 +326,7 @@ class SubtitleSourceDetector:
                 settings.model_dump(mode="json"),
                 timeout_seconds=settings.ocr_timeout_seconds,
                 stage_name=f"OCR {video.filename}",
+                progress_callback=progress_callback,
             )
             return HardSubOCRResult.model_validate(payload)
         if progress_callback is None:
@@ -403,7 +405,12 @@ def _dedupe_messages(values: list[str] | None) -> list[str]:
     return cleaned
 
 
-def _asr_worker(video_path: str, output_srt_path: str, settings_payload: dict[str, Any]) -> dict[str, Any]:
+def _asr_worker(
+    video_path: str,
+    output_srt_path: str,
+    settings_payload: dict[str, Any],
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
     settings = DouyinReupSettings.model_validate(settings_payload)
     service = ASRService()
     path = service.transcribe_to_srt(
@@ -415,12 +422,17 @@ def _asr_worker(video_path: str, output_srt_path: str, settings_payload: dict[st
         device=settings.asr_device,
         vad_filter=settings.asr_vad_filter,
         max_audio_seconds=settings.asr_max_audio_seconds,
-        progress_callback=None,
+        progress_callback=progress_callback,
     )
     return {"path": path, "warnings": list(service.warnings)}
 
 
-def _ocr_worker(video_path: str, output_dir: str, settings_payload: dict[str, Any]) -> dict[str, Any]:
+def _ocr_worker(
+    video_path: str,
+    output_dir: str,
+    settings_payload: dict[str, Any],
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
     settings = DouyinReupSettings.model_validate(settings_payload)
-    result = HardSubOCRService().extract_hardsub_to_srt(video_path, output_dir, settings, progress_callback=None)
+    result = HardSubOCRService().extract_hardsub_to_srt(video_path, output_dir, settings, progress_callback=progress_callback)
     return result.model_dump(mode="json")

@@ -38,6 +38,7 @@ class DouyinReupSettings(BaseModel):
     ocr_provider: str = "easyocr"
     ocr_language: str = "ch"
     ocr_sample_fps: float = Field(default=2.0, gt=0, le=10)
+    ocr_max_sample_frames: int = Field(default=240, ge=1, le=20_000)
     ocr_subprocess_isolation: bool = False
     ocr_timeout_seconds: int = Field(default=1200, ge=60, le=24 * 60 * 60)
     ocr_region_mode: str = "full_frame"
@@ -167,7 +168,7 @@ class DouyinReupSettings(BaseModel):
 
     # Cấu hình chia nhỏ video dài
     split_long_video: bool = False
-    split_max_duration: float = Field(default=55.0, ge=10.0, le=300.0)
+    split_max_duration: float = Field(default=55.0, gt=0)
     split_part_prefix: str = "Phần"
     split_label_duration_mode: Literal["always", "intro_5s"] = "always"
     split_label_position: Literal["top_center", "bottom_center", "top_left", "top_right"] = "top_center"

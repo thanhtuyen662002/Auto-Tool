@@ -143,6 +143,7 @@ export interface DouyinReupSettings {
   ocr_provider: string;
   ocr_language: string;
   ocr_sample_fps: number;
+  ocr_max_sample_frames: number;
   ocr_subprocess_isolation: boolean;
   ocr_timeout_seconds: number;
   ocr_region_mode: 'bottom_auto' | 'middle_lower' | 'full_frame' | 'manual' | string;

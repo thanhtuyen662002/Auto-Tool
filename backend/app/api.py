@@ -138,7 +138,7 @@ from app.modules.script_variants.script_variant_generator import ScriptVariantGe
 from app.modules.script_variants.variant_registry import list_variant_styles
 from app.modules.script_writer.script_writer import ProductVideoScript
 from app.modules.silent_immersive_reup.silent_reup_pipeline import SilentReupPipeline
-from app.modules.silent_immersive_reup.silent_reup_service import SilentReupService
+from app.modules.silent_immersive_reup.silent_reup_service import SilentReupService, is_silent_reup_settings
 from app.modules.silent_immersive_reup.silent_schema import SilentReupPlan
 from app.modules.silent_visual_tagging.visual_tag_repository import VisualTagRepository
 from app.modules.silent_visual_tagging.visual_tag_schema import (
@@ -220,6 +220,7 @@ from app.modules.job_recovery import (
 )
 from app.presets import get_default_presets
 from app.utils.env_loader import load_local_env
+from app.utils.subprocess_utils import terminate_all_tracked_processes
 from app.schemas.api_schema import (
     AppSettings,
     ApplyIndustryPresetRequest,
@@ -451,6 +452,7 @@ def create_app() -> FastAPI:
 
     @app.on_event("shutdown")
     def _shutdown() -> None:
+        terminate_all_tracked_processes(reason="fastapi shutdown")
         publisher_orchestrator.stop()
 
     @app.get("/api/health", response_model=HealthResponse)
@@ -534,8 +536,12 @@ def create_app() -> FastAPI:
 
     @app.post("/api/system/shutdown")
     def system_shutdown() -> dict[str, bool | str]:
+        killed_processes = terminate_all_tracked_processes(reason="user shutdown")
         _schedule_process_exit(delay_seconds=0.8)
-        return {"success": True, "message": "Auto Tool đang tắt."}
+        return {
+            "success": True,
+            "message": f"Auto Tool đang tắt. Đã dọn {killed_processes} tiến trình xử lý nền.",
+        }
 
     @app.get("/api/local-app/config", response_model=LocalAppConfig)
     def get_local_app_config() -> LocalAppConfig:
@@ -5059,6 +5065,7 @@ def _build_douyin_project_config_from_settings(
             "project_name": project_name.strip(),
             "source_folder": source_folder,
             "output_folder": output_folder,
+            "mode": _douyin_config_mode_from_settings(settings, project_name),
             "product": _douyin_product_payload(product_context),
             "render": {
                 "output_count": settings.max_videos or 1,
@@ -5099,6 +5106,17 @@ def _build_douyin_project_config_from_settings(
             "douyin_reup": settings.model_dump(mode="json"),
         }
     )
+
+
+def _douyin_config_mode_from_settings(settings: DouyinReupSettings, project_name: str = "") -> str:
+    preset_id = str(settings.preset_id or "").strip().lower()
+    preset_name = str(settings.preset_name or "").strip().lower()
+    project_name_lower = str(project_name or "").strip().lower()
+    if preset_id.startswith("long_movie_") or "phim" in preset_name or "vlog dài" in preset_name or "vlog dài" in project_name_lower:
+        return "long_video"
+    if is_silent_reup_settings(settings):
+        return "silent_reup"
+    return "douyin_reup"
 
 
 def _douyin_product_payload(product_context: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -5768,6 +5786,18 @@ def _project_mode_from_config(config: dict[str, Any]) -> str:
     project_name = str(config.get("project_name") or "")
     douyin_reup = config.get("douyin_reup")
     if isinstance(douyin_reup, dict) and douyin_reup.get("enabled"):
+        preset_id = str(douyin_reup.get("preset_id") or "").strip().lower()
+        preset_name = str(douyin_reup.get("preset_name") or "").strip().lower()
+        project_name_lower = project_name.lower()
+        if (
+            explicit == "long_video"
+            or preset_id.startswith("long_movie_")
+            or "phim" in preset_name
+            or "vlog dài" in preset_name
+            or project_name_lower.startswith("phim/")
+            or "vlog dài" in project_name_lower
+        ):
+            return "long_video"
         if explicit == "silent_reup" or project_name.startswith("silent_") or project_name.startswith("silent_reup"):
             return "silent_reup"
         return "douyin_reup"

@@ -231,7 +231,7 @@ class DouyinReupService:
             if queue_state is None or _queue_state_needs_rebuild(queue_state, current_video_paths):
                 queue_state = queue_state_service.create_queue_state(
                     job_id=job_id,
-                    mode="silent_immersive" if is_silent_reup_settings(settings) else "douyin_reup",
+                    mode=_queue_mode_from_settings(settings),
                     video_paths=current_video_paths,
                     settings=_queue_settings_from_douyin(settings),
                     output_dir=str(output_root),
@@ -355,6 +355,19 @@ class DouyinReupService:
                 if checkpoint_service and job_id:
                     _mark_douyin_output_checkpoint(checkpoint_service, job_id, f"video_{index:03d}", output)
             except Exception as exc:
+                if queue_control and job_id and queue_control.should_cancel(job_id):
+                    if queue_state_service and queue_item:
+                        queue_state_service.update_item_status(
+                            job_id,
+                            queue_item.id,
+                            QueueItemStatus.cancelled,
+                            current_step="cancelled",
+                            progress_percent=100,
+                            error_message="Đã hủy theo yêu cầu người dùng.",
+                        )
+                    queue_control.mark_cancelled(job_id, "Job đã hủy và các tiến trình OCR/FFmpeg đang chạy đã được dọn.")
+                    queue_status = "cancelled"
+                    break
                 failed += 1
                 output = self._failed_output(index, video, output_root, _friendly_error(str(exc)), settings=settings)
                 outputs.append(output)
@@ -467,6 +480,7 @@ class DouyinReupService:
             sorted(retry_steps),
             timeout_seconds=timeout_seconds,
             stage_name=f"Douyin video {index}",
+            progress_callback=step_progress_callback,
         )
         return DouyinOutputResult.model_validate(payload)
 
@@ -1399,6 +1413,7 @@ def _douyin_process_one_video_worker(
     job_id: str | None,
     cached_output: dict[str, Any] | None,
     retry_steps: list[str],
+    progress_callback: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     service = DouyinReupService()
     settings = DouyinReupSettings.model_validate(settings_payload)
@@ -1413,7 +1428,7 @@ def _douyin_process_one_video_worker(
         job_id=job_id,
         cached_output=cached_output,
         retry_steps=set(retry_steps or []),
-        step_progress_callback=None,
+        step_progress_callback=progress_callback,
     )
     return output.model_dump(mode="json")
 
@@ -1853,7 +1868,8 @@ def _compute_item_timeout(video: DouyinVideoItem, settings: DouyinReupSettings) 
         return 0  # isolation bị tắt, caller sẽ skip
     video_duration = max(0.0, float(video.duration or 0))
     fps = max(0.1, float(settings.ocr_sample_fps or 2.0))
-    ocr_frames = min(_OCR_MAX_FRAMES_ESTIMATE, int(video_duration * fps))
+    frame_cap = max(1, int(getattr(settings, "ocr_max_sample_frames", _OCR_MAX_FRAMES_ESTIMATE) or _OCR_MAX_FRAMES_ESTIMATE))
+    ocr_frames = min(frame_cap, int(video_duration * fps))
     dynamic = ocr_frames * _OCR_SECONDS_PER_FRAME_ESTIMATE + _OCR_ITEM_BASE_SECONDS
     return max(dynamic, base_timeout)
 
@@ -1876,18 +1892,43 @@ def _queue_ffmpeg_timeout_seconds(queue_state: QueueState | None) -> int | None:
 
 
 def _queue_settings_from_douyin(settings: DouyinReupSettings) -> QueueSettings:
+    item_timeout = int(settings.batch_item_timeout_seconds or 0)
+    ffmpeg_timeout = int(settings.batch_ffmpeg_timeout_seconds or 0)
+    watchdog_minutes = int(settings.batch_watchdog_stale_minutes or 0)
+    chunk_size = int(settings.batch_chunk_size or 50)
+    if _is_long_video_settings(settings):
+        item_timeout = max(item_timeout, 7200)
+        ffmpeg_timeout = max(ffmpeg_timeout, 7200)
+        watchdog_minutes = max(watchdog_minutes, 60)
+        chunk_size = min(max(1, chunk_size), 5)
     return QueueSettings(
         max_videos_per_batch=settings.max_videos,
         performance_mode=settings.batch_performance_mode,
-        batch_chunk_size=settings.batch_chunk_size,
-        item_timeout_seconds=settings.batch_item_timeout_seconds,
-        ffmpeg_timeout_seconds=settings.batch_ffmpeg_timeout_seconds,
-        watchdog_stale_minutes=settings.batch_watchdog_stale_minutes,
+        batch_chunk_size=chunk_size,
+        item_timeout_seconds=item_timeout,
+        ffmpeg_timeout_seconds=ffmpeg_timeout,
+        watchdog_stale_minutes=watchdog_minutes,
         pause_on_repeated_failures=settings.batch_pause_on_repeated_failures,
         max_consecutive_failures=settings.batch_max_consecutive_failures,
         resource_guard_enabled=True,
         continue_on_video_error=True,
     )
+
+
+def _queue_mode_from_settings(settings: DouyinReupSettings) -> str:
+    if is_silent_reup_settings(settings):
+        return "silent_immersive"
+    if _is_long_video_settings(settings):
+        return "long_video"
+    return "douyin_reup"
+
+
+def _is_long_video_settings(settings: DouyinReupSettings | None) -> bool:
+    if settings is None:
+        return False
+    preset_id = str(settings.preset_id or "").strip().lower()
+    preset_name = str(settings.preset_name or "").strip().lower()
+    return preset_id in {"long_movie_sub_only", "long_movie_dubbing"} or preset_id.startswith("long_movie_") or "phim" in preset_name or "vlog dài" in preset_name
 
 
 def _repeated_failure_pause_reason(queue_state: QueueState | None) -> str | None:

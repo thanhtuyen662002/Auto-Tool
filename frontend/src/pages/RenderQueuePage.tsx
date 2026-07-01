@@ -277,6 +277,12 @@ function buildAdjustAction(
   if (mode === 'silent_reup') {
     return { label: 'Mở Silent Mode', to: '/silent-mode' };
   }
+  if (mode === 'long_video') {
+    return {
+      label: 'Chỉnh Video dài/Phim rồi chạy tiếp',
+      to: `/long-video-reup?job_id=${encodeURIComponent(jobId)}&resume=1`,
+    };
+  }
   if (mode === 'subtitle_render') {
     return { label: 'Mở kết quả sửa phụ đề', to: `/results/${projectId}/${jobId}` };
   }
@@ -288,6 +294,7 @@ function resolveWorkflowMode(job: JobStatus | null, projectId = ''): string {
   const normalizedProjectId = projectId.toLowerCase();
   const step = (job?.current_step || '').toLowerCase();
   if (mode) return mode;
+  if ((job?.project_name || '').toLowerCase().includes('vlog dài')) return 'long_video';
   if (normalizedProjectId.startsWith('douyin_reup_') || step.startsWith('douyin_video_')) return 'douyin_reup';
   if (normalizedProjectId.startsWith('silent_')) return 'silent_reup';
   if (normalizedProjectId.startsWith('subtitle_review_') || step.startsWith('subtitle_review_')) return 'subtitle_render';

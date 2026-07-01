@@ -280,6 +280,7 @@ def _launch_updater_script(bat_path: Path, exe_dir: Path) -> None:
         ["cmd.exe", "/d", "/c", str(bat_path)],
         cwd=str(exe_dir),
         shell=False,
+        track=False,
     )
 
 

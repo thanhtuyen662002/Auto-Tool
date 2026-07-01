@@ -95,15 +95,16 @@ class PaddleOCRProvider(BaseOCRProvider):
         crop_path = crop_region(image_path, region)
         warnings: list[str] = []
         try:
+            image_input = _load_ocr_image(crop_path)
             with self._ocr_lock:
                 try:
-                    raw = self.ocr.ocr(str(crop_path), cls=True)
+                    raw = self.ocr.ocr(image_input, cls=True)
                 except Exception:
                     try:
                         if hasattr(self.ocr, "predict"):
-                            raw = self.ocr.predict(str(crop_path))
+                            raw = self.ocr.predict(image_input)
                         else:
-                            raw = self.ocr.ocr(str(crop_path))
+                            raw = self.ocr.ocr(image_input)
                     except Exception as inner_exc:
                         raise inner_exc
 
@@ -132,14 +133,15 @@ class PaddleOCRProvider(BaseOCRProvider):
         crop_paths = [crop_region(image_path, region) for image_path in image_paths]
         warnings: list[str] = []
         try:
+            image_inputs = [_load_ocr_image(path) for path in crop_paths]
             with self._ocr_lock:
                 if hasattr(self.ocr, "predict"):
-                    raw_batch = self.ocr.predict([str(p) for p in crop_paths])
+                    raw_batch = self.ocr.predict(image_inputs)
                 else:
                     try:
-                        raw_batch = [self.ocr.ocr(str(p), cls=True) for p in crop_paths]
+                        raw_batch = [self.ocr.ocr(image_input, cls=True) for image_input in image_inputs]
                     except Exception:
-                        raw_batch = [self.ocr.ocr(str(p)) for p in crop_paths]
+                        raw_batch = [self.ocr.ocr(image_input) for image_input in image_inputs]
         except Exception as exc:
             # Fallback chạy tuần tự nếu batch lỗi
             return [self.recognize(image_path, region) for image_path in image_paths]
@@ -208,8 +210,9 @@ class EasyOCRProvider(BaseOCRProvider):
         crop_path = crop_region(image_path, region)
         warnings: list[str] = []
         try:
+            image_input = _load_ocr_image(crop_path)
             with self._reader_lock:
-                raw = self.reader.readtext(str(crop_path))
+                raw = self.reader.readtext(image_input)
             blocks, text, confidence = _parse_easyocr_blocks(raw)
         except Exception as exc:
             blocks = []
@@ -231,9 +234,10 @@ class EasyOCRProvider(BaseOCRProvider):
             return []
         crop_paths = [crop_region(image_path, region) for image_path in image_paths]
         try:
+            image_inputs = [_load_ocr_image(path) for path in crop_paths]
             with self._reader_lock:
                 raw_batch = self.reader.readtext_batched(
-                    [str(path) for path in crop_paths],
+                    image_inputs,
                     batch_size=min(4, len(crop_paths)),
                     decoder="greedy",
                 )
@@ -299,9 +303,23 @@ def crop_region(image_path: str, region: OCRRegion) -> Path:
     crop_dir = ensure_dir(source.parent / "_ocr_crop")
     target = crop_dir / f"{source.stem}_crop.jpg"
     with Image.open(source) as image:
-        box = (region.x, region.y, region.x + region.width, region.y + region.height)
+        image_width, image_height = image.size
+        left = max(0, min(int(region.x), max(0, image_width - 1)))
+        top = max(0, min(int(region.y), max(0, image_height - 1)))
+        right = max(left + 1, min(int(region.x + region.width), image_width))
+        bottom = max(top + 1, min(int(region.y + region.height), image_height))
+        box = (left, top, right, bottom)
         image.crop(box).save(target, quality=92)
     return target
+
+
+def _load_ocr_image(image_path: Path) -> Any:
+    try:
+        import numpy as np  # noqa: PLC0415
+    except ImportError as exc:
+        raise RuntimeError("Thiếu thư viện numpy để nạp ảnh OCR an toàn trên Windows.") from exc
+    with Image.open(image_path) as image:
+        return np.array(image.convert("RGB"))
 
 
 def _timestamp_from_frame_name(image_path: str) -> int:

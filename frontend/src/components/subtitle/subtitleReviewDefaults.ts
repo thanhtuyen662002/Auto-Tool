@@ -8,6 +8,7 @@ export const DEFAULT_REVIEW_RENDER_SETTINGS: DouyinReupSettings = {
   asr_device: 'auto', asr_vad_filter: true, asr_max_audio_seconds: 180, asr_subprocess_isolation: true,
   asr_timeout_seconds: 1200, asr_subtitle_offset_seconds: -0.25, use_ocr_if_asr_failed: true,
   use_ocr_if_no_subtitle: true, ocr_provider: 'easyocr', ocr_language: 'ch', ocr_sample_fps: 2,
+  ocr_max_sample_frames: 240,
   ocr_subprocess_isolation: true, ocr_timeout_seconds: 1200, ocr_region_mode: 'bottom_auto',
   ocr_manual_region: null, ocr_min_confidence: 0.35, ocr_dedupe_similarity: 0.86,
   ocr_min_text_length: 2, ocr_merge_gap_ms: 600, ocr_min_duration_ms: 500, ocr_max_duration_ms: 6000,

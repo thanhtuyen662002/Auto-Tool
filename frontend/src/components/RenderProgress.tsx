@@ -27,7 +27,7 @@ export default function RenderProgress({ job }: RenderProgressProps) {
       </div>
       {stalledMinutes !== null ? (
         <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Không có cập nhật xử lý trong {stalledMinutes} phút. API vẫn có thể trả 200 khi worker nền đã bị kẹt; hãy xem bước hiện tại và nhật ký bên dưới.
+          Không thấy tiến độ mới trong {stalledMinutes} phút. Nếu máy gần như không chạy CPU/GPU, hãy bấm Hủy rồi chạy lại hoặc xem nhật ký bên dưới để biết bước đang kẹt.
         </div>
       ) : null}
       <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
@@ -74,6 +74,9 @@ function workflowBadge(job: JobStatus | null): { label: string; className: strin
   if (mode === 'silent_reup') {
     return { label: 'Silent Mode', className: 'border-violet-200 bg-violet-50 text-violet-800' };
   }
+  if (mode === 'long_video') {
+    return { label: 'Video dài/Phim', className: 'border-sky-200 bg-sky-50 text-sky-800' };
+  }
   if (mode === 'subtitle_render') {
     return { label: 'Sửa phụ đề', className: 'border-amber-200 bg-amber-50 text-amber-800' };
   }
@@ -88,6 +91,7 @@ function jobWorkflowMode(job: JobStatus | null): string {
   const projectId = (job?.project_id || '').toLowerCase();
   const step = (job?.current_step || '').toLowerCase();
   if (mode) return mode;
+  if ((job?.project_name || '').toLowerCase().includes('vlog dài')) return 'long_video';
   if (projectId.startsWith('douyin_reup_') || step.startsWith('douyin_video_')) return 'douyin_reup';
   if (projectId.startsWith('silent_')) return 'silent_reup';
   if (projectId.startsWith('subtitle_review_') || step.startsWith('subtitle_review_')) return 'subtitle_render';
@@ -120,6 +124,7 @@ function formatStep(step: string): string {
     asr_loading_model: 'Đang nạp model nhận diện thoại',
     asr_transcribing: 'Đang nhận diện lời thoại',
     asr_writing_subtitles: 'Đang ghi phụ đề nhận diện',
+    item_worker_start: 'Đang khởi động worker xử lý video',
     ocr_probe: 'Đang kiểm tra chữ trên video',
     ocr_loading_model: 'Đang chuẩn bị bộ đọc chữ',
     ocr_sampling_frames: 'Đang lấy frame phụ đề',
