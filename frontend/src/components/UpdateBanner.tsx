@@ -13,6 +13,7 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResponse | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadElapsedSeconds, setDownloadElapsedSeconds] = useState(0);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,8 +39,17 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
     void checkUpdate();
   }, [connected]);
 
+  useEffect(() => {
+    if (!isDownloading) return undefined;
+    const timer = window.setInterval(() => {
+      setDownloadElapsedSeconds((current) => current + 1);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isDownloading]);
+
   const handleDownloadAndInstall = async () => {
     setIsDownloading(true);
+    setDownloadElapsedSeconds(0);
     setError(null);
     try {
       const res = await downloadSystemUpdate();
@@ -117,6 +127,12 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
                     : ' Bạn có thể cập nhật tự động chỉ với 1 cú click.'
                 )}
               </p>
+              {isDownloading && !downloadSuccess ? (
+                <p className="mt-1 text-xs text-slate-400">
+                  Đang chờ {formatElapsed(downloadElapsedSeconds)}. Nếu đường truyền GitHub đứng yên hơn khoảng 30 giây,
+                  tool sẽ tự ngắt kết nối và tải tiếp từ phần đã tải.
+                </p>
+              ) : null}
               {error && (
                 <div className="mt-1 space-y-1 text-xs font-medium text-rose-300">
                   <p>Lỗi: {error}</p>
@@ -166,4 +182,11 @@ export default function UpdateBanner({ connected }: UpdateBannerProps) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds} giây`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes} phút ${remainder} giây` : `${minutes} phút`;
 }

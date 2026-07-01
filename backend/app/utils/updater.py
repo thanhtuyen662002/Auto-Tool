@@ -28,7 +28,7 @@ DEFAULT_REPO = "thanhtuyen662002/Auto-Tool"
 GITHUB_API_BASE = "https://api.github.com"
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 DOWNLOAD_CONNECT_TIMEOUT_SECONDS = 20
-DOWNLOAD_READ_TIMEOUT_SECONDS = 60
+DOWNLOAD_READ_TIMEOUT_SECONDS = 30
 DOWNLOAD_RETRY_DELAY_SECONDS = 2
 CHECK_INTERVAL_SECONDS = 6 * 3600  # 6 giờ, tránh spam GitHub API
 
@@ -276,11 +276,15 @@ def download_and_prepare_update(info: UpdateInfo) -> DownloadResult:
 
 def _launch_updater_script(bat_path: Path, exe_dir: Path) -> None:
     """Launch the updater batch file hidden so users only see the app UI."""
+    kwargs = {}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
     popen_hidden(
         ["cmd.exe", "/d", "/c", str(bat_path)],
         cwd=str(exe_dir),
         shell=False,
         track=False,
+        **kwargs,
     )
 
 
@@ -321,7 +325,7 @@ def _download_file_once(url: str, tmp: Path, timeout: int) -> None:
     headers = _download_headers(resume_from if resume_from > 0 else None)
     request_timeout = (
         DOWNLOAD_CONNECT_TIMEOUT_SECONDS,
-        max(DOWNLOAD_READ_TIMEOUT_SECONDS, timeout),
+        _download_read_timeout(timeout),
     )
 
     with requests.get(
@@ -348,6 +352,7 @@ def _download_file_once(url: str, tmp: Path, timeout: int) -> None:
                 if not chunk:
                     continue
                 file.write(chunk)
+                file.flush()
                 bytes_written += len(chunk)
 
     final_size = tmp.stat().st_size if tmp.exists() else 0
@@ -384,11 +389,30 @@ def _expected_download_size(response: requests.Response, resume_from: int) -> in
 
 
 def _download_retry_count() -> int:
-    value = os.getenv("AUTO_TOOL_UPDATE_DOWNLOAD_RETRIES", "5").strip()
+    value = os.getenv("AUTO_TOOL_UPDATE_DOWNLOAD_RETRIES", "8").strip()
     try:
         return max(1, int(value))
     except ValueError:
-        return 5
+        return 8
+
+
+def _download_read_timeout(timeout: int | None = None) -> int:
+    """
+    Time allowed with no incoming bytes before reconnecting and resuming.
+
+    Older builds used a 180s read timeout, so a broken GitHub/CDN socket could look
+    frozen for 15+ minutes across retries. Keep this short enough to self-heal, but
+    long enough for slow home networks because it resets whenever data arrives.
+    """
+    raw = os.getenv("AUTO_TOOL_UPDATE_STALL_TIMEOUT_SECONDS", "").strip()
+    if raw:
+        try:
+            return max(10, int(raw))
+        except ValueError:
+            pass
+    if timeout is not None and timeout < DOWNLOAD_READ_TIMEOUT_SECONDS:
+        return max(10, timeout)
+    return DOWNLOAD_READ_TIMEOUT_SECONDS
 
 
 def _format_download_error(error: Exception | None, attempts: int) -> str:
