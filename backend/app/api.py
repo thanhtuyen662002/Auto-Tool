@@ -2826,9 +2826,9 @@ def create_app() -> FastAPI:
 
 
     @app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
-    def get_job(job_id: str) -> JobStatusResponse:
+    def get_job(job_id: str, log_limit: int = Query(1000, ge=0, le=10000)) -> JobStatusResponse:
         job = _get_job_or_404(job_id)
-        logs = database.get_job_logs(job_id)
+        logs, logs_total, logs_truncated = database.get_job_logs_with_meta(job_id, limit=None if log_limit == 0 else log_limit)
         project = database.get_project(job.get("project_id")) if job.get("project_id") else None
         project_meta = _project_meta_from_config((project or {}).get("config") if project else None)
         return JobStatusResponse(
@@ -2843,6 +2843,8 @@ def create_app() -> FastAPI:
             completed_outputs=job["completed_outputs"],
             failed_outputs=job["failed_outputs"],
             logs=logs,
+            logs_total=logs_total,
+            logs_truncated=logs_truncated,
             cache_summary=job.get("results", {}).get("cache_summary"),
             created_at=job.get("created_at"),
             updated_at=job.get("updated_at"),

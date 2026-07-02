@@ -1943,7 +1943,22 @@ export default function DouyinReupPage({ initialWorkflow = 'douyin' }: { initial
 
   function updateAdvancedSettings(updates: Partial<DouyinReupSettings>) {
     setMode('advanced');
-    updateSettings(updates);
+    const syncedUpdates: Partial<DouyinReupSettings> = { ...updates };
+    if (workflowMode === 'silent_immersive') {
+      if (updates.original_audio_volume !== undefined && updates.immersive_original_audio_volume === undefined) {
+        syncedUpdates.immersive_original_audio_volume = updates.original_audio_volume;
+      }
+      if (updates.bgm_volume !== undefined && updates.immersive_bgm_volume === undefined) {
+        syncedUpdates.immersive_bgm_volume = updates.bgm_volume;
+      }
+      if (updates.keep_original_audio !== undefined && updates.keep_immersive_original_audio === undefined) {
+        syncedUpdates.keep_immersive_original_audio = updates.keep_original_audio;
+      }
+      if (updates.add_bgm !== undefined && updates.add_bgm_for_silent_video === undefined) {
+        syncedUpdates.add_bgm_for_silent_video = updates.add_bgm;
+      }
+    }
+    updateSettings(syncedUpdates);
   }
 
   function saveCurrentReupSettings() {

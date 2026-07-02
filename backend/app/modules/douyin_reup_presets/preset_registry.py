@@ -7,7 +7,15 @@ from app.modules.douyin_reup_presets.preset_schema import DouyinReupPreset, Douy
 
 
 def list_douyin_reup_presets() -> list[DouyinReupPreset]:
-    return deepcopy(_PRESETS)
+    seen: set[str] = set()
+    presets: list[DouyinReupPreset] = []
+    for preset in _PRESETS:
+        preset_id = preset.id.value
+        if preset_id in seen:
+            continue
+        seen.add(preset_id)
+        presets.append(preset)
+    return deepcopy(presets)
 
 
 def get_douyin_reup_preset(preset_id: str) -> DouyinReupPreset | None:

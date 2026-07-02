@@ -26,6 +26,11 @@ class FakeVisionClient:
                             "source": "frame",
                             "value": "Frame 1 cho thấy sản phẩm đang cọ bên trong ly.",
                             "confidence": 0.82,
+                        },
+                        {
+                            "source": "frame",
+                            "value": "Frame 2 tiếp tục thấy cùng dụng cụ vệ sinh ly cốc.",
+                            "confidence": 0.8,
                         }
                     ],
                 }
@@ -137,6 +142,49 @@ def test_frame_observation_vote_handles_noisy_frames(tmp_path):
     assert report.top_candidate.confidence > 0.78
     assert report.context_updates["product_name"] == "dung cu ve sinh ly coc"
     assert len(report.frame_observations) == 3
+
+
+def test_single_frame_product_detection_does_not_lock_product_name(tmp_path):
+    frame = tmp_path / "frame.jpg"
+    frame.write_bytes(b"fake image")
+    segment = SilentVisualSegment(
+        id="seg_001",
+        video_path="clip.mp4",
+        start=0,
+        end=2,
+        duration=2,
+        segment_type=VisualSegmentType.demo,
+        visual_score=0.8,
+        representative_frame_path=str(frame),
+    )
+
+    class SingleFrameVisionClient:
+        def generate_json_with_images(self, prompt: str, image_paths: list[str]) -> dict:
+            return {
+                "candidates": [
+                    {
+                        "display_name": "dong ho hen gio bep",
+                        "product_type": "dong ho hen gio bep",
+                        "industry": "kitchen_goods",
+                        "certainty": "product_type",
+                        "confidence": 0.97,
+                        "evidence": [{"source": "frame", "value": "Frame 1 thay dong ho hen gio.", "confidence": 0.95}],
+                    }
+                ]
+            }
+
+    report = SilentProductDetector(vision_client=SingleFrameVisionClient()).detect(
+        video_path="clip.mp4",
+        segments=[segment],
+        visual_tag_report=None,
+        product_context={},
+        gemini_api_keys=["test-key"],
+    )
+
+    assert report.top_candidate is not None
+    assert "single_frame_evidence" in report.top_candidate.risk_flags
+    assert report.top_candidate.confidence <= 0.62
+    assert "product_name" not in report.context_updates
 
 
 def test_fallback_detection_does_not_invent_exact_product(tmp_path):

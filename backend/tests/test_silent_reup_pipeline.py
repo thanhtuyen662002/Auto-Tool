@@ -226,4 +226,4 @@ def test_silent_pipeline_falls_back_to_music_only_when_voiceover_would_be_unsafe
     assert captured["voiceover_path"] is None
     assert captured["settings"].burn_subtitle is False
     assert captured["settings"].generate_voiceover_for_silent_video is False
-    assert captured["settings"].keep_original_audio is False
+    assert captured["settings"].keep_original_audio is True

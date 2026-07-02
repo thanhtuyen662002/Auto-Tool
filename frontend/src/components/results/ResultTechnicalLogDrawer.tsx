@@ -65,8 +65,14 @@ export default function ResultTechnicalLogDrawer({
         ) : null}
 
         <Section title="Nhật ký công việc" className="mt-5">
+          {jobStatus?.logs_total ? (
+            <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs text-slate-400">
+              Hiển thị {jobStatus.logs.length}/{jobStatus.logs_total} dòng mới nhất
+              {jobStatus.logs_truncated ? '. Nhật ký đầy đủ vẫn được lưu trong hệ thống.' : '.'}
+            </div>
+          ) : null}
           {jobStatus?.logs?.length ? (
-            jobStatus.logs.slice(-20).reverse().map((log) => (
+            [...jobStatus.logs].reverse().map((log) => (
               <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs leading-5" key={`${log.created_at}-${log.message}`}>
                 <div className="font-semibold text-slate-200">{log.level} · {log.created_at}</div>
                 <div className="mt-1 text-slate-400">{log.message}</div>

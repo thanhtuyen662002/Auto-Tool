@@ -44,15 +44,35 @@ class HardSubOCRService:
         _progress(progress_callback, "ocr_probe", 2)
         media = probe_video(video_path)
         _progress(progress_callback, "ocr_loading_model", 5)
-        provider = self.provider or build_ocr_provider(settings.ocr_provider, settings.ocr_language)
+        provider = self.provider
+        if provider is None:
+            try:
+                provider = build_ocr_provider(settings.ocr_provider, settings.ocr_language)
+            except Exception as exc:
+                if str(settings.ocr_provider or "").strip().lower() != "paddleocr":
+                    raise
+                warnings.append(f"PaddleOCR chưa sẵn sàng ({exc}); tự thử EasyOCR cho video này.")
+                try:
+                    provider = build_ocr_provider("easyocr", settings.ocr_language)
+                except Exception as fallback_exc:
+                    raise RuntimeError(f"PaddleOCR lỗi: {exc}; EasyOCR dự phòng cũng lỗi: {fallback_exc}") from fallback_exc
 
         _progress(progress_callback, "ocr_sampling_frames", 10)
-        frames = self.frame_sampler.sample_frames(
-            video_path,
-            str(target_dir / "ocr_frames"),
-            sample_fps=settings.ocr_sample_fps,
-            max_frames=settings.ocr_max_sample_frames,
-        )
+        try:
+            frames = self.frame_sampler.sample_frames(
+                video_path,
+                str(target_dir / "ocr_frames"),
+                sample_fps=settings.ocr_sample_fps,
+                max_frames=settings.ocr_max_sample_frames,
+            )
+        except TypeError as exc:
+            if "max_frames" not in str(exc):
+                raise
+            frames = self.frame_sampler.sample_frames(
+                video_path,
+                str(target_dir / "ocr_frames"),
+                sample_fps=settings.ocr_sample_fps,
+            )
         frame_width, frame_height = media.width, media.height
         if frames:
             try:
@@ -213,6 +233,48 @@ class HardSubOCRService:
                 warnings.append(
                     "ocr_region_fallback_full_frame: initial OCR region was weak, retried full-frame and used the stronger result."
                 )
+        if provider.provider_name == "paddleocr" and not lines and frames:
+            try:
+                easy_provider = build_ocr_provider("easyocr", settings.ocr_language)
+                easy_region = self.region_detector.detect_region(frame_width, frame_height, mode="full_frame")
+                _progress(progress_callback, "ocr_retry_easyocr", 93, len(frames), len(frames))
+                easy_frame_results, easy_warnings = _recognize_frames_for_region(
+                    easy_provider,
+                    frames,
+                    easy_region,
+                    progress_callback,
+                )
+                easy_lines = self.line_merger.merge_frames_to_lines(easy_frame_results, settings)
+                easy_filter_summary = dict(getattr(self.line_merger, "last_filter_summary", {}) or {})
+                easy_average_confidence = sum(line.confidence for line in easy_lines) / len(easy_lines) if easy_lines else 0.0
+                easy_text_frame_count = sum(1 for frame in easy_frame_results if str(frame.text or "").strip())
+                easy_accepted_frame_count = sum(line.frame_count for line in easy_lines)
+                easy_used = bool(easy_lines)
+                fallback_attempts.append(
+                    {
+                        "provider": "easyocr",
+                        "region_mode": "full_frame",
+                        "region": easy_region.model_dump(mode="json"),
+                        "detected_line_count": len(easy_lines),
+                        "average_confidence": round(easy_average_confidence, 4),
+                        "text_frame_count": easy_text_frame_count,
+                        "accepted_frame_count": easy_accepted_frame_count,
+                        "used": easy_used,
+                    }
+                )
+                if easy_used:
+                    provider = easy_provider
+                    region = easy_region
+                    frame_results = easy_frame_results
+                    lines = easy_lines
+                    filter_summary = easy_filter_summary
+                    text_frame_count = easy_text_frame_count
+                    accepted_frame_count = easy_accepted_frame_count
+                    effective_region_mode = "full_frame"
+                    warnings.extend(easy_warnings)
+                    warnings.append("ocr_provider_fallback_easyocr: PaddleOCR không ra phụ đề, đã dùng EasyOCR full-frame.")
+            except Exception as exc:
+                warnings.append(f"EasyOCR fallback sau PaddleOCR không thành công: {exc}")
         average_confidence = sum(line.confidence for line in lines) / len(lines) if lines else 0.0
         source_srt_path = None
         if lines:

@@ -40,7 +40,7 @@ class PublisherOrchestrator:
     def start(self) -> None:
         """Starts the background publisher thread if not already running."""
         with self._worker_lock:
-            if self._thread and self._thread.is_alive():
+            if _thread_is_alive(self._thread):
                 logger.info("PublisherOrchestrator background thread already running.")
                 return
 
@@ -56,7 +56,7 @@ class PublisherOrchestrator:
     def stop(self) -> None:
         """Stops the background publisher thread."""
         with self._worker_lock:
-            if not self._thread or not self._thread.is_alive():
+            if not _thread_is_alive(self._thread):
                 return
             
             logger.info("Stopping PublisherOrchestrator background thread...")
@@ -481,3 +481,12 @@ class PublisherOrchestrator:
             test_day += timedelta(days=1)
             # Reset start_dt to midnight of the new day so we can pick its first slot
             start_dt = datetime.combine(test_day, datetime.min.time())
+
+
+def _thread_is_alive(thread: Any | None) -> bool:
+    if thread is None:
+        return False
+    is_alive = getattr(thread, "is_alive", None)
+    if not callable(is_alive):
+        return False
+    return bool(is_alive())

@@ -728,8 +728,11 @@ export function saveProjectScript(
   });
 }
 
-export function getJobStatus(jobId: string): Promise<JobStatus> {
-  return request<JobStatus>(`/api/jobs/${jobId}`);
+export function getJobStatus(jobId: string, options: { logLimit?: number } = {}): Promise<JobStatus> {
+  const params = new URLSearchParams();
+  if (options.logLimit !== undefined) params.set('log_limit', String(options.logLimit));
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return request<JobStatus>(`/api/jobs/${jobId}${query}`);
 }
 
 export function getJobResults(jobId: string): Promise<JobResult> {

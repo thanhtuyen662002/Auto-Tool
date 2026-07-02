@@ -202,9 +202,27 @@ export default function ResultPage() {
     }
   }
 
+  async function loadCompleteJobLog() {
+    if (!jobId) return;
+    const currentTotal = jobStatus?.logs_total ?? 0;
+    const currentCount = jobStatus?.logs?.length ?? 0;
+    if (currentTotal > 0 && currentCount >= currentTotal && !jobStatus?.logs_truncated) return;
+    try {
+      const view = await fetchResultsView(jobId, { jobLogLimit: 0 });
+      setOutputs(view.outputs);
+      setJobStatus(view.jobStatus);
+      setDouyinSummary(view.douyinSummary);
+      setExportPack(view.exportPack);
+      setIsDouyinReup(view.isDouyinReup);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể tải đầy đủ nhật ký tác vụ.');
+    }
+  }
+
   function showLog(item: NormalizedResultItem) {
     setLogItem(item);
     setLogOpen(true);
+    void loadCompleteJobLog();
   }
 
   async function handleRunQA() {

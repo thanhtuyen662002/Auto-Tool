@@ -445,6 +445,8 @@ class JobStatusResponse(BaseModel):
     completed_outputs: int
     failed_outputs: int
     logs: list[JobLogItem]
+    logs_total: int = 0
+    logs_truncated: bool = False
     cache_summary: dict[str, Any] | None = None
     created_at: str | None = None
     updated_at: str | None = None

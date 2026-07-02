@@ -848,13 +848,19 @@ def _render_settings_for_silent(
     burn_subtitle: bool | None = None,
     generate_voiceover: bool | None = None,
 ) -> DouyinReupSettings:
-    replace_original_with_bgm = bool(settings.add_bgm_for_silent_video and (settings.music_folder or settings.favorite_music_paths))
+    original_audio_volume = _effective_silent_original_audio_volume(settings)
+    bgm_volume = _effective_silent_bgm_volume(settings)
+    add_bgm = bool(
+        settings.add_bgm_for_silent_video
+        and bgm_volume > 0.001
+        and (settings.music_folder or settings.favorite_music_paths)
+    )
     return settings.model_copy(
         update={
-            "keep_original_audio": False if replace_original_with_bgm else settings.keep_immersive_original_audio,
-            "original_audio_volume": 0.0 if replace_original_with_bgm else settings.immersive_original_audio_volume,
-            "add_bgm": settings.add_bgm_for_silent_video,
-            "bgm_volume": settings.immersive_bgm_volume,
+            "keep_original_audio": settings.keep_immersive_original_audio and original_audio_volume > 0.001,
+            "original_audio_volume": original_audio_volume,
+            "add_bgm": add_bgm,
+            "bgm_volume": bgm_volume if add_bgm else 0.0,
             "burn_subtitle": settings.burn_subtitle if burn_subtitle is None else bool(burn_subtitle),
             "add_overlay": settings.add_overlay,
             "generate_voiceover_for_silent_video": (
@@ -868,12 +874,27 @@ def _recommended_audio_mode(settings: DouyinReupSettings) -> str:
     parts: list[str] = []
     if settings.generate_voiceover_for_silent_video:
         parts.append("voiceover")
-    replace_original_with_bgm = bool(settings.add_bgm_for_silent_video and (settings.music_folder or settings.favorite_music_paths))
-    if settings.keep_immersive_original_audio and not replace_original_with_bgm:
+    original_audio_volume = _effective_silent_original_audio_volume(settings)
+    bgm_volume = _effective_silent_bgm_volume(settings)
+    if settings.keep_immersive_original_audio and original_audio_volume > 0.001:
         parts.append("original_audio")
-    if settings.add_bgm_for_silent_video:
+    if settings.add_bgm_for_silent_video and bgm_volume > 0.001:
         parts.append("bgm")
     return "_plus_".join(parts) or "silent_video"
+
+
+def _effective_silent_original_audio_volume(settings: DouyinReupSettings) -> float:
+    return _clamp_volume(max(float(settings.immersive_original_audio_volume), float(settings.original_audio_volume)))
+
+
+def _effective_silent_bgm_volume(settings: DouyinReupSettings) -> float:
+    if not settings.add_bgm_for_silent_video:
+        return 0.0
+    return _clamp_volume(min(float(settings.immersive_bgm_volume), float(settings.bgm_volume)))
+
+
+def _clamp_volume(value: float) -> float:
+    return max(0.0, min(1.0, float(value or 0.0)))
 
 
 def _normalize_caption_timing(captions: list[ImmersiveCaptionLine]) -> list[ImmersiveCaptionLine]:
@@ -967,7 +988,15 @@ def _visual_caption_allowed(
     reliable_segments = [segment for segment in segments if float(segment.visual_score or 0.0) >= 0.45]
     if len(reliable_segments) < int(settings.silent_visual_caption_min_segments):
         return False
-    if not product_detection or product_detection.status != "detected":
+    if not product_detection or product_detection.status not in {"detected", "manual_context"}:
+        return False
+    if product_detection.status == "manual_context":
+        return True
+    top_candidate = product_detection.top_candidate
+    if top_candidate and any(
+        flag in {"single_frame_evidence", "ambiguous_product_detection"}
+        for flag in top_candidate.risk_flags
+    ):
         return False
     return float(product_detection.average_confidence or 0.0) >= float(settings.silent_visual_caption_min_product_confidence)
 

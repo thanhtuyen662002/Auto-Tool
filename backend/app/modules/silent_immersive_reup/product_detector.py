@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
@@ -127,10 +128,15 @@ class SilentProductDetector:
         ]
         candidates = _merge_observation_candidates(candidates, frame_observations)
         candidates = [candidate for candidate in candidates if candidate.display_name.strip()]
+        candidates = _stabilize_candidates(candidates, frame_observations)
         candidates.sort(key=lambda item: item.confidence, reverse=True)
         top = candidates[0] if candidates else None
         confidence = top.confidence if top else 0.0
         warnings = _clean_list(payload.get("warnings"))
+        if top and "ambiguous_product_detection" in top.risk_flags:
+            warnings.append("AI vision thấy nhiều vật thể sản phẩm có điểm gần nhau; cần khóa sản phẩm trước khi tạo voice/sub.")
+        if top and "single_frame_evidence" in top.risk_flags:
+            warnings.append("AI vision chỉ có bằng chứng mạnh ở một frame; không nên tự tạo voice/sub nếu không có OCR hoặc sản phẩm khóa tay.")
         if top and top.product_name and top.certainty != "exact_product":
             top = top.model_copy(update={"product_name": ""})
             candidates[0] = top
@@ -281,7 +287,15 @@ def context_updates_from_detection(
     features = _dedupe([*candidate.visible_features, *candidate.use_cases])
     if features:
         updates["features"] = features[:5]
-    if candidate.confidence >= min_confidence and candidate.certainty in {"exact_product", "product_type"}:
+    unstable_detection = any(
+        flag in {"single_frame_evidence", "ambiguous_product_detection"}
+        for flag in candidate.risk_flags
+    )
+    if (
+        candidate.confidence >= min_confidence
+        and candidate.certainty in {"exact_product", "product_type"}
+        and not unstable_detection
+    ):
         label = candidate.product_name or candidate.product_type or candidate.display_name
         if label:
             updates["product_name"] = label
@@ -474,6 +488,73 @@ def _candidates_from_observation_vote(
             )
         )
     return sorted(candidates, key=lambda item: (-item.confidence, item.display_name))
+
+
+def _stabilize_candidates(
+    candidates: list[ProductDetectionCandidate],
+    observations: list[ProductDetectionFrameObservation],
+) -> list[ProductDetectionCandidate]:
+    if not candidates:
+        return []
+    support_by_key: Counter[str] = Counter()
+    for observation in observations:
+        if not observation.is_product_visible or observation.confidence < 0.2:
+            continue
+        key = _canonical_product_label(observation.product_type or observation.primary_object)
+        if key:
+            support_by_key[key] += 1
+
+    stabilized: list[ProductDetectionCandidate] = []
+    for candidate in candidates:
+        key = _canonical_product_label(candidate.product_type or candidate.display_name)
+        support = max(int(support_by_key.get(key, 0)), _candidate_evidence_support(candidate))
+        risk_flags = _dedupe(candidate.risk_flags)
+        confidence = float(candidate.confidence or 0.0)
+        if candidate.certainty != "exact_product" and support <= 1:
+            confidence = min(confidence, 0.62)
+            if "single_frame_evidence" not in risk_flags:
+                risk_flags.append("single_frame_evidence")
+        stabilized.append(candidate.model_copy(update={"confidence": round(confidence, 4), "risk_flags": risk_flags}))
+
+    sorted_candidates = sorted(stabilized, key=lambda item: item.confidence, reverse=True)
+    if len(sorted_candidates) >= 2:
+        top = sorted_candidates[0]
+        second = sorted_candidates[1]
+        top_key = _canonical_product_label(top.product_type or top.display_name)
+        second_key = _canonical_product_label(second.product_type or second.display_name)
+        if (
+            top.certainty != "exact_product"
+            and second.certainty != "unknown"
+            and top_key
+            and second_key
+            and top_key != second_key
+            and float(top.confidence) - float(second.confidence) < 0.08
+        ):
+            sorted_candidates[0] = top.model_copy(
+                update={
+                    "confidence": round(min(float(top.confidence), 0.7), 4),
+                    "risk_flags": _dedupe([*top.risk_flags, "ambiguous_product_detection"]),
+                }
+            )
+    return sorted_candidates
+
+
+def _candidate_evidence_support(candidate: ProductDetectionCandidate) -> int:
+    markers: set[str] = set()
+    for evidence in candidate.evidence:
+        if evidence.frame_path:
+            markers.add(str(evidence.frame_path))
+            continue
+        if evidence.segment_id:
+            markers.add(str(evidence.segment_id))
+            continue
+        value = str(evidence.value or "")
+        frame_labels = re.findall(r"frame[_\s-]?(\d{1,4})", value, flags=re.IGNORECASE)
+        if frame_labels:
+            markers.update(frame_labels)
+        elif value.strip():
+            markers.add(value.strip()[:80])
+    return len(markers)
 
 
 def _candidate_from_payload(payload: dict[str, Any], frame_paths: list[str]) -> ProductDetectionCandidate:

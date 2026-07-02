@@ -179,7 +179,19 @@ export default function RenderQueuePage() {
         />
 
         <section className="rounded-lg border border-line bg-white p-5 shadow-panel">
-          <h2 className="mb-3 text-base font-semibold text-ink">Nhật ký</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-ink">Nhật ký</h2>
+            {job?.logs_total ? (
+              <span className="text-xs text-muted">
+                Hiển thị {job.logs.length}/{job.logs_total} dòng mới nhất
+              </span>
+            ) : null}
+          </div>
+          {job?.logs_truncated ? (
+            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Nhật ký rất dài nên màn hình chỉ tải phần mới nhất để tránh nặng giao diện. Log vẫn được lưu trong hệ thống.
+            </div>
+          ) : null}
           <div className="max-h-[420px] overflow-auto rounded-md bg-surface p-3 text-sm">
             {job?.logs?.length ? (
               job.logs.map((log, index) => (

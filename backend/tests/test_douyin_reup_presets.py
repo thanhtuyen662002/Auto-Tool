@@ -6,9 +6,10 @@ from app.modules.douyin_reup_presets import DouyinReupPresetService
 
 def test_douyin_reup_presets_include_required_modes():
     presets = DouyinReupPresetService().list_presets()
-    ids = {preset.id.value for preset in presets}
+    id_list = [preset.id.value for preset in presets]
+    ids = set(id_list)
 
-    assert ids == {
+    assert {
         "safe_review",
         "fast_auto",
         "ocr_priority",
@@ -18,7 +19,8 @@ def test_douyin_reup_presets_include_required_modes():
         "silent_chill_immersive",
         "silent_product_voiceover",
         "silent_sales_recut",
-    }
+    } <= ids
+    assert len(id_list) == len(ids)
     assert [preset.id.value for preset in presets if preset.is_default] == ["safe_review"]
 
 

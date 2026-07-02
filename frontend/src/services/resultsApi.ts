@@ -28,10 +28,13 @@ export interface ResultsViewData {
   isDouyinReup: boolean;
 }
 
-export async function fetchResultsView(jobId: string): Promise<ResultsViewData> {
+export async function fetchResultsView(
+  jobId: string,
+  options: { jobLogLimit?: number } = {},
+): Promise<ResultsViewData> {
   const [jobResults, jobStatus, douyinResults, exportPack] = await Promise.allSettled([
     getJobResults(jobId),
-    getJobStatus(jobId),
+    getJobStatus(jobId, { logLimit: options.jobLogLimit }),
     getDouyinReupJobResults(jobId),
     getDouyinExportPack(jobId),
   ]);

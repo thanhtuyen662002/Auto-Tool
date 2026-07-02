@@ -1414,6 +1414,8 @@ export interface JobStatus {
   completed_outputs: number;
   failed_outputs: number;
   logs: JobLogItem[];
+  logs_total?: number;
+  logs_truncated?: boolean;
   cache_summary?: CacheSummary | null;
   created_at?: string;
   updated_at?: string;

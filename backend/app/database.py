@@ -561,19 +561,49 @@ def add_job_log(job_id: str, level: str, message: str) -> None:
             )
 
 
-def get_job_logs(job_id: str, limit: int = 200) -> list[dict[str, Any]]:
+def count_job_logs(job_id: str) -> int:
     with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT created_at, level, message
-            FROM job_logs
-            WHERE job_id = ?
-            ORDER BY id ASC
-            LIMIT ?
-            """,
-            (job_id, limit),
-        ).fetchall()
+        row = conn.execute("SELECT COUNT(*) AS total FROM job_logs WHERE job_id = ?", (job_id,)).fetchone()
+    return int(row["total"] if row else 0)
+
+
+def get_job_logs(job_id: str, limit: int | None = 1000) -> list[dict[str, Any]]:
+    if limit is not None and limit <= 0:
+        limit = None
+
+    with get_connection() as conn:
+        if limit is None:
+            rows = conn.execute(
+                """
+                SELECT created_at, level, message
+                FROM job_logs
+                WHERE job_id = ?
+                ORDER BY id ASC
+                """,
+                (job_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT created_at, level, message
+                FROM (
+                    SELECT id, created_at, level, message
+                    FROM job_logs
+                    WHERE job_id = ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                )
+                ORDER BY id ASC
+                """,
+                (job_id, limit),
+            ).fetchall()
     return [dict(row) for row in rows]
+
+
+def get_job_logs_with_meta(job_id: str, limit: int | None = 1000) -> tuple[list[dict[str, Any]], int, bool]:
+    total = count_job_logs(job_id)
+    logs = get_job_logs(job_id, limit=limit)
+    return logs, total, len(logs) < total
 
 
 def upsert_output_review(
